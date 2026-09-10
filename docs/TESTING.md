@@ -20,7 +20,7 @@ ctest --test-dir build/host --output-on-failure
 - JY60：USART2，PD6 RX 接传感器 TX，9600、8N1，共地。沿用当前工程实际接线。
 - X42S：USART3，PB10 TX，PB11 RX，921600、8N1。驱动器须选 Emm F6 速度协议、固定 0x6B 校验，并已使能。
 - 轮序 FL/FR/RL/RR，默认 ID 2/1/3/4；必须按实机调整。
-- 使用四个同步 F6（每条8字节）及 `00 FF 66 6B`，合计36字节；未启用未经实机确认的 `00 AA` 聚合协议。
+- 使用四个同步 F6（每条8字节）及 `00 FF 66 6B`，合计36字节，逐帧DMA发送、至少3ms帧间隔；`00 AA` 待核对对应版本手册后实现。
 - 这是发送命令里程计，无编码器反馈；遥测 velocity 不代表实测轮速。串口发送成功不等于驱动器执行成功。
 - DMA 缓冲区要求 D-cache 关闭，当前启动代码未开启它；若改缓存策略需另行实现缓存一致性。
 
@@ -28,12 +28,12 @@ ctest --test-dir build/host --output-on-failure
 
 1. 架空底盘，保持静止至少2秒。默认 `calibrated=false`，不允许启动运动。
 2. 调试器观察 `Chassis_GetState()` 对应的静态 `state`：`dt` 约0.005秒，`updates` 增长，`fault=0`，`bias_ready=true`。
-3. 观察 JY60 驱动的 `s_jy60`：yaw/gyro 随动作变化，静止时 gyro 接近零；trust 2=GOOD、1=DEGRADED、0=LOST。断开传感器超过180ms必须 LOST；重新连接需收到新的角度和角速度。
+3. 观察 JY60 驱动的 `s_jy60`：yaw/gyro 随动作变化，静止时 gyro 接近零；trust 2=GOOD、1=DEGRADED、0=LOST。断开传感器超过180ms必须 LOST；重新连接需收到新的角度和角速度，并通过连续5个合格角度帧恢复检查；freshness表示新鲜度，confidence表示数据质量，trust综合两者。
 4. UART5 的 PC12（TX）接 USB-TTL 的 RX，并共地，115200、8N1；VOFA+ 选 **JustFloat**，20Hz，14通道：vx目标、vy目标、wz目标、vx命令里程计、vy命令里程计、wz命令里程计、yaw度、yaw误差度、FL/FR/RL/RR发送RPM、trust、dt秒。PD2 为 UART5 RX，但当前尚未实现上位机串口指令接收，运动命令仍使用下述调试器邮箱。
 
 ## 启动短距离运动
 
-`chassis_config` 定义于 `App/chassis_control.c`。轮半径50mm、半轮距150mm、半轴距150mm只是占位参数。先测量后修改，逐轮核对ID和 `motor_sign`（+1/-1），验证电机已使能、通信协议和正反向，再设置 `calibrated=true`。首次 RPM 上限建议20。
+`chassis_config` 定义于 `App/chassis_control.c`。轮半径按70mm直径设为35mm；半轮距、半轴距默认0，必须实测填写正值。先测量后修改，逐轮核对ID和 `motor_sign`（+1/-1），验证电机已使能、通信协议和正反向，再设置 `calibrated=true`。首次 RPM 上限建议20。
 
 在调试器 Watch 中使用 `chassis_debug`，**先填字段，最后递增 sequence**；恢复运行后检查 acknowledged 等于 sequence、result=0。不要在电机运动时长时间暂停CPU，暂停后上位机无法发送停止命令。
 
@@ -51,4 +51,4 @@ ctest --test-dir build/host --output-on-failure
 
 故障位：1=控制周期超过50ms，2=运动中IMU丢失，4=电机TX错误或超时，8=参数无效。故障解除后复位重新校准。通信故障、CPU暂停或掉电时无法保证软件停止帧送达，应使用驱动器超时停机或外部断使能。
 
-规划按命令距离及时间执行，打滑、轮速饱和、未执行命令都会造成实际距离误差；不构成位置闭环。
+规划使用最终发送RPM的分段投影积分决定减速和结束，可补偿限幅造成的命令进度落后。打滑、通信延迟及驱动器未执行命令仍会造成实际距离误差；不构成真实位置闭环。详细状态见 ARCHITECTURE_FIX_V03.md。

@@ -51,6 +51,11 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/bsp_dwt.c
+    Core/Src/pin_config.c
+    Algorithm/planner.c
+    Algorithm/imu_health.c
+    Algorithm/heading.c
+    App/chassis_odom.c
     DRIVER/src/jy60.c
     DRIVER/src/zdt_x42s.c
     App/chassis_control.c

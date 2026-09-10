@@ -1,4 +1,7 @@
 #include "jy60.h"
+#include "imu_health.h"
+static ImuHealth health;
+static uint32_t raw_angle_cycle;
 
 #include "pin_config.h"
 #include "bsp_dwt.h"
@@ -252,6 +255,11 @@ static void JY60_ParseAngle(const uint8_t *frame, uint32_t now)
      */
     const float scale = 180.0f / 32768.0f;
 
+    float interval = DWT_DeltaSec(now, raw_angle_cycle);
+    raw_angle_cycle = now;
+    if (!ImuHealth_Angle(&health, (float)raw_yaw * scale, s_jy60.gz_dps, interval))
+        return;
+
     s_jy60.roll_deg = (float)raw_roll * scale;
 
     s_jy60.pitch_deg = (float)raw_pitch * scale;
@@ -404,6 +412,8 @@ static void JY60_UpdateTrust(uint32_t now)
 
 bool JY60_Init(void)
 {
+    memset(&health, 0, sizeof(health));
+    raw_angle_cycle = 0;
     /*
      * 清零所有状态。
      */
@@ -507,6 +517,7 @@ void JY60_Process(void)
         if (!JY60_CheckFrame(frame))
         {
             s_jy60.checksum_error_count++;
+            ImuHealth_ChecksumError(&health);
 
             s_dma_read_pos = JY60_RingAdvance(s_dma_read_pos, 1U);
 
@@ -530,7 +541,13 @@ void JY60_Process(void)
      * 即使本周期没有新数据，
      * 也必须更新 freshness。
      */
+    s_jy60.trust = s_jy60.freshness;
     JY60_UpdateTrust(BSP_DWT_GetCycle());
+    s_jy60.freshness = s_jy60.trust;
+    s_jy60.confidence = (uint8_t)ImuHealth_Confidence(&health);
+    s_jy60.plausibility_errors = health.rejected;
+    if (s_jy60.confidence < (unsigned)s_jy60.trust)
+        s_jy60.trust = (JY60_Trust_t)s_jy60.confidence;
 }
 
 const JY60_State_t *JY60_GetState(void)

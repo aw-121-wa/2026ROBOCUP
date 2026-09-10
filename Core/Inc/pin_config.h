@@ -22,8 +22,8 @@
 #define PINCFG_ZDT_BAUDRATE 921600U
 
 /* -------------------- Host telemetry (UART5: PC12 TX / PD2 RX) -------------------- */
-#define PINCFG_VOFA_UART        (&huart5)
-#define PINCFG_VOFA_BAUDRATE    115200U
+#define PINCFG_VOFA_UART (&huart5)
+#define PINCFG_VOFA_BAUDRATE 115200U
 
 /* -------------------- WIT JY60 -------------------- */
 
@@ -61,6 +61,8 @@ typedef enum
     PINCFG_ERR_JY60_BAUDRATE = 0x00000004U,
     PINCFG_ERR_JY60_DMA_MISSING = 0x00000008U,
     PINCFG_ERR_JY60_DMA_NOT_CIRC = 0x00000010U,
+    PINCFG_ERR_ZDT_DMA = 0x00000020U,
+    PINCFG_ERR_DMA_CACHE = 0x00000040U,
 
 } PinConfigError_t;
 

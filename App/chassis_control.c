@@ -1,5 +1,7 @@
 #include "chassis_control.h"
 #include "motion.h"
+#include "heading.h"
+#include "chassis_odom.h"
 #include "pin_config.h"
 #include "bsp_dwt.h"
 #include "jy60.h"
@@ -8,12 +10,26 @@
 #include <string.h>
 #include <stdlib.h>
 #define RAD 0.017453292519943295f
-ChassisConfig chassis_config = {35, 150, 150,          100,          2,    0.05f, 0.15f, 1, 1, 1,
-                                1,  1,   {2, 1, 3, 4}, {1, 1, 1, 1}, false};
+ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
+                                .half_track_mm = 0.0f, /* Measure before arming. */
+                                .half_wheelbase_mm = 0.0f,
+                                .rpm_limit = 100.0f,
+                                .kp = 2.0f,
+                                .ki = 0.05f,
+                                .gyro_damping = 0.15f,
+                                .wz_limit = 1.0f,
+                                .left_gain = 1.0f,
+                                .right_gain = 1.0f,
+                                .left_odom_scale = 1.0f,
+                                .right_odom_scale = 1.0f,
+                                .motor_id = {2, 1, 3, 4},
+                                .motor_sign = {1, 1, 1, 1},
+                                .calibrated = false};
 static ChassisState state;
 volatile ChassisDebugCommand chassis_debug;
 static Planner planner;
 static float dx, dy, heading, integral, bias_sum, bias_elapsed;
+static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
 static uint32_t last_cycle, last_gyro, last_angle, bias_count, telemetry_cycle;
 static uint8_t tx[36] __attribute__((aligned(32)));
@@ -39,11 +55,13 @@ static void integrate_odom(uint32_t cycle)
     odom_cycle = cycle;
     if (dt > 0.05f || !isfinite(dt))
         return;
-    Mecanum_Forward(geometry(), state.rpm_sent, state.velocity);
-    float y = state.velocity[1] * (state.velocity[1] >= 0 ? chassis_config.left_odom_scale
-                                                          : chassis_config.right_odom_scale);
-    state.x_mm += (cosf(state.yaw_rad) * state.velocity[0] - sinf(state.yaw_rad) * y) * dt;
-    state.y_mm += (sinf(state.yaw_rad) * state.velocity[0] + cosf(state.yaw_rad) * y) * dt;
+    ChassisOdomDelta delta = ChassisOdom_Integrate(
+        geometry(), state.rpm_sent, state.yaw_rad, chassis_config.left_odom_scale,
+        chassis_config.right_odom_scale, dx, dy, dt, state.velocity);
+    if (planner.active)
+        segment_progress += delta.progress;
+    state.x_mm += delta.x;
+    state.y_mm += delta.y;
 }
 static bool config_valid(void)
 {
@@ -71,22 +89,10 @@ static bool config_valid(void)
     }
     return true;
 }
-uint32_t PinConfig_Validate(void)
-{
-    uint32_t e = 0;
-    if (PINCFG_JY60_UART == PINCFG_ZDT_UART)
-        e |= PINCFG_ERR_UART_CONFLICT;
-    if (PINCFG_JY60_UART->Init.BaudRate != PINCFG_JY60_BAUDRATE)
-        e |= PINCFG_ERR_JY60_BAUDRATE;
-    if (PINCFG_ZDT_UART->Init.BaudRate != PINCFG_ZDT_BAUDRATE)
-        e |= PINCFG_ERR_ZDT_BAUDRATE;
-    if (!PINCFG_JY60_UART->hdmarx)
-        e |= PINCFG_ERR_JY60_DMA_MISSING;
-    else if (PINCFG_JY60_UART->hdmarx->Init.Mode != DMA_CIRCULAR)
-        e |= PINCFG_ERR_JY60_DMA_NOT_CIRC;
-    return e;
-}
 /* F6 speed frames, followed by broadcast synchronous execution (fixed 0x6B). */
+/* Legacy fallback: transmit individual frames with a DWT-timed gap.
+ * A batch is immutable; newer commands replace only the pending batch. */
+static uint8_t tx_part;
 static void service_tx(void)
 {
     if (tx_error)
@@ -97,10 +103,17 @@ static void service_tx(void)
     }
     if (tx_done)
     {
-        integrate_odom(tx_complete_cycle);
         tx_done = false;
         tx_busy = false;
-        memcpy(state.rpm_sent, inflight, sizeof(inflight));
+        tx_cycle = tx_complete_cycle;
+        if (tx_part == 4)
+        {
+            integrate_odom(tx_complete_cycle);
+            memcpy(state.rpm_sent, inflight, sizeof(inflight));
+            tx_part = 0;
+        }
+        else
+            tx_part++;
     }
     if (tx_busy)
     {
@@ -111,24 +124,28 @@ static void service_tx(void)
         }
         return;
     }
-    if (!pending_valid)
+    if (tx_part != 0 && DWT_DeltaSec(DWT_GetCycle(), tx_cycle) < 0.003f)
         return;
-    for (int i = 0; i < 4; i++)
+    if (tx_part == 0)
     {
-        int16_t speed = (int16_t)((int)pending[i] * chassis_config.motor_sign[i]);
-        ZDT_BuildSpeed(&tx[i * 8], chassis_config.motor_id[i], speed, 0);
+        if (!pending_valid)
+            return;
+        for (int i = 0; i < 4; i++)
+        {
+            int16_t speed = (int16_t)((int)pending[i] * chassis_config.motor_sign[i]);
+            ZDT_BuildSpeed(&tx[i * 8], chassis_config.motor_id[i], speed, 0);
+        }
+        ZDT_BuildSync(&tx[32]);
+        memcpy(inflight, pending, sizeof(inflight));
+        pending_valid = false;
     }
-    ZDT_BuildSync(&tx[32]);
-    memcpy(inflight, pending, sizeof(inflight));
-    tx_done = false;
     tx_busy = true;
     tx_cycle = DWT_GetCycle();
-    if (HAL_UART_Transmit_DMA(PINCFG_ZDT_UART, tx, sizeof(tx)) == HAL_OK)
-        pending_valid = false;
-    else
+    if (HAL_UART_Transmit_DMA(PINCFG_ZDT_UART, &tx[tx_part * 8], tx_part == 4 ? 4 : 8) != HAL_OK)
     {
         tx_busy = false;
         state.fault |= 4;
+        tx_error = true;
         Chassis_Stop();
     }
 }
@@ -147,23 +164,31 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *uart)
 }
 bool Chassis_Init(void)
 {
+    /* 1. 初始化统一高精度时间基准 */
     if (!DWT_Time_Init())
+    {
         return false;
-    /* Configure once before RX starts; preserve CubeMX-owned initialization. */
-    DMA_HandleTypeDef *dma = PINCFG_JY60_UART->hdmarx;
-    if (!dma || !PINCFG_ZDT_UART->hdmatx)
+    }
+
+    /* 2. 检查 CubeMX / pin_config 是否配置正确 */
+    if (PinConfig_Validate() != PINCFG_OK)
+    {
         return false;
-    dma->Init.Mode = DMA_CIRCULAR;
-    if (HAL_DMA_Init(dma) != HAL_OK || PinConfig_Validate() != 0)
-        return false;
-    /* Existing firmware leaves D-cache disabled. DMA buffers require that policy. */
-    if ((SCB->CCR & SCB_CCR_DC_Msk) != 0)
-        return false;
+    }
+
+    /* 3. 启动 JY60 Circular DMA 并初始化解析器 */
     if (!JY60_Init())
+    {
         return false;
-    last_cycle = DWT_GetCycle();
-    telemetry_cycle = last_cycle;
-    odom_cycle = last_cycle;
+    }
+
+    /* 4. 初始化底盘时间戳 */
+    uint32_t now = DWT_GetCycle();
+
+    last_cycle = now;
+    telemetry_cycle = now;
+    odom_cycle = now;
+
     return true;
 }
 bool Chassis_Arm(void)
@@ -193,6 +218,7 @@ bool Chassis_Move(float x, float y, float v, float a, float d)
     if (!Planner_Start(&planner, length, v, a, d))
         return false;
     jog_remaining = 0;
+    segment_progress = 0;
     dx = x / length;
     dy = y / length;
     heading = state.yaw_rad;
@@ -234,8 +260,6 @@ void Chassis_Update(void)
     uint32_t now = DWT_GetCycle();
     float dt = DWT_DeltaSec(now, last_cycle);
     service_tx();
-    if (dt < 0.005f)
-        return;
     last_cycle = now;
     state.dt = dt;
     state.updates++;
@@ -247,11 +271,10 @@ void Chassis_Update(void)
         Chassis_Stop();
         dt = 0;
     }
-    if (!config_valid())
+    if (state.armed && !config_valid())
     {
         state.fault |= 8;
         Chassis_Stop();
-        return;
     }
     if (imu->trust == JY60_TRUST_LOST)
     {
@@ -331,16 +354,14 @@ void Chassis_Update(void)
         chassis_debug.result = ok ? 0 : -1;
         chassis_debug.acknowledged = sequence;
     }
-    float speed = state.armed ? Planner_Update(&planner, dt) : 0;
+    float speed = state.armed ? Planner_UpdateProgress(&planner, dt, segment_progress) : 0;
     float vx = speed * dx, vy = speed * dy, wz = 0;
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
     if (state.armed)
     {
-        float error = fabsf(state.yaw_error) < 0.005f ? 0 : state.yaw_error;
-        integral = clamp(integral + error * dt, 0.5f);
-        wz = clamp(chassis_config.kp * error + chassis_config.ki * integral -
-                       chassis_config.gyro_damping * (imu->gz_dps - state.gyro_bias_dps) * RAD,
-                   chassis_config.wz_limit);
+        wz = Heading_Update(state.yaw_error, (imu->gz_dps - state.gyro_bias_dps) * RAD, dt,
+                            chassis_config.kp, chassis_config.ki, chassis_config.gyro_damping,
+                            chassis_config.wz_limit, &integral);
     }
     if (state.armed && jog_remaining > 0)
     {
@@ -352,6 +373,13 @@ void Chassis_Update(void)
         integral = 0;
     }
     vy *= vy >= 0 ? chassis_config.left_gain : chassis_config.right_gain;
+    if (!config_valid())
+    {
+        Chassis_Stop();
+        service_tx();
+        send_telemetry(0, 0, 0, now);
+        return;
+    }
     float t[4], r[4], out[4];
     Mecanum_Inverse(geometry(), vx, vy, 0, t);
     Mecanum_Inverse(geometry(), 0, 0, wz, r);

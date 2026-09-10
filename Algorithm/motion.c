@@ -39,34 +39,3 @@ float Wheel_Limit(const float t[4], const float r[4], float limit, float out[4])
         out[i] = s * t[i] + scale * r[i];
     return s;
 }
-bool Planner_Start(Planner *p, float d, float v, float a, float b)
-{
-    *p = (Planner){0};
-    if (!isfinite(d) || !isfinite(v) || !isfinite(a) || !isfinite(b) || d <= 0 || v <= 0 ||
-        a <= 0 || b <= 0)
-        return false;
-    p->distance = d;
-    p->peak = fminf(v, sqrtf(4 * d / (PI * (1 / a + 1 / b))));
-    p->ta = PI * p->peak / (2 * a);
-    p->td = PI * p->peak / (2 * b);
-    p->tc = fmaxf(0, (d - 0.5f * p->peak * (p->ta + p->td)) / p->peak);
-    p->active = true;
-    return true;
-}
-float Planner_Update(Planner *p, float dt)
-{
-    if (!p->active || dt <= 0)
-        return 0;
-    p->time += dt;
-    float t = p->time;
-    if (t < p->ta)
-        return 0.5f * p->peak * (1 - cosf(PI * t / p->ta));
-    t -= p->ta;
-    if (t < p->tc)
-        return p->peak;
-    t -= p->tc;
-    if (t < p->td)
-        return 0.5f * p->peak * (1 + cosf(PI * t / p->td));
-    p->active = false;
-    return 0;
-}

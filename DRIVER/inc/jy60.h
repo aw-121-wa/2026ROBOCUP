@@ -118,6 +118,9 @@ typedef struct
     /* -------------------- Trust -------------------- */
 
     JY60_Trust_t trust;
+    JY60_Trust_t freshness;
+    uint8_t confidence;
+    uint32_t plausibility_errors;
 
 } JY60_State_t;
 
