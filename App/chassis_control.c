@@ -24,7 +24,8 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
                                 .right_odom_scale = 1.0f,
                                 .motor_id = {2, 1, 3, 4},
                                 .motor_sign = {1, 1, 1, 1},
-                                .calibrated = false};
+                                .calibrated = false,
+                                .command_mode = ZDT_MULTI_COMMAND};
 static ChassisState state;
 volatile ChassisDebugCommand chassis_debug;
 static Planner planner;
@@ -32,8 +33,7 @@ static float dx, dy, heading, integral, bias_sum, bias_elapsed;
 static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
 static uint32_t last_cycle, last_gyro, last_angle, bias_count, telemetry_cycle;
-static uint8_t tx[36] __attribute__((aligned(32)));
-static float inflight[4], pending[4];
+static uint8_t tx[ZDT_MULTI_SPEED_SIZE] __attribute__((aligned(32)));
 static volatile bool tx_done, tx_busy, tx_error;
 static bool pending_valid;
 static uint32_t tx_cycle;
@@ -56,7 +56,7 @@ static void integrate_odom(uint32_t cycle)
     if (dt > 0.05f || !isfinite(dt))
         return;
     ChassisOdomDelta delta = ChassisOdom_Integrate(
-        geometry(), state.rpm_sent, state.yaw_rad, chassis_config.left_odom_scale,
+        geometry(), state.rpm_applied, state.yaw_rad, chassis_config.left_odom_scale,
         chassis_config.right_odom_scale, dx, dy, dt, state.velocity);
     if (planner.active)
         segment_progress += delta.progress;
@@ -66,6 +66,8 @@ static void integrate_odom(uint32_t cycle)
 static bool config_valid(void)
 {
     ChassisConfig *c = &chassis_config;
+    if (c->command_mode != ZDT_MULTI_COMMAND && c->command_mode != ZDT_LEGACY_SYNC)
+        return false;
     if (!isfinite(c->wheel_radius_mm) || !isfinite(c->half_track_mm) ||
         !isfinite(c->half_wheelbase_mm) || !isfinite(c->rpm_limit) || c->wheel_radius_mm <= 0 ||
         c->half_track_mm <= 0 || c->half_wheelbase_mm <= 0 || c->rpm_limit < 1 ||
@@ -89,10 +91,10 @@ static bool config_valid(void)
     }
     return true;
 }
-/* F6 speed frames, followed by broadcast synchronous execution (fixed 0x6B). */
-/* Legacy fallback: transmit individual frames with a DWT-timed gap.
- * A batch is immutable; newer commands replace only the pending batch. */
+/* Wire buffer, inflight RPM and mode remain immutable until the batch completes. */
 static uint8_t tx_part;
+static ZDT_CommandMode tx_mode;
+static size_t tx_length;
 static void service_tx(void)
 {
     if (tx_error)
@@ -106,10 +108,10 @@ static void service_tx(void)
         tx_done = false;
         tx_busy = false;
         tx_cycle = tx_complete_cycle;
-        if (tx_part == 4)
+        if (tx_mode == ZDT_MULTI_COMMAND || tx_part == 4)
         {
             integrate_odom(tx_complete_cycle);
-            memcpy(state.rpm_sent, inflight, sizeof(inflight));
+            memcpy(state.rpm_applied, state.rpm_inflight, sizeof(state.rpm_applied));
             tx_part = 0;
         }
         else
@@ -130,18 +132,41 @@ static void service_tx(void)
     {
         if (!pending_valid)
             return;
-        for (int i = 0; i < 4; i++)
+        int16_t physical_rpm[4];
+        for (int i = 0; i < 4; ++i)
+            physical_rpm[i] = (int16_t)((int)state.rpm_pending[i] * chassis_config.motor_sign[i]);
+        tx_mode = chassis_config.command_mode;
+        if (tx_mode == ZDT_MULTI_COMMAND)
         {
-            int16_t speed = (int16_t)((int)pending[i] * chassis_config.motor_sign[i]);
-            ZDT_BuildSpeed(&tx[i * 8], chassis_config.motor_id[i], speed, 0);
+            tx_length =
+                ZDT_BuildMultiSpeed(tx, sizeof(tx), chassis_config.motor_id, physical_rpm, 0);
+            if (tx_length == 0)
+            {
+                state.fault |= 4;
+                Chassis_Stop();
+                return;
+            }
         }
-        ZDT_BuildSync(&tx[32]);
-        memcpy(inflight, pending, sizeof(inflight));
+        else if (tx_mode == ZDT_LEGACY_SYNC)
+        {
+            for (int i = 0; i < 4; ++i)
+                ZDT_BuildLegacySpeed(&tx[i * 8], chassis_config.motor_id[i], physical_rpm[i], 0);
+            ZDT_BuildSync(&tx[32]);
+        }
+        else
+        {
+            state.fault |= 4;
+            Chassis_Stop();
+            return;
+        }
+        memcpy(state.rpm_inflight, state.rpm_pending, sizeof(state.rpm_inflight));
         pending_valid = false;
     }
     tx_busy = true;
     tx_cycle = DWT_GetCycle();
-    if (HAL_UART_Transmit_DMA(PINCFG_ZDT_UART, &tx[tx_part * 8], tx_part == 4 ? 4 : 8) != HAL_OK)
+    uint8_t *data = tx_mode == ZDT_MULTI_COMMAND ? tx : &tx[tx_part * 8];
+    uint16_t length = tx_mode == ZDT_MULTI_COMMAND ? (uint16_t)tx_length : (tx_part == 4 ? 4 : 8);
+    if (HAL_UART_Transmit_DMA(PINCFG_ZDT_UART, data, length) != HAL_OK)
     {
         tx_busy = false;
         state.fault |= 4;
@@ -207,7 +232,8 @@ void Chassis_Stop(void)
     planner.active = false;
     jog_remaining = 0;
     integral = 0;
-    memset(pending, 0, sizeof(pending));
+    memset(state.rpm_requested, 0, sizeof(state.rpm_requested));
+    memset(state.rpm_pending, 0, sizeof(state.rpm_pending));
     pending_valid = true;
 }
 bool Chassis_Move(float x, float y, float v, float a, float d)
@@ -242,10 +268,10 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
                           state.velocity[2],
                           state.yaw_rad / RAD,
                           state.yaw_error / RAD,
-                          state.rpm_sent[0],
-                          state.rpm_sent[1],
-                          state.rpm_sent[2],
-                          state.rpm_sent[3],
+                          state.rpm_applied[0],
+                          state.rpm_applied[1],
+                          state.rpm_applied[2],
+                          state.rpm_applied[3],
                           (float)JY60_GetState()->trust,
                           state.dt};
     memcpy(telemetry, channels, sizeof(channels));
@@ -254,6 +280,10 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
     telemetry[58] = 0x80;
     telemetry[59] = 0x7f;
     (void)HAL_UART_Transmit_IT(PINCFG_VOFA_UART, telemetry, sizeof(telemetry));
+}
+void Chassis_RecordDeadlineMiss(void)
+{
+    state.deadline_misses++;
 }
 void Chassis_Update(void)
 {
@@ -386,7 +416,8 @@ void Chassis_Update(void)
     Wheel_Limit(t, r, chassis_config.rpm_limit, out);
     for (int i = 0; i < 4; i++)
     {
-        pending[i] = roundf(out[i]);
+        state.rpm_requested[i] = out[i];
+        state.rpm_pending[i] = roundf(state.rpm_requested[i]);
     }
     pending_valid = true;
     service_tx();

@@ -60,7 +60,7 @@ osThreadId_t ChassisTaskHandle;
 const osThreadAttr_t ChassisTask_attributes = {
   .name = "ChassisTask",
   .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityAboveNormal,
 };
 /* Definitions for UartCommandTask */
 osThreadId_t UartCommandTaskHandle;
@@ -155,11 +155,25 @@ void StartDefaultTask(void *argument)
 void StartChassisTask(void *argument)
 {
   /* USER CODE BEGIN StartChassisTask */
-  /* Infinite loop */
+  const uint32_t tick_hz = osKernelGetTickFreq();
+  if (tick_hz < 200U || tick_hz % 200U != 0U)
+  {
+    Error_Handler(); /* This kernel tick cannot represent exactly 5 ms. */
+  }
+  const uint32_t period = tick_hz / 200U;
+  uint32_t wake = osKernelGetTickCount();
+  /* Absolute deadlines prevent execution time accumulating into the period. */
   for(;;)
   {
     Chassis_Update();
-    osDelay(1);
+    wake += period;
+    if (osDelayUntil(wake) != osOK)
+    {
+      Chassis_RecordDeadlineMiss();
+      wake = osKernelGetTickCount();
+      wake += period;
+      (void)osDelayUntil(wake);
+    }
   }
   /* USER CODE END StartChassisTask */
 }
