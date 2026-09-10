@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "chassis_control.h"
 
 /* USER CODE END Includes */
 
@@ -157,6 +158,7 @@ void StartChassisTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
+    Chassis_Update();
     osDelay(1);
   }
   /* USER CODE END StartChassisTask */

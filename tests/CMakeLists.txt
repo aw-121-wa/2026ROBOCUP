@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.22)
+project(chassis_tests C)
+enable_testing()
+# Keep object paths ASCII for Windows MinGW assemblers.
+configure_file(../Algorithm/motion.c ${CMAKE_CURRENT_BINARY_DIR}/motion.c COPYONLY)
+configure_file(../DRIVER/src/zdt_x42s.c ${CMAKE_CURRENT_BINARY_DIR}/zdt_x42s.c COPYONLY)
+add_executable(test_motion test_motion.c ${CMAKE_CURRENT_BINARY_DIR}/motion.c ${CMAKE_CURRENT_BINARY_DIR}/zdt_x42s.c)
+target_include_directories(test_motion PRIVATE ../Algorithm ../DRIVER/inc)
+target_compile_options(test_motion PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_motion PRIVATE m)
+add_test(NAME motion COMMAND test_motion)

@@ -35,6 +35,12 @@ enable_language(C ASM)
 add_executable(${CMAKE_PROJECT_NAME})
 
 # Add STM32CubeMX generated sources
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE_NAME:${CMAKE_PROJECT_NAME}> chassis_motor.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE_NAME:${CMAKE_PROJECT_NAME}> chassis_motor.bin
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    VERBATIM
+)
 add_subdirectory(cmake/stm32cubemx)
 
 # Link directories setup
@@ -44,12 +50,16 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    Core/Src/bsp_dwt.c
+    DRIVER/src/jy60.c
+    DRIVER/src/zdt_x42s.c
+    App/chassis_control.c
+    Algorithm/motion.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
+    DRIVER/inc App Algorithm
 )
 
 # Add project symbols (macros)

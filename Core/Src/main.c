@@ -28,6 +28,7 @@
 #include "bsp_dwt.h"
 #include "pin_config.h"
 #include "jy60.h"
+#include "chassis_control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -85,8 +86,6 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
-  bsp_dwt_init();
-  jy60_init();
 
   /* USER CODE END Init */
 
@@ -107,6 +106,7 @@ int main(void)
   MX_UART5_Init();
   MX_UART8_Init();
   /* USER CODE BEGIN 2 */
+  if (!Chassis_Init()) { Error_Handler(); }
 
   /* USER CODE END 2 */
 
