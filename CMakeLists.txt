@@ -34,10 +34,27 @@ enable_language(C ASM)
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# Release-only experiment; keep OFF until hardware regression has passed.
+option(CHASSIS_RELEASE_LTO "Enable experimental Release link-time optimization" OFF)
+option(CHASSIS_TELEMETRY_ENABLE "Enable binary VOFA transmission (host RX stays enabled)" ON)
+option(CHASSIS_TELEMETRY_FULL "Include full IMU diagnostics in VOFA frames" ON)
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+    CHASSIS_TELEMETRY_ENABLE=$<BOOL:${CHASSIS_TELEMETRY_ENABLE}>
+    CHASSIS_TELEMETRY_FULL=$<BOOL:${CHASSIS_TELEMETRY_FULL}>)
+if(CHASSIS_RELEASE_LTO)
+    add_compile_options($<$<AND:$<CONFIG:Release>,$<COMPILE_LANGUAGE:C>>:-flto>)
+    target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:-flto>)
+    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:-flto>)
+    # Referenced by inline assembly in the Cortex-M7 PendSV port.
+    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Release>:-Wl,--undefined=vTaskSwitchContext>)
+endif()
+
 # Add STM32CubeMX generated sources
 add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O ihex $<TARGET_FILE_NAME:${CMAKE_PROJECT_NAME}> chassis_motor.hex
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE_NAME:${CMAKE_PROJECT_NAME}> chassis_motor.bin
+    COMMAND ${CMAKE_SIZE} $<TARGET_FILE_NAME:${CMAKE_PROJECT_NAME}>
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )

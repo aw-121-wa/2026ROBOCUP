@@ -48,13 +48,6 @@
 /* USER CODE BEGIN Variables */
 
 /* USER CODE END Variables */
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* Definitions for ChassisTask */
 osThreadId_t ChassisTaskHandle;
 const osThreadAttr_t ChassisTask_attributes = {
@@ -62,22 +55,28 @@ const osThreadAttr_t ChassisTask_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityAboveNormal,
 };
-/* Definitions for UartCommandTask */
+#ifndef ENABLE_UART_COMMAND_TASK
+#define ENABLE_UART_COMMAND_TASK 0
+#endif
+#if ENABLE_UART_COMMAND_TASK
+/* Reserved placeholder; host commands are serviced by ChassisTask. */
 osThreadId_t UartCommandTaskHandle;
 const osThreadAttr_t UartCommandTask_attributes = {
   .name = "UartCommandTask",
   .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+#endif
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
 
-void StartDefaultTask(void *argument);
 void StartChassisTask(void *argument);
+#if ENABLE_UART_COMMAND_TASK
 void StartUartCommandTask(void *argument);
+#endif
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -108,14 +107,13 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-
   /* creation of ChassisTask */
   ChassisTaskHandle = osThreadNew(StartChassisTask, NULL, &ChassisTask_attributes);
 
-  /* creation of UartCommandTask */
+#if ENABLE_UART_COMMAND_TASK
+  /* Optional placeholder, disabled in normal builds. */
   UartCommandTaskHandle = osThreadNew(StartUartCommandTask, NULL, &UartCommandTask_attributes);
+#endif
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -125,24 +123,6 @@ void MX_FREERTOS_Init(void) {
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
-}
-
-/* USER CODE BEGIN Header_StartDefaultTask */
-/**
-  * @brief  Function implementing the defaultTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  /* USER CODE BEGIN StartDefaultTask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartDefaultTask */
 }
 
 /* USER CODE BEGIN Header_StartChassisTask */
@@ -185,6 +165,7 @@ void StartChassisTask(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartUartCommandTask */
+#if ENABLE_UART_COMMAND_TASK
 void StartUartCommandTask(void *argument)
 {
   /* USER CODE BEGIN StartUartCommandTask */
@@ -195,6 +176,7 @@ void StartUartCommandTask(void *argument)
   }
   /* USER CODE END StartUartCommandTask */
 }
+#endif
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */

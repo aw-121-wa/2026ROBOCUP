@@ -1,6 +1,7 @@
 #include "chassis_control.h"
 #include "host_command.h"
 #include "host_uart.h"
+#include "forward_comp.h"
 #include "motion.h"
 #include "heading.h"
 #include "relative_yaw.h"
@@ -13,6 +14,12 @@
 #include <string.h>
 #include <stdlib.h>
 #define RAD 0.017453292519943295f
+#ifndef CHASSIS_TELEMETRY_ENABLE
+#define CHASSIS_TELEMETRY_ENABLE 1
+#endif
+#ifndef CHASSIS_TELEMETRY_FULL
+#define CHASSIS_TELEMETRY_FULL 1
+#endif
 ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
@@ -23,6 +30,7 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
                                 .wz_limit = 1.9f,
                                 .left_gain = 1.0f,
                                 .right_gain = 1.0f,
+                                .forward_lateral_comp = 0.017f,
                                 .left_odom_scale = 1.0f,
                                 .right_odom_scale = 1.0f,
                                 .motor_id = {2, 1, 3, 4},
@@ -36,14 +44,23 @@ static RelativeYaw relative_yaw;
 static float dx, dy, heading, integral, bias_sum, bias_elapsed;
 static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
-static uint32_t last_cycle, last_gyro, bias_count, telemetry_cycle;
+static uint32_t last_cycle, last_gyro, bias_count;
+#if CHASSIS_TELEMETRY_ENABLE
+static uint32_t telemetry_cycle;
+#endif
 static uint8_t tx[ZDT_MULTI_SPEED_SIZE] __attribute__((aligned(32)));
 static volatile bool tx_done, tx_busy, tx_error;
 static bool pending_valid;
 static uint32_t tx_cycle;
 static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
-static uint8_t telemetry[104]; /* 25 float channels + JustFloat tail. */
+#if CHASSIS_TELEMETRY_ENABLE
+#if CHASSIS_TELEMETRY_FULL
+static uint8_t telemetry[112]; /* 27 float channels + JustFloat tail. */
+#else
+static uint8_t telemetry[92]; /* 22 float channels + JustFloat tail. */
+#endif
+#endif
 static HostParser host_parser;
 static int host_result;
 static uint32_t host_sequence, host_byte_cycle;
@@ -86,6 +103,8 @@ static bool config_valid(void)
     if (!isfinite(c->left_gain) || !isfinite(c->right_gain) || !isfinite(c->left_odom_scale) ||
         !isfinite(c->right_odom_scale) || c->left_gain <= 0 || c->right_gain <= 0 ||
         c->left_odom_scale <= 0 || c->right_odom_scale <= 0)
+        return false;
+    if (!ForwardComp_ConfigValid(c->forward_lateral_comp))
         return false;
     for (int i = 0; i < 4; i++)
     {
@@ -223,7 +242,9 @@ bool Chassis_Init(void)
     uint32_t now = DWT_GetCycle();
 
     last_cycle = now;
+#if CHASSIS_TELEMETRY_ENABLE
     telemetry_cycle = now;
+#endif
     odom_cycle = now;
 
     if (!HostUart_Init())
@@ -269,14 +290,16 @@ const ChassisState *Chassis_GetState(void)
 {
     return &state;
 }
-static void send_telemetry(float vx, float vy, float wz, uint32_t now)
+#if CHASSIS_TELEMETRY_ENABLE
+static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy,
+                           float vy_original, uint32_t now)
 {
     if (DWT_DeltaSec(now, telemetry_cycle) < 0.05f ||
         PINCFG_VOFA_UART->gState != HAL_UART_STATE_READY)
         return;
     telemetry_cycle = now;
     const JY60_State_t *imu = JY60_GetState();
-    float channels[25] = {vx,
+    float channels[] = {vx,
                           vy,
                           wz,
                           state.velocity[0],
@@ -288,7 +311,7 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
                           state.rpm_applied[1],
                           state.rpm_applied[2],
                           state.rpm_applied[3],
-                          (float)JY60_GetState()->trust,
+                          (float)imu->trust,
                           state.dt,
                           state.armed ? 1.0f : 0.0f,
                           (float)state.fault,
@@ -296,18 +319,26 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
                           (float)host_sequence,
                           (planner.active || jog_remaining > 0) ? 1.0f : 0.0f,
                           state.bias_ready ? 1.0f : 0.0f,
+#if CHASSIS_TELEMETRY_FULL
                           imu->raw_yaw_deg,
                           imu->gz_dps,
                           state.gyro_bias_dps,
                           (float)(imu->raw_angle_frame_count & 0x00ffffffU),
-                          (float)(imu->gyro_frame_count & 0x00ffffffU)};
-    memcpy(telemetry, channels, sizeof(channels));
-    telemetry[sizeof(channels)] = 0;
-    telemetry[sizeof(channels) + 1] = 0;
-    telemetry[sizeof(channels) + 2] = 0x80;
-    telemetry[sizeof(channels) + 3] = 0x7f;
+                          (float)(imu->gyro_frame_count & 0x00ffffffU),
+#endif
+                          forward_comp_vy,
+                          vy_original};
+    const size_t channel_bytes = sizeof(channels);
+    memcpy(telemetry, channels, channel_bytes);
+    telemetry[channel_bytes] = 0;
+    telemetry[channel_bytes + 1] = 0;
+    telemetry[channel_bytes + 2] = 0x80;
+    telemetry[channel_bytes + 3] = 0x7f;
     (void)HAL_UART_Transmit_IT(PINCFG_VOFA_UART, telemetry, sizeof(telemetry));
 }
+#else
+#define send_telemetry(vx, vy, wz, forward_comp_vy, vy_original, now) ((void)0)
+#endif
 void Chassis_RecordDeadlineMiss(void)
 {
     state.deadline_misses++;
@@ -491,6 +522,7 @@ void Chassis_Update(void)
                                                        state.committed_path_speed, response_delay)
                               : 0;
     float vx = speed * dx, vy = speed * dy, wz = 0;
+    float lateral_direction = dy;
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
     if (state.armed)
     {
@@ -502,17 +534,21 @@ void Chassis_Update(void)
     {
         vx = jog_x;
         vy = jog_y;
+        lateral_direction = jog_y;
         wz = jog_w;
         jog_remaining = fmaxf(0, jog_remaining - dt);
         heading = state.yaw_rad;
         integral = 0;
     }
-    vy *= vy >= 0 ? chassis_config.left_gain : chassis_config.right_gain;
+    ForwardCompResult forward_comp =
+        ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
+                          chassis_config.right_gain, chassis_config.forward_lateral_comp);
+    vy = forward_comp.vy_final;
     if (!config_valid())
     {
         Chassis_Stop();
         service_tx();
-        send_telemetry(0, 0, 0, now);
+        send_telemetry(0, 0, 0, 0, 0, now);
         return;
     }
     float t[4], r[4], out[4];
@@ -536,5 +572,5 @@ void Chassis_Update(void)
     }
     pending_valid = true;
     service_tx();
-    send_telemetry(vx, vy, wz, now);
+    send_telemetry(vx, vy, wz, forward_comp.forward_comp_vy, forward_comp.vy_original, now);
 }

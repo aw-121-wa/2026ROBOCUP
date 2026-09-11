@@ -18,14 +18,26 @@
             }
         },
         {
+            "name": "Release-LTO",
+            "inherits": "Release",
+            "cacheVariables": {
+                "CHASSIS_RELEASE_LTO": "ON"
+            }
+        },
+        {
             "name": "Release",
             "inherits": "default",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
+                "CMAKE_BUILD_TYPE": "Release",
+                "CHASSIS_RELEASE_LTO": "OFF"
             }
         }
     ],
     "buildPresets": [
+        {
+            "name": "Release-LTO",
+            "configurePreset": "Release-LTO"
+        },
         {
             "name": "Debug",
             "configurePreset": "Debug"

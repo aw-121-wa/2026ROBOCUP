@@ -1,5 +1,66 @@
 # RoboChassis V2 测试
 
+## V0.6 当前测试入口（优先于下方历史记录）
+
+正式候选固件使用普通 Release；Debug 保留 -O0 -g3，不启用 LTO。
+
+```powershell
+cmake --preset Release
+cmake --build --preset Release
+```
+
+产物：`build/Release/chassis_motor.hex`。本轮没有自动烧录或驱动车辆。
+不要误烧旧的 `build/Debug` 文件。尺寸对比见 [V0.6 报告](ARCHITECTURE_FIX_V06.md)。
+
+当前保留用户实调参数：半径 35 mm、上限 200 RPM、串口动作速度 450.519 mm/s、加减速度 550 mm/s²。没有调整 Heading、IMU、电机方向或里程计比例。
+
+### 纯前进右漂补偿
+
+只修改 `App/chassis_control.c` 中 `.forward_lateral_comp = 0.0f`。
+这是无量纲前馈系数 K：`vy_comp = K * vx`，正值向左抵消右漂。
+默认 0 关闭。只对路径方向 y=0 且 vx>0 生效；斜向（即使低速时 vy 很小）、后退、左右横移、原地旋转均不启用。调试 jog 同样依据原始 jog_y 判断。
+
+原左右横移增益先计算，再叠加前进补偿，不修改 odom scale。它补偿的是固定横向漂移，不保证消除真实航向误差或轮胎打滑。
+
+1. K 保持 0，架空确认四轮方向和 STOP，再在清空的场地依次测试短距离前进、后退、左右横移。先不要自动循环发送。
+2. 复位后静置等待 bias_ready=1、trust=2、fault=0，ASCII 发送 `ARM` 加换行，再发送 `FORWARD 1000` 加换行。确认空间足够并准备物理断电。
+3. 测量实际前进长度 L 和向右偏移 D，记录车头角度。距离尚不准时先排查，不能直接用名义 1000 代替 L。
+4. 理论 K≈D/L，第一轮只取约 70%。例如 L=1000、D=30 mm，先设约 0.02，而不是直接 0.03。
+5. 重新编译烧录、复位静置，再测相同路线；出现左漂则减小 K。每次只改 K，不同时改 PID/速度/里程计。
+6. 回归 `FORWARD -1000`、`SHIFT 1000`、`SHIFT -1000`；斜向/原地旋转通过现有调试入口在安全条件下验证。对这些动作补偿通道必须为 0。
+
+VOFA 继续使用 UART5 115200、JustFloat，默认 **27 通道、112 字节/帧**，原 0..24 编号不变：
+
+| 通道（从 0 开始） | 数据 |
+| --- | --- |
+| 0 | vx_cmd，mm/s |
+| 1 | vy_final，叠加补偿后的命令，mm/s |
+| 7 | yaw_error，度 |
+| 25 | forward_comp_vy，主动横向前馈，mm/s |
+| 26 | vy_original，原左右增益处理后、前馈叠加前的 vy，mm/s |
+
+这些是轮速限幅前的命令；8..11 为已发送应用的模型 RPM，不是编码器实测转速。轮速饱和时实际应用补偿会减少。
+
+### Telemetry 裁剪与 LTO 实验
+
+开发默认完整遥测 ON，不使用 printf。可在独立目录测试裁剪，避免改变普通 Release 缓存：
+
+```powershell
+cmake --preset Release -B build/Release-Slim -DCHASSIS_TELEMETRY_FULL=OFF
+cmake --build build/Release-Slim
+cmake --preset Release -B build/Release-NoTelemetry -DCHASSIS_TELEMETRY_ENABLE=OFF
+cmake --build build/Release-NoTelemetry
+```
+
+FULL=OFF：22 通道、92 字节；0..19 不变，20=forward_comp_vy，21=vy_original，不再发送原 IMU 诊断。ENABLE=OFF 仅停止 VOFA TX，UART5 命令 RX/STOP 仍启用。
+
+```powershell
+cmake --preset Release-LTO
+cmake --build --preset Release-LTO
+```
+
+LTO 是未实车验收的独立实验，不是推荐首次烧录版本。先验证普通 Release：启动遥测、ARM/STOP、IMU 丢失停车、四方向/旋转、稳定 5 ms 周期及任务栈余量；之后才做相同实机 LTO 对照。主机测试不覆盖实际调度与串口中断时序。
+
 ## 电机速度单位修正（当前配置）
 
 已确认驱动器F6速度单位为0.1 RPM：所有ZDT接口仍接收真实RPM，
@@ -8,8 +69,7 @@
 多机接口保留±3000 RPM输入检查；legacy接口超过此范围饱和，防止乘10溢出。
 rpm_applied、轮速遥测、rpm_limit及里程积分均保持真实RPM，不能再次乘10。
 
-本次恢复70mm直径对应半径35mm、轮速上限100RPM；
-按用户要求保留旧配置可达到的最高物理速度：串口目标366.519mm/s，轮速上限100真实RPM（线编码1000）。加减速度仍100mm/s²。航向PID参数未改。此处保持的是理论最高速度，不保证旧错误模型下的起停时序相同。
+历史说明：单位修正时曾设置半径35mm、上限100RPM、串口目标366.519mm/s、加减速度100mm/s²；之后用户已实调为上方V0.6当前参数，以下不再作为当前速度配置依据。
 重新编译烧录后先架空确认方向，再低速发送FORWARD 100并测量实际距离。
 最高匀速段约100RPM（受航向修正限幅影响），短距离不一定达到最高速度。
 不要沿用旧配置下480对应5m的经验比例；单位统一后重新做距离标定。

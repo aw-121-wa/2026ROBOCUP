@@ -7,7 +7,7 @@ typedef struct
 {
     float wheel_radius_mm, half_track_mm, half_wheelbase_mm;
     float rpm_limit, kp, ki, gyro_damping, wz_limit;
-    float left_gain, right_gain, left_odom_scale, right_odom_scale;
+    float left_gain, right_gain, forward_lateral_comp, left_odom_scale, right_odom_scale;
     uint8_t motor_id[4];
     int8_t motor_sign[4];
     bool calibrated;
