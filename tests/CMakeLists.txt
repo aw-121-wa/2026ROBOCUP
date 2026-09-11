@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.22)
 project(chassis_tests C)
 enable_testing()
+add_executable(test_dwt test_dwt.c)
+target_include_directories(test_dwt PRIVATE ../Core/Inc)
+target_compile_options(test_dwt PRIVATE -Wall -Wextra -Werror)
+add_test(NAME dwt_init COMMAND test_dwt)
 # Keep object paths ASCII for Windows MinGW assemblers.
 configure_file(../Algorithm/motion.c ${CMAKE_CURRENT_BINARY_DIR}/motion.c COPYONLY)
 configure_file(../DRIVER/src/zdt_x42s.c ${CMAKE_CURRENT_BINARY_DIR}/zdt_x42s.c COPYONLY)

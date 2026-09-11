@@ -7,6 +7,11 @@ bool DWT_Time_Init(void)
      */
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 
+    /* Cortex-M7 DWT may be locked after power-on; unlock before configuring it. */
+    DWT->LAR = 0xC5ACCE55U;
+    __DSB();
+    __ISB();
+
     /*
      * 清零 cycle counter
      */
