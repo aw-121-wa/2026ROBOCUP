@@ -1,4 +1,6 @@
 #include "chassis_control.h"
+#include "host_command.h"
+#include "host_uart.h"
 #include "motion.h"
 #include "heading.h"
 #include "chassis_odom.h"
@@ -10,20 +12,20 @@
 #include <string.h>
 #include <stdlib.h>
 #define RAD 0.017453292519943295f
-ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
+ChassisConfig chassis_config = {.wheel_radius_mm = 0.35f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
-                                .rpm_limit = 100.0f,
-                                .kp = 2.0f,
-                                .ki = 0.05f,
-                                .gyro_damping = 0.15f,
-                                .wz_limit = 1.0f,
+                                .rpm_limit = 1000.0f,
+                                .kp = 0.1f,
+                                .ki = 0.00f,
+                                .gyro_damping = 0.0f,
+                                .wz_limit = 0.02f,
                                 .left_gain = 1.0f,
                                 .right_gain = 1.0f,
                                 .left_odom_scale = 1.0f,
                                 .right_odom_scale = 1.0f,
                                 .motor_id = {2, 1, 3, 4},
-                                .motor_sign = {1, 1, 1, 1},
+                                .motor_sign = {1, -1, 1, -1}, /* FL/FR/RL/RR: IDs 2/1/3/4. */
                                 .calibrated = true,
                                 .command_mode = ZDT_MULTI_COMMAND};
 static ChassisState state;
@@ -39,7 +41,10 @@ static bool pending_valid;
 static uint32_t tx_cycle;
 static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
-static uint8_t telemetry[60];
+static uint8_t telemetry[84]; /* 20 float channels + JustFloat tail. */
+static HostParser host_parser;
+static int host_result;
+static uint32_t host_sequence, host_byte_cycle;
 static Geometry geometry(void)
 {
     return (Geometry){chassis_config.wheel_radius_mm,
@@ -184,8 +189,13 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *uart)
 }
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *uart)
 {
+    HostUart_Error(uart);
     if (uart == PINCFG_ZDT_UART)
         tx_error = true;
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart)
+{
+    HostUart_RxComplete(uart);
 }
 bool Chassis_Init(void)
 {
@@ -213,6 +223,9 @@ bool Chassis_Init(void)
     last_cycle = now;
     telemetry_cycle = now;
     odom_cycle = now;
+
+    if (!HostUart_Init())
+        return false;
 
     return true;
 }
@@ -260,7 +273,7 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
         PINCFG_VOFA_UART->gState != HAL_UART_STATE_READY)
         return;
     telemetry_cycle = now;
-    float channels[14] = {vx,
+    float channels[20] = {vx,
                           vy,
                           wz,
                           state.velocity[0],
@@ -273,17 +286,75 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
                           state.rpm_applied[2],
                           state.rpm_applied[3],
                           (float)JY60_GetState()->trust,
-                          state.dt};
+                          state.dt,
+                          state.armed ? 1.0f : 0.0f,
+                          (float)state.fault,
+                          (float)host_result,
+                          (float)host_sequence,
+                          (planner.active || jog_remaining > 0) ? 1.0f : 0.0f,
+                          state.bias_ready ? 1.0f : 0.0f};
     memcpy(telemetry, channels, sizeof(channels));
-    telemetry[56] = 0;
-    telemetry[57] = 0;
-    telemetry[58] = 0x80;
-    telemetry[59] = 0x7f;
+    telemetry[80] = 0;
+    telemetry[81] = 0;
+    telemetry[82] = 0x80;
+    telemetry[83] = 0x7f;
     (void)HAL_UART_Transmit_IT(PINCFG_VOFA_UART, telemetry, sizeof(telemetry));
 }
 void Chassis_RecordDeadlineMiss(void)
 {
     state.deadline_misses++;
+}
+/* Only called by the chassis task, after IMU/fault checks and debug commands. */
+static void service_host_commands(uint32_t now)
+{
+    uint8_t bytes[HOST_UART_CAPACITY];
+    int count = HostUart_Read(bytes, sizeof(bytes));
+    if (count < 0)
+    {
+        Chassis_Stop();
+        host_parser = (HostParser){.discard = true};
+        host_result = HOST_RX_ERROR;
+        host_sequence = (host_sequence + 1U) & 0x00ffffffU;
+        return;
+    }
+    /* Never join an old partial command with a much later fragment. */
+    if (host_parser.length && DWT_DeltaSec(now, host_byte_cycle) > 0.5f)
+        host_parser.discard = true;
+    if (count > 0)
+        host_byte_cycle = now;
+    for (int i = 0; i < count; ++i)
+    {
+        HostCommand command;
+        int result = HostCommand_Feed(&host_parser, bytes[i], &command);
+        if (result == HOST_IDLE)
+            continue;
+        host_sequence = (host_sequence + 1U) & 0x00ffffffU;
+        host_result = result;
+        if (result < 0)
+            continue;
+        host_result = HostCommand_Check(&command, state.armed, planner.active || jog_remaining > 0);
+        if (host_result != HOST_OK)
+            continue;
+        if (command.kind == HOST_STOP)
+        {
+            Chassis_Stop();
+            HostUart_Flush();
+            host_parser = (HostParser){0};
+            break; /* Discard the rest of this snapshot too. */
+        }
+        if (command.kind == HOST_ARM)
+        {
+            if (!state.armed && !Chassis_Arm())
+                host_result = HOST_NOT_READY;
+        }
+        else
+        {
+            float x = command.kind == HOST_FORWARD ? command.distance_mm : 0;
+            float y = command.kind == HOST_SHIFT ? command.distance_mm : 0;
+            if (!Chassis_Move(x, y, 50.0f, 100.0f, 100.0f))
+                host_result = HOST_NOT_READY;
+        }
+    }
 }
 void Chassis_Update(void)
 {
@@ -384,6 +455,7 @@ void Chassis_Update(void)
         chassis_debug.result = ok ? 0 : -1;
         chassis_debug.acknowledged = sequence;
     }
+    service_host_commands(now);
     state.applied_path_speed =
         ChassisOdom_PathSpeed(geometry(), state.rpm_applied, chassis_config.left_odom_scale,
                               chassis_config.right_odom_scale, dx, dy);

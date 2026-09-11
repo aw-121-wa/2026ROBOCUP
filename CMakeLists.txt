@@ -59,6 +59,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     DRIVER/src/jy60.c
     DRIVER/src/zdt_x42s.c
     App/chassis_control.c
+    App/host_command.c
+    App/host_uart.c
     Algorithm/motion.c
 )
 
