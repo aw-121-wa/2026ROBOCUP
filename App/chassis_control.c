@@ -3,6 +3,7 @@
 #include "host_uart.h"
 #include "motion.h"
 #include "heading.h"
+#include "relative_yaw.h"
 #include "chassis_odom.h"
 #include "pin_config.h"
 #include "bsp_dwt.h"
@@ -12,14 +13,14 @@
 #include <string.h>
 #include <stdlib.h>
 #define RAD 0.017453292519943295f
-ChassisConfig chassis_config = {.wheel_radius_mm = 0.35f,
+ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
-                                .rpm_limit = 1000.0f,
-                                .kp = 0.1f,
+                                .rpm_limit = 200.0f,
+                                .kp = 1.8f,
                                 .ki = 0.00f,
                                 .gyro_damping = 0.0f,
-                                .wz_limit = 0.02f,
+                                .wz_limit = 1.9f,
                                 .left_gain = 1.0f,
                                 .right_gain = 1.0f,
                                 .left_odom_scale = 1.0f,
@@ -31,17 +32,18 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 0.35f,
 static ChassisState state;
 volatile ChassisDebugCommand chassis_debug;
 static Planner planner;
+static RelativeYaw relative_yaw;
 static float dx, dy, heading, integral, bias_sum, bias_elapsed;
 static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
-static uint32_t last_cycle, last_gyro, last_angle, bias_count, telemetry_cycle;
+static uint32_t last_cycle, last_gyro, bias_count, telemetry_cycle;
 static uint8_t tx[ZDT_MULTI_SPEED_SIZE] __attribute__((aligned(32)));
 static volatile bool tx_done, tx_busy, tx_error;
 static bool pending_valid;
 static uint32_t tx_cycle;
 static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
-static uint8_t telemetry[84]; /* 20 float channels + JustFloat tail. */
+static uint8_t telemetry[104]; /* 25 float channels + JustFloat tail. */
 static HostParser host_parser;
 static int host_result;
 static uint32_t host_sequence, host_byte_cycle;
@@ -231,7 +233,7 @@ bool Chassis_Init(void)
 }
 bool Chassis_Arm(void)
 {
-    if (!chassis_config.calibrated || !config_valid() || !state.bias_ready || state.fault ||
+    if (!chassis_config.calibrated || !config_valid() || !state.bias_ready || !relative_yaw.ready || state.fault ||
         JY60_GetState()->trust != JY60_TRUST_GOOD)
         return false;
     state.armed = true;
@@ -273,7 +275,8 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
         PINCFG_VOFA_UART->gState != HAL_UART_STATE_READY)
         return;
     telemetry_cycle = now;
-    float channels[20] = {vx,
+    const JY60_State_t *imu = JY60_GetState();
+    float channels[25] = {vx,
                           vy,
                           wz,
                           state.velocity[0],
@@ -292,12 +295,17 @@ static void send_telemetry(float vx, float vy, float wz, uint32_t now)
                           (float)host_result,
                           (float)host_sequence,
                           (planner.active || jog_remaining > 0) ? 1.0f : 0.0f,
-                          state.bias_ready ? 1.0f : 0.0f};
+                          state.bias_ready ? 1.0f : 0.0f,
+                          imu->raw_yaw_deg,
+                          imu->gz_dps,
+                          state.gyro_bias_dps,
+                          (float)(imu->raw_angle_frame_count & 0x00ffffffU),
+                          (float)(imu->gyro_frame_count & 0x00ffffffU)};
     memcpy(telemetry, channels, sizeof(channels));
-    telemetry[80] = 0;
-    telemetry[81] = 0;
-    telemetry[82] = 0x80;
-    telemetry[83] = 0x7f;
+    telemetry[sizeof(channels)] = 0;
+    telemetry[sizeof(channels) + 1] = 0;
+    telemetry[sizeof(channels) + 2] = 0x80;
+    telemetry[sizeof(channels) + 3] = 0x7f;
     (void)HAL_UART_Transmit_IT(PINCFG_VOFA_UART, telemetry, sizeof(telemetry));
 }
 void Chassis_RecordDeadlineMiss(void)
@@ -351,7 +359,7 @@ static void service_host_commands(uint32_t now)
         {
             float x = command.kind == HOST_FORWARD ? command.distance_mm : 0;
             float y = command.kind == HOST_SHIFT ? command.distance_mm : 0;
-            if (!Chassis_Move(x, y, 50.0f, 100.0f, 100.0f))
+            if (!Chassis_Move(x, y, 450.519f, 550.0f, 550.0f))
                 host_result = HOST_NOT_READY;
         }
     }
@@ -412,17 +420,24 @@ void Chassis_Update(void)
             state.bias_ready = true;
         }
     }
-    if (imu->trust != JY60_TRUST_LOST)
+    /* Experimental heading: accumulate accepted angle-frame deltas, no gz fusion.
+     * LOST clears the reference; only GOOD may establish a fresh zero. */
+    bool yaw_was_ready = relative_yaw.ready;
+    RelativeYaw_Update(&relative_yaw, imu->yaw_deg, imu->angle_frame_count,
+                       imu->trust != JY60_TRUST_LOST, imu->trust == JY60_TRUST_GOOD);
+    state.yaw_rad = relative_yaw.yaw_rad;
+    if (!relative_yaw.ready)
     {
-        state.yaw_rad = Angle_Wrap(state.yaw_rad + (imu->gz_dps - state.gyro_bias_dps) * RAD * dt);
-        if (imu->angle_frame_count != last_angle)
-        {
-            float error = Angle_Wrap(imu->yaw_deg * RAD - state.yaw_rad);
-            state.yaw_rad = Angle_Wrap(state.yaw_rad + (last_angle ? 0.2f : 1) * error);
-        }
+        if (state.armed)
+            state.fault |= 2;
+        Chassis_Stop();
+    }
+    if (!relative_yaw.ready || !yaw_was_ready)
+    {
+        heading = state.yaw_rad;
+        integral = 0;
     }
     last_gyro = imu->gyro_frame_count;
-    last_angle = imu->angle_frame_count;
     if (!tx_busy)
         integrate_odom(DWT_GetCycle());
     uint32_t sequence = chassis_debug.sequence;

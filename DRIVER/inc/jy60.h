@@ -75,6 +75,9 @@ typedef struct
     float roll_deg;
     float pitch_deg;
     float yaw_deg;
+    /* Diagnostic only: checksum-valid angle before health rejection. */
+    float raw_yaw_deg;
+    uint32_t raw_angle_frame_count;
 
     /* -------------------- DWT 时间戳 -------------------- */
 

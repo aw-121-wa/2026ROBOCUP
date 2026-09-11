@@ -2,6 +2,11 @@
 void ZDT_BuildLegacySpeed(uint8_t p[8], uint8_t id, int16_t rpm, uint8_t acceleration)
 {
     uint16_t magnitude = (uint16_t)(rpm < 0 ? -(int32_t)rpm : rpm);
+    /* Public input is physical RPM; configured driver uses 0.1 RPM per unit.
+     * Clamp the void legacy API before scaling to avoid uint16_t overflow. */
+    if (magnitude > 3000U)
+        magnitude = 3000U;
+    magnitude = (uint16_t)(magnitude * 10U);
     p[0] = id;
     p[1] = 0xF6;
     p[2] = rpm < 0;

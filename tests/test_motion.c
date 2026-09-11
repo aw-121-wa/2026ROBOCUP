@@ -11,7 +11,7 @@ static void near(float a, float b)
 int main(void)
 {
     uint8_t frame[8], sync[4];
-    const uint8_t wanted[8] = {2, 0xF6, 1, 1, 44, 0, 1, 0x6B};
+    const uint8_t wanted[8] = {2, 0xF6, 1, 0x0B, 0xB8, 0, 1, 0x6B};
     const uint8_t wanted_sync[4] = {0, 0xFF, 0x66, 0x6B};
     ZDT_BuildSpeed(frame, 2, -300, 0);
     assert(memcmp(frame, wanted, 8) == 0);

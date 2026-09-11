@@ -255,6 +255,9 @@ static void JY60_ParseAngle(const uint8_t *frame, uint32_t now)
      */
     const float scale = 180.0f / 32768.0f;
 
+    s_jy60.raw_yaw_deg = (float)raw_yaw * scale;
+    s_jy60.raw_angle_frame_count++;
+
     float interval = DWT_DeltaSec(now, raw_angle_cycle);
     raw_angle_cycle = now;
     if (!ImuHealth_Angle(&health, (float)raw_yaw * scale, s_jy60.gz_dps, interval))
