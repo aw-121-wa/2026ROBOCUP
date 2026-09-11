@@ -17,5 +17,8 @@ int main(void)
     float lateral[4] = {-60, 60, 60, -60};
     d = ChassisOdom_Integrate((Geometry){35, 300}, lateral, 0, 2, 1, 0, 1, 0.01f, velocity);
     assert(fabsf(d.progress - 4.39822972f) < 0.001f);
+    assert(fabsf(ChassisOdom_PathSpeed((Geometry){35, 300}, lateral, 2, 1, 0, 1) - 439.822972f) <
+           0.01f);
+    assert(fabsf(ChassisOdom_PathSpeed((Geometry){35, 300}, lateral, 2, 1, 1, 0)) < 0.001f);
     return 0;
 }

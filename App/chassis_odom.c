@@ -1,5 +1,15 @@
 #include "chassis_odom.h"
 #include <math.h>
+float ChassisOdom_PathSpeed(Geometry g, const float rpm[4], float left_scale, float right_scale,
+                            float ux, float uy)
+{
+    if (g.radius <= 0 || g.arm <= 0)
+        return 0;
+    float velocity[3];
+    Mecanum_Forward(g, rpm, velocity);
+    float y = velocity[1] * (velocity[1] >= 0 ? left_scale : right_scale);
+    return velocity[0] * ux + y * uy;
+}
 ChassisOdomDelta ChassisOdom_Integrate(Geometry g, const float rpm[4], float yaw, float left_scale,
                                        float right_scale, float ux, float uy, float dt,
                                        float velocity[3])

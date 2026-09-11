@@ -19,6 +19,7 @@ typedef struct
     float velocity[3], rpm_applied[4], yaw_error;
     float rpm_requested[4], rpm_pending[4], rpm_inflight[4];
     uint32_t deadline_misses;
+    float applied_path_speed, committed_path_speed;
     uint32_t fault, updates;
     bool armed, bias_ready;
 } ChassisState;

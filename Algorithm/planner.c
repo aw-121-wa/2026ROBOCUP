@@ -36,9 +36,11 @@ float Planner_Update(Planner *p, float dt)
 
 /* Braking phase is indexed by applied distance, not elapsed wall time.
  * 0.5 mm acceptance and 5 mm/s crawl prevent integer-RPM terminal deadlock. */
-float Planner_UpdateProgress(Planner *p, float dt, float progress)
+float Planner_UpdateProgress(Planner *p, float dt, float progress, float applied_speed,
+                             float committed_speed, float response_delay)
 {
-    if (!p->active || !isfinite(dt) || dt <= 0 || !isfinite(progress))
+    if (!p->active || !isfinite(dt) || dt <= 0 || !isfinite(progress) || !isfinite(applied_speed) ||
+        !isfinite(committed_speed) || !isfinite(response_delay) || response_delay < 0)
         return 0;
     float remaining = p->distance - progress;
     if (remaining <= 0.5f)
@@ -48,12 +50,15 @@ float Planner_UpdateProgress(Planner *p, float dt, float progress)
     }
     p->time += dt;
     float speed = p->time < p->ta ? 0.5f * p->peak * (1 - cosf(PI * p->time / p->ta)) : p->peak;
-    float stopping = PI * speed * speed / (4 * p->deceleration);
-    if (!p->braking && remaining <= stopping + speed * dt)
+    float approach = fmaxf(0, fmaxf(applied_speed, committed_speed));
+    float delay_distance = approach * fmaxf(dt, response_delay);
+    float stopping = PI * approach * approach / (4 * p->deceleration);
+    if (!p->braking && approach > 0 && remaining <= stopping + delay_distance)
     {
         p->braking = true;
-        p->brake_distance = remaining;
-        p->brake_speed = speed;
+        p->brake_distance = fmaxf(0.5f, remaining - delay_distance);
+        p->brake_speed = approach;
+        p->brake_output = approach;
     }
     if (p->braking)
     {
@@ -69,6 +74,12 @@ float Planner_UpdateProgress(Planner *p, float dt, float progress)
                 hi = u;
         }
         speed = 0.5f * p->brake_speed * (1 + cosf(PI * (lo + hi) * 0.5f));
+        /* Do not regain lost translation when rotational saturation disappears.
+         * The existing terminal crawl remains a deliberate low-speed exception. */
+        float crawl = fminf(5.0f, p->peak);
+        float applied_cap = fmaxf(crawl, fmaxf(0, applied_speed));
+        p->brake_output = fminf(p->brake_output, fminf(applied_cap, fmaxf(crawl, speed)));
+        return p->brake_output;
     }
     return fmaxf(fminf(5.0f, p->peak), speed);
 }

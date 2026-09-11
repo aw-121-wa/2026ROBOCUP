@@ -45,4 +45,5 @@ legacy保留四帧F6+FF66、至少3ms帧间隔。发送模式在批次开始时�
 烧录后先架空低速测试并检查逻辑分析仪实际帧，确认UART5遥测dt约0.005秒。
 
 本轮仅处理V0.4三项；未新增驱动器状态读取、心跳自动配置，未修改cache和creep策略。
+后续更新：Planner制动改用applied_path_speed，详见APPLIED_SPEED_BRAKING.md；保留低速爬行策略。
 V0.3记录中的“0xAA待手册确认”由本记录取代。尚未进行实机验证。

@@ -11,8 +11,8 @@
 #include <stdlib.h>
 #define RAD 0.017453292519943295f
 ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
-                                .half_track_mm = 0.0f, /* Measure before arming. */
-                                .half_wheelbase_mm = 0.0f,
+                                .half_track_mm = 128.5f, /* Measure before arming. */
+                                .half_wheelbase_mm = 130.5f,
                                 .rpm_limit = 100.0f,
                                 .kp = 2.0f,
                                 .ki = 0.05f,
@@ -24,7 +24,7 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
                                 .right_odom_scale = 1.0f,
                                 .motor_id = {2, 1, 3, 4},
                                 .motor_sign = {1, 1, 1, 1},
-                                .calibrated = false,
+                                .calibrated = true,
                                 .command_mode = ZDT_MULTI_COMMAND};
 static ChassisState state;
 volatile ChassisDebugCommand chassis_debug;
@@ -384,7 +384,25 @@ void Chassis_Update(void)
         chassis_debug.result = ok ? 0 : -1;
         chassis_debug.acknowledged = sequence;
     }
-    float speed = state.armed ? Planner_UpdateProgress(&planner, dt, segment_progress) : 0;
+    state.applied_path_speed =
+        ChassisOdom_PathSpeed(geometry(), state.rpm_applied, chassis_config.left_odom_scale,
+                              chassis_config.right_odom_scale, dx, dy);
+    bool committed = tx_busy || tx_part != 0;
+    state.committed_path_speed =
+        committed
+            ? ChassisOdom_PathSpeed(geometry(), state.rpm_inflight, chassis_config.left_odom_scale,
+                                    chassis_config.right_odom_scale, dx, dy)
+            : state.applied_path_speed;
+    /* Reserve a control cycle plus both in-progress and subsequent wire time.
+     * Legacy batches span multiple task wakeups, so use a conservative 60 ms. */
+    bool legacy =
+        chassis_config.command_mode == ZDT_LEGACY_SYNC || (committed && tx_mode == ZDT_LEGACY_SYNC);
+    float response_delay =
+        legacy ? 0.060f : 0.010f + 2.0f * ZDT_MULTI_SPEED_SIZE * 10.0f / PINCFG_ZDT_BAUDRATE;
+    float speed = state.armed ? Planner_UpdateProgress(&planner, dt, segment_progress,
+                                                       state.applied_path_speed,
+                                                       state.committed_path_speed, response_delay)
+                              : 0;
     float vx = speed * dx, vy = speed * dy, wz = 0;
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
     if (state.armed)
@@ -412,6 +430,16 @@ void Chassis_Update(void)
     }
     float t[4], r[4], out[4];
     Mecanum_Inverse(geometry(), vx, vy, 0, t);
+    if (planner.braking && planner.active && jog_remaining <= 0)
+    {
+        /* Prevent lateral compensation from amplifying the braking envelope.
+         * Rotation-priority limiting may only reduce this translation. */
+        float projected = ChassisOdom_PathSpeed(geometry(), t, chassis_config.left_odom_scale,
+                                                chassis_config.right_odom_scale, dx, dy);
+        if (projected > speed && projected > 0)
+            for (int i = 0; i < 4; ++i)
+                t[i] *= speed / projected;
+    }
     Mecanum_Inverse(geometry(), 0, 0, wz, r);
     Wheel_Limit(t, r, chassis_config.rpm_limit, out);
     for (int i = 0; i < 4; i++)
