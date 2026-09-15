@@ -294,5 +294,7 @@ void UART8_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+extern UART_HandleTypeDef huart6;
+void USART6_IRQHandler(void) { HAL_UART_IRQHandler(&huart6); }
 
 /* USER CODE END 1 */

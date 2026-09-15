@@ -1,6 +1,8 @@
 #include "chassis_control.h"
 #include "host_command.h"
 #include "host_uart.h"
+#include "path_ports.h"
+#include "path_yaw.h"
 #include "forward_comp.h"
 #include "motion.h"
 #include "heading.h"
@@ -41,9 +43,13 @@ static ChassisState state;
 volatile ChassisDebugCommand chassis_debug;
 static Planner planner;
 static RelativeYaw relative_yaw;
+static PathYaw path_yaw;
 static float dx, dy, heading, integral, bias_sum, bias_elapsed;
 static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
+static bool path_rotation, path_body, zero_output;
+static float path_target, body_x, body_y, body_w;
+static uint32_t moving_tick;
 static uint32_t last_cycle, last_gyro, bias_count;
 #if CHASSIS_TELEMETRY_ENABLE
 static uint32_t telemetry_cycle;
@@ -56,9 +62,9 @@ static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
 #if CHASSIS_TELEMETRY_ENABLE
 #if CHASSIS_TELEMETRY_FULL
-static uint8_t telemetry[112]; /* 27 float channels + JustFloat tail. */
+static uint8_t telemetry[128]; /* Existing 27 + 4 PATH channels + JustFloat tail. */
 #else
-static uint8_t telemetry[92]; /* 22 float channels + JustFloat tail. */
+static uint8_t telemetry[108]; /* Existing 22 + 4 PATH channels + JustFloat tail. */
 #endif
 #endif
 static HostParser host_parser;
@@ -210,12 +216,14 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *uart)
 }
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *uart)
 {
+    PathPorts_Error(uart);
     HostUart_Error(uart);
     if (uart == PINCFG_ZDT_UART)
         tx_error = true;
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart)
 {
+    PathPorts_RxComplete(uart);
     HostUart_RxComplete(uart);
 }
 bool Chassis_Init(void)
@@ -250,12 +258,16 @@ bool Chassis_Init(void)
     if (!HostUart_Init())
         return false;
 
+    /* A failed mission peripheral prevents PATH, not manual chassis diagnosis. */
+    PathPorts_Init();
+    moving_tick = HAL_GetTick();
+
     return true;
 }
 bool Chassis_Arm(void)
 {
-    if (!chassis_config.calibrated || !config_valid() || !state.bias_ready || !relative_yaw.ready || state.fault ||
-        JY60_GetState()->trust != JY60_TRUST_GOOD)
+    if (!chassis_config.calibrated || !config_valid() || !state.bias_ready || !relative_yaw.ready ||
+        state.fault || JY60_GetState()->trust != JY60_TRUST_GOOD)
         return false;
     state.armed = true;
     heading = state.yaw_rad;
@@ -264,7 +276,10 @@ bool Chassis_Arm(void)
 }
 void Chassis_Stop(void)
 {
+    PathPorts_Cancel();
     state.armed = false;
+    path_rotation = path_body = false;
+    zero_output = true;
     planner.active = false;
     jog_remaining = 0;
     integral = 0;
@@ -274,25 +289,77 @@ void Chassis_Stop(void)
 }
 bool Chassis_Move(float x, float y, float v, float a, float d)
 {
-    if (!state.armed || !isfinite(x) || !isfinite(y))
+    if (!state.armed || Chassis_MotionBusy() || !isfinite(x) || !isfinite(y))
         return false;
     float length = hypotf(x, y);
     if (!Planner_Start(&planner, length, v, a, d))
         return false;
     jog_remaining = 0;
+    zero_output = false;
     segment_progress = 0;
     dx = x / length;
     dy = y / length;
     heading = state.yaw_rad;
     return true;
 }
+void Chassis_Hold(void)
+{
+    planner.active = false;
+    path_rotation = path_body = false;
+    jog_remaining = 0;
+    zero_output = true;
+    heading = state.yaw_rad;
+    integral = 0;
+}
+bool Chassis_MotionBusy(void)
+{
+    return planner.active || path_rotation || path_body || jog_remaining > 0;
+}
+bool Chassis_IsSettled(void)
+{
+    if (Chassis_MotionBusy())
+        return false;
+    for (int i = 0; i < 4; ++i)
+        if (state.rpm_applied[i] != 0 || state.rpm_requested[i] != 0 ||
+            ((tx_busy || tx_part) && state.rpm_inflight[i] != 0))
+            return false;
+    return (uint32_t)(HAL_GetTick() - moving_tick) >= 80;
+}
+bool Chassis_Rotate(float degrees)
+{
+    if (!state.armed || Chassis_MotionBusy() || !isfinite(degrees) || fabsf(degrees) > 360)
+        return false;
+    path_target = path_yaw.continuous + degrees * RAD;
+    path_rotation = true;
+    zero_output = false;
+    integral = 0;
+    return true;
+}
+bool Chassis_Body(float x, float y, float w)
+{
+    if (!state.armed || planner.active || path_rotation || !isfinite(x) || !isfinite(y) ||
+        !isfinite(w))
+        return false;
+    if (!path_body)
+        heading = state.yaw_rad;
+    body_x = x;
+    body_y = y;
+    body_w = w;
+    path_body = true;
+    zero_output = false;
+    return true;
+}
+float Chassis_ContinuousYaw(void)
+{
+    return path_yaw.continuous;
+}
 const ChassisState *Chassis_GetState(void)
 {
     return &state;
 }
 #if CHASSIS_TELEMETRY_ENABLE
-static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy,
-                           float vy_original, uint32_t now)
+static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, float vy_original,
+                           uint32_t now)
 {
     if (DWT_DeltaSec(now, telemetry_cycle) < 0.05f ||
         PINCFG_VOFA_UART->gState != HAL_UART_STATE_READY)
@@ -300,34 +367,38 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy,
     telemetry_cycle = now;
     const JY60_State_t *imu = JY60_GetState();
     float channels[] = {vx,
-                          vy,
-                          wz,
-                          state.velocity[0],
-                          state.velocity[1],
-                          state.velocity[2],
-                          state.yaw_rad / RAD,
-                          state.yaw_error / RAD,
-                          state.rpm_applied[0],
-                          state.rpm_applied[1],
-                          state.rpm_applied[2],
-                          state.rpm_applied[3],
-                          (float)imu->trust,
-                          state.dt,
-                          state.armed ? 1.0f : 0.0f,
-                          (float)state.fault,
-                          (float)host_result,
-                          (float)host_sequence,
-                          (planner.active || jog_remaining > 0) ? 1.0f : 0.0f,
-                          state.bias_ready ? 1.0f : 0.0f,
+                        vy,
+                        wz,
+                        state.velocity[0],
+                        state.velocity[1],
+                        state.velocity[2],
+                        state.yaw_rad / RAD,
+                        state.yaw_error / RAD,
+                        state.rpm_applied[0],
+                        state.rpm_applied[1],
+                        state.rpm_applied[2],
+                        state.rpm_applied[3],
+                        (float)imu->trust,
+                        state.dt,
+                        state.armed ? 1.0f : 0.0f,
+                        (float)state.fault,
+                        (float)host_result,
+                        (float)host_sequence,
+                        (planner.active || jog_remaining > 0) ? 1.0f : 0.0f,
+                        state.bias_ready ? 1.0f : 0.0f,
 #if CHASSIS_TELEMETRY_FULL
-                          imu->raw_yaw_deg,
-                          imu->gz_dps,
-                          state.gyro_bias_dps,
-                          (float)(imu->raw_angle_frame_count & 0x00ffffffU),
-                          (float)(imu->gyro_frame_count & 0x00ffffffU),
+                        imu->raw_yaw_deg,
+                        imu->gz_dps,
+                        state.gyro_bias_dps,
+                        (float)(imu->raw_angle_frame_count & 0x00ffffffU),
+                        (float)(imu->gyro_frame_count & 0x00ffffffU),
 #endif
-                          forward_comp_vy,
-                          vy_original};
+                        forward_comp_vy,
+                        vy_original,
+                        (float)path_diagnostics.result,
+                        (float)path_diagnostics.step,
+                        (float)path_diagnostics.accepted_ids,
+                        (float)path_diagnostics.fault};
     const size_t channel_bytes = sizeof(channels);
     memcpy(telemetry, channels, channel_bytes);
     telemetry[channel_bytes] = 0;
@@ -371,7 +442,8 @@ static void service_host_commands(uint32_t now)
         host_result = result;
         if (result < 0)
             continue;
-        host_result = HostCommand_Check(&command, state.armed, planner.active || jog_remaining > 0);
+        host_result =
+            HostCommand_Check(&command, state.armed, Chassis_MotionBusy() || PathPorts_Busy());
         if (host_result != HOST_OK)
             continue;
         if (command.kind == HOST_STOP)
@@ -384,6 +456,11 @@ static void service_host_commands(uint32_t now)
         if (command.kind == HOST_ARM)
         {
             if (!state.armed && !Chassis_Arm())
+                host_result = HOST_NOT_READY;
+        }
+        else if (command.kind == HOST_PATH)
+        {
+            if (!PathPorts_Start())
                 host_result = HOST_NOT_READY;
         }
         else
@@ -457,6 +534,7 @@ void Chassis_Update(void)
     RelativeYaw_Update(&relative_yaw, imu->yaw_deg, imu->angle_frame_count,
                        imu->trust != JY60_TRUST_LOST, imu->trust == JY60_TRUST_GOOD);
     state.yaw_rad = relative_yaw.yaw_rad;
+    PathYaw_Update(&path_yaw, state.yaw_rad, relative_yaw.ready);
     if (!relative_yaw.ready)
     {
         if (state.armed)
@@ -481,27 +559,29 @@ void Chassis_Update(void)
             Chassis_Stop();
             ok = true;
         }
-        if (command == 2)
+        if (command == 2 && !PathPorts_Busy())
             ok = Chassis_Arm();
-        if (command == 3)
+        if (command == 3 && !PathPorts_Busy())
             ok = Chassis_Move(chassis_debug.x, chassis_debug.y, chassis_debug.vmax,
                               chassis_debug.amax, chassis_debug.dmax);
         /* Timed low-speed jog: x/y mm/s, vmax rad/s, amax duration seconds. */
-        if (command == 4 && state.armed && isfinite(chassis_debug.x) && isfinite(chassis_debug.y) &&
-            isfinite(chassis_debug.vmax) && isfinite(chassis_debug.amax) &&
-            chassis_debug.amax > 0 && chassis_debug.amax <= 2)
+        if (command == 4 && !PathPorts_Busy() && state.armed && isfinite(chassis_debug.x) &&
+            isfinite(chassis_debug.y) && isfinite(chassis_debug.vmax) &&
+            isfinite(chassis_debug.amax) && chassis_debug.amax > 0 && chassis_debug.amax <= 2)
         {
             jog_x = clamp(chassis_debug.x, 100);
             jog_y = clamp(chassis_debug.y, 100);
             jog_w = clamp(chassis_debug.vmax, 0.3f);
             jog_remaining = chassis_debug.amax;
             planner.active = false;
+            zero_output = false;
             ok = true;
         }
         chassis_debug.result = ok ? 0 : -1;
         chassis_debug.acknowledged = sequence;
     }
     service_host_commands(now);
+    PathPorts_Tick();
     state.applied_path_speed =
         ChassisOdom_PathSpeed(geometry(), state.rpm_applied, chassis_config.left_odom_scale,
                               chassis_config.right_odom_scale, dx, dy);
@@ -540,6 +620,30 @@ void Chassis_Update(void)
         heading = state.yaw_rad;
         integral = 0;
     }
+    if (state.armed && path_rotation)
+    {
+        float error = path_target - path_yaw.continuous; /* continuous, also handles +180 */
+        vx = vy = 0;
+        float limit = 60.0f * (2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f) /
+                      (chassis_config.half_track_mm + chassis_config.half_wheelbase_mm);
+        wz = clamp(error * 1.8f, fminf(limit, chassis_config.wz_limit));
+        if (fabsf(error) < RAD && fabsf(imu->gz_dps - state.gyro_bias_dps) < 3)
+            Chassis_Hold();
+    }
+    if (state.armed && path_body)
+    {
+        vx = body_x;
+        vy = body_y;
+        lateral_direction = body_y;
+        if (body_w != 0)
+        {
+            wz = body_w;
+            heading = state.yaw_rad;
+            integral = 0;
+        }
+    }
+    if (zero_output || !state.armed)
+        vx = vy = wz = 0;
     ForwardCompResult forward_comp =
         ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
                           chassis_config.right_gain, chassis_config.forward_lateral_comp);
@@ -572,5 +676,9 @@ void Chassis_Update(void)
     }
     pending_valid = true;
     service_tx();
+    for (int i = 0; i < 4; ++i)
+        if (state.rpm_applied[i] != 0 || state.rpm_requested[i] != 0 ||
+            ((tx_busy || tx_part) && state.rpm_inflight[i] != 0))
+            moving_tick = HAL_GetTick();
     send_telemetry(vx, vy, wz, forward_comp.forward_comp_vy, forward_comp.vy_original, now);
 }

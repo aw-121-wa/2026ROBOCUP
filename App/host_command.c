@@ -20,6 +20,11 @@ static int parse(char *line, HostCommand *command)
         command->kind = HOST_ARM;
         return HOST_OK;
     }
+    if (!strcmp(line, "PATH"))
+    {
+        command->kind = HOST_PATH;
+        return HOST_OK;
+    }
     if (!strcmp(line, "STOP"))
     {
         command->kind = HOST_STOP;
@@ -105,7 +110,7 @@ int HostCommand_Check(const HostCommand *command, bool armed, bool busy)
         return HOST_OK;
     if (command->kind == HOST_ARM)
         return busy ? HOST_BUSY : HOST_OK;
-    if (command->kind != HOST_FORWARD && command->kind != HOST_SHIFT)
+    if (command->kind != HOST_FORWARD && command->kind != HOST_SHIFT && command->kind != HOST_PATH)
         return HOST_SYNTAX;
     if (!armed)
         return HOST_NOT_READY;

@@ -30,6 +30,11 @@
 #define PINCFG_JY60_UART (&huart2)
 #define PINCFG_JY60_BAUDRATE 9600U
 
+/* Mission peripherals: old turntable/RFID wiring, separate RDK link. */
+#define PINCFG_RDK_UART (&huart4) /* PC10 TX / PC11 RX, 115200 */
+#define PINCFG_TURNTABLE_UART (&huart6) /* PC6 TX / PC7 RX, 115200 */
+#define PINCFG_RFID_UART (&huart8) /* PE0 RX / PE1 TX, raw IDs, 115200 */
+
 /*
  * ============================================================
  * Optional GPIO mapping

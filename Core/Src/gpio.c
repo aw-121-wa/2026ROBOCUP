@@ -50,6 +50,12 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
 
+  GPIO_InitTypeDef inputs={0};
+  inputs.Pin=GPIO_PIN_8|GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_3|GPIO_PIN_10;
+  inputs.Mode=GPIO_MODE_INPUT;
+  inputs.Pull=GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOD,&inputs);
+
 }
 
 /* USER CODE BEGIN 2 */

@@ -25,6 +25,11 @@ int main(void)
 {
     HostParser p = {0};
     HostCommand c = {0};
+    CHECK(feed(&p, "PATH\n", &c) == HOST_OK);
+    CHECK(HostCommand_Check(&c, false, false) == HOST_NOT_READY);
+    CHECK(HostCommand_Check(&c, true, true) == HOST_BUSY);
+    CHECK(HostCommand_Check(&c, true, false) == HOST_OK);
+    CHECK(feed(&p, "PATH 1\n", &c) == HOST_SYNTAX);
     CHECK(feed(&p, "ARM\r\n", &c) == HOST_OK && c.kind == HOST_ARM);
     CHECK(feed(&p, "\r\n  \n", &c) == HOST_IDLE);
     CHECK(feed(&p, "FOR", &c) == HOST_IDLE);

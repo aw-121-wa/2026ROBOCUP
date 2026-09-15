@@ -10,7 +10,8 @@ typedef enum
     HOST_ARM,
     HOST_FORWARD,
     HOST_SHIFT,
-    HOST_STOP
+    HOST_STOP,
+    HOST_PATH
 } HostCommandKind;
 typedef struct
 {
