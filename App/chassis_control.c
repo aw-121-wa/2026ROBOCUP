@@ -22,7 +22,7 @@
 #ifndef CHASSIS_TELEMETRY_FULL
 #define CHASSIS_TELEMETRY_FULL 1
 #endif
-ChassisConfig chassis_config = {.wheel_radius_mm = 35.0f,
+ChassisConfig chassis_config = {.wheel_radius_mm = 36.4583f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
                                 .rpm_limit = 200.0f,
