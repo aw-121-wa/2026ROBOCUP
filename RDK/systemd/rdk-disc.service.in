@@ -1,0 +1,16 @@
+[Unit]
+Description=RDK X5 Disc Vision/Servo Bridge
+After=multi-user.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__WORKDIR__
+Environment=PYTHONUNBUFFERED=1
+SupplementaryGroups=dialout video
+ExecStart=/usr/bin/python3 __WORKDIR__/tools/rdk_stm32_bridge.py --project-root __WORKDIR__ --stm32-port /dev/ttyUSB0 --stm32-baud 115200
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
