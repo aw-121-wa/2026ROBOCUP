@@ -78,11 +78,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/chassis_control.c
     App/host_command.c
     App/host_uart.c
+    App/path_chassis.c
     App/path_mission.c
     App/path_ports.c
-    App/path_session.c
     App/rdk_link.c
-    App/turntable_link.c
     Algorithm/motion.c
 )
 

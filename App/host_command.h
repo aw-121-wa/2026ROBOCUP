@@ -11,7 +11,8 @@ typedef enum
     HOST_FORWARD,
     HOST_SHIFT,
     HOST_STOP,
-    HOST_PATH
+    HOST_PATH,
+    HOST_PING, HOST_RDK_RESET, HOST_DISC
 } HostCommandKind;
 typedef struct
 {

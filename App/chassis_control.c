@@ -62,9 +62,9 @@ static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
 #if CHASSIS_TELEMETRY_ENABLE
 #if CHASSIS_TELEMETRY_FULL
-static uint8_t telemetry[128]; /* Existing 27 + 4 PATH channels + JustFloat tail. */
+static uint8_t telemetry[148]; /* 27 + 8 task/link + 1 RFID count + JustFloat tail. */
 #else
-static uint8_t telemetry[108]; /* Existing 22 + 4 PATH channels + JustFloat tail. */
+static uint8_t telemetry[128]; /* 22 + 8 task/link + 1 RFID count + JustFloat tail. */
 #endif
 #endif
 static HostParser host_parser;
@@ -384,7 +384,7 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
                         (float)state.fault,
                         (float)host_result,
                         (float)host_sequence,
-                        (planner.active || jog_remaining > 0) ? 1.0f : 0.0f,
+                        (Chassis_MotionBusy() || PathPorts_Busy()) ? 1.0f : 0.0f,
                         state.bias_ready ? 1.0f : 0.0f,
 #if CHASSIS_TELEMETRY_FULL
                         imu->raw_yaw_deg,
@@ -398,7 +398,13 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
                         (float)path_diagnostics.result,
                         (float)path_diagnostics.step,
                         (float)path_diagnostics.accepted_ids,
-                        (float)path_diagnostics.fault};
+                        (float)path_diagnostics.fault,
+                        (float)path_diagnostics.link_stage,
+                        (float)path_diagnostics.link_error,
+                        (float)path_diagnostics.gray,
+                        (float)path_diagnostics.phase,
+                        (float)path_diagnostics.rfid_count};
+    _Static_assert(sizeof(channels) + 4 == sizeof(telemetry), "VOFA frame size mismatch");
     const size_t channel_bytes = sizeof(channels);
     memcpy(telemetry, channels, channel_bytes);
     telemetry[channel_bytes] = 0;
@@ -442,8 +448,9 @@ static void service_host_commands(uint32_t now)
         host_result = result;
         if (result < 0)
             continue;
-        host_result =
-            HostCommand_Check(&command, state.armed, Chassis_MotionBusy() || PathPorts_Busy());
+        host_result = HostCommand_Check(&command, state.armed,
+                                        Chassis_MotionBusy() ||
+                                            (command.kind != HOST_RDK_RESET && PathPorts_Busy()));
         if (host_result != HOST_OK)
             continue;
         if (command.kind == HOST_STOP)
@@ -458,6 +465,21 @@ static void service_host_commands(uint32_t now)
             if (!state.armed && !Chassis_Arm())
                 host_result = HOST_NOT_READY;
         }
+        else if (command.kind == HOST_PING)
+        {
+            if (!PathPorts_Ping())
+                host_result = HOST_NOT_READY;
+        }
+        else if (command.kind == HOST_RDK_RESET)
+        {
+            if (!PathPorts_Reset())
+                host_result = HOST_NOT_READY;
+        }
+        else if (command.kind == HOST_DISC)
+        {
+            if (!PathPorts_Disc())
+                host_result = HOST_NOT_READY;
+        }
         else if (command.kind == HOST_PATH)
         {
             if (!PathPorts_Start())
@@ -467,7 +489,7 @@ static void service_host_commands(uint32_t now)
         {
             float x = command.kind == HOST_FORWARD ? command.distance_mm : 0;
             float y = command.kind == HOST_SHIFT ? command.distance_mm : 0;
-            if (!Chassis_Move(x, y, 550.519f, 550.0f, 550.0f))
+            if (!Chassis_Move(x, y, 450.519f, 550.0f, 550.0f))
                 host_result = HOST_NOT_READY;
         }
     }

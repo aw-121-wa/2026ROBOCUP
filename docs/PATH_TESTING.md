@@ -1,3 +1,5 @@
+> 当前 ZHY 迁移版本请先看 [ZHY_MIGRATION.md](ZHY_MIGRATION.md)；下文旧协议及任务说明为历史记录。
+
 # PATH 联调与安全检查
 
 本次迁移以旧工程 `snapshot-2026-08-24-servo-arm` 的实际执行代码为流程依据。

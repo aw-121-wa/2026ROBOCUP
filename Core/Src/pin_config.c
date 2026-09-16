@@ -18,5 +18,9 @@ uint32_t PinConfig_Validate(void)
         e |= PINCFG_ERR_JY60_DMA_MISSING;
     else if (PINCFG_JY60_UART->hdmarx->Init.Mode != DMA_CIRCULAR)
         e |= PINCFG_ERR_JY60_DMA_NOT_CIRC;
+    if (PINCFG_RDK_UART == PINCFG_JY60_UART || PINCFG_RDK_UART == PINCFG_ZDT_UART || PINCFG_RDK_UART == PINCFG_VOFA_UART)
+        e |= PINCFG_ERR_UART_CONFLICT;
+    if (PINCFG_RDK_UART->Init.BaudRate != PINCFG_RDK_BAUDRATE)
+        e |= PINCFG_ERR_RDK_BAUDRATE;
     return e;
 }

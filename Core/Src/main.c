@@ -29,7 +29,6 @@
 #include "pin_config.h"
 #include "jy60.h"
 #include "chassis_control.h"
-#include "path_session.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -107,7 +106,6 @@ int main(void)
   MX_UART5_Init();
   MX_UART8_Init();
   MX_USART6_UART_Init();
-  (void)PathSession_Create(); /* Startup-only RNG/clock setup, before the RTOS. */
   /* USER CODE BEGIN 2 */
   if (!Chassis_Init()) { Error_Handler(); }
 

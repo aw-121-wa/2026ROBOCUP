@@ -1,52 +1,47 @@
 #include "rdk_link.h"
-#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <limits.h>
+static void fail(RdkLink *r, unsigned e)
+{
+    r->active = false;
+    r->locked = true;
+    r->stage = 6;
+    r->error = e;
+    r->reply = PATH_FAILED;
+}
 void Rdk_Init(RdkLink *r, uint32_t s, RdkTransmit tx, void *ctx)
 {
     *r = (RdkLink){.session = s, .transmit = tx, .context = ctx};
 }
 bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
 {
-    bool stop = !strcmp(v, "STOP");
-    if ((r->active && !stop) || (r->locked && !stop) || r->sequence == UINT32_MAX || !t)
+    (void)a;
+    if (!strcmp(v, "STOP"))
+    {
+        if (!r->locked)
+            fail(r, 5);
+        return true;
+    } /* Local lock only: RDK cannot abort. */
+    if (r->active || r->locked || !t)
         return false;
-    if (strcmp(v, "GROUP") && strcmp(v, "VISION") && strcmp(v, "DISC") && strcmp(v, "HELLO") &&
-        !stop)
+    if (!strcmp(v, "HELLO"))
+    {
+        strcpy(r->request, "PING\r\n");
+        r->stage = 1;
+    }
+    else if (!strcmp(v, "DISC") && r->stage == 2)
+    {
+        strcpy(r->request, "DISC_START\r\n");
+        r->stage = 3;
+    }
+    else
         return false;
-    r->interrupted_sequence = stop ? r->sequence : 0;
-    r->interrupted_reply = stop ? r->reply : PATH_WAIT;
     r->sequence++;
-    int count =
-        snprintf(r->request, sizeof(r->request), "Q %lu %lu %s %lu\n", (unsigned long)r->session,
-                 (unsigned long)r->sequence, v, (unsigned long)a);
-    if (count < 0 || (size_t)count >= sizeof(r->request))
-        return false;
     r->active = true;
     r->sent = false;
     r->reply = PATH_WAIT;
     r->started = n;
     r->timeout = t;
-    return true;
-}
-static bool number(char **s, uint32_t *n)
-{
-    if (**s < '0' || **s > '9')
-        return false;
-    uint32_t value = 0;
-    do
-    {
-        unsigned d = (unsigned)(**s - '0');
-        if (value > (UINT32_MAX - d) / 10U)
-            return false;
-        value = value * 10U + d;
-        (*s)++;
-    } while (**s >= '0' && **s <= '9');
-    if (**s != ' ')
-        return false;
-    (*s)++;
-    *n = value;
+    r->error = 0;
     return true;
 }
 void Rdk_Feed(RdkLink *r, uint8_t b)
@@ -58,9 +53,7 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
     }
     if (b != '\n')
     {
-        if (r->carriage)
-            r->overflow = true;
-        if (b < 32 || b > 126 || r->length >= sizeof(r->line) - 1)
+        if (r->carriage || b < 32 || b > 126 || r->length >= sizeof(r->line) - 1)
             r->overflow = true;
         if (!r->overflow)
             r->line[r->length++] = (char)b;
@@ -72,55 +65,48 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
     if (r->overflow)
     {
         r->overflow = false;
+        fail(r, 3);
         return;
     }
-    if (!r->active || strncmp(r->line, "R ", 2))
+    if (!r->line[0] || r->locked)
         return;
-    char *s = r->line + 2;
-    uint32_t session, sequence;
-    if (!number(&s, &session) || !number(&s, &sequence) || session != r->session ||
-        (sequence != r->sequence && sequence != r->interrupted_sequence))
-        return;
-    if (!strcmp(s, "ACK"))
-        return;
-    PathReply result;
-    if (!strcmp(s, "DONE"))
-        result = PATH_OK;
-    else if (!strcmp(s, "NONE"))
-        result = PATH_NONE;
-    else if (!strcmp(s, "ERROR"))
+    if (!r->active || !r->sent)
     {
-        result = PATH_FAILED;
-        r->locked = true;
+        fail(r, 3);
+        return;
     }
+    if (!strcmp(r->line, "PONG") && r->stage == 1)
+    {
+        r->stage = 2;
+        r->active = false;
+        r->reply = PATH_OK;
+    }
+    else if (!strcmp(r->line, "DISC_ACK") && r->stage == 3)
+        r->stage = 4;
+    else if (!strcmp(r->line, "DISC_DONE") && r->stage == 4)
+    {
+        r->stage = 5;
+        r->active = false;
+        r->reply = PATH_OK;
+    }
+    else if (!strcmp(r->line, "DISC_ERROR") && (r->stage == 3 || r->stage == 4))
+        fail(r, 2);
     else
-        return;
-    if (sequence == r->interrupted_sequence)
-    {
-        r->interrupted_reply = result;
-        return;
-    }
-    r->reply = result;
-    r->active = false;
+        fail(r, 3);
 }
 void Rdk_Tick(RdkLink *r, uint32_t n)
 {
     if (!r->active)
         return;
-    if ((uint32_t)(n - r->started) >= r->timeout)
+    uint32_t elapsed = n - r->started;
+    if (elapsed >= r->timeout || ((r->stage == 1 || r->stage == 3) && elapsed >= 2000))
     {
-        r->reply = PATH_FAILED;
-        r->active = false;
-        r->locked = true;
+        fail(r, 1);
         return;
     }
-    /* Identical retransmissions also renew the RDK's two-second detector lease. */
-    if (!r->sent || (uint32_t)(n - r->last_tx) >= 500)
+    if (!r->sent && r->transmit(r->context, r->request, strlen(r->request)))
     {
-        if (r->transmit(r->context, r->request, strlen(r->request)))
-        {
-            r->last_tx = n;
-            r->sent = true;
-        }
+        r->sent = true;
+        r->last_tx = n;
     }
 }

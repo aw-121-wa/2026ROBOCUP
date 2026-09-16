@@ -1,0 +1,59 @@
+camera:
+  device: /dev/video0
+  width: 640
+  height: 480
+  fps: 30
+  stale_ms: 250
+  startup_timeout_ms: 5000
+serial:
+  device: /dev/ttyS1
+  baudrate: 115200
+  reconnect_attempts: 3
+  reconnect_delay_ms: 250
+roi:
+  x: 92
+  y: 29
+  width: 352
+  height: 244
+  edge_margin: 4
+colors:
+  red:
+    ranges:
+    - - 0
+      - 100
+      - 60
+      - 10
+      - 255
+      - 255
+    - - 170
+      - 100
+      - 60
+      - 179
+      - 255
+      - 255
+  blue:
+    ranges:
+    - - 90
+      - 80
+      - 50
+      - 135
+      - 255
+      - 255
+ball:
+  min_mask_pixels: 700
+  min_contour_area: 900
+  min_width: 20
+  min_height: 20
+  max_width: 260
+  max_height: 260
+  reference_width: 148
+  reference_height: 150
+  aspect_ratio_min: 0.75
+  aspect_ratio_max: 1.3
+  size_min_scale: 0.65
+  size_max_scale: 1.4
+  fill_ratio_min: 0.5
+  fill_ratio_max: 0.9
+temporal:
+  window_frames: 3
+  required_hits: 2

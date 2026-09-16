@@ -31,9 +31,10 @@
 #define PINCFG_JY60_BAUDRATE 9600U
 
 /* Mission peripherals: old turntable/RFID wiring, separate RDK link. */
+#define PINCFG_RDK_BAUDRATE 115200U
 #define PINCFG_RDK_UART (&huart4) /* PC10 TX / PC11 RX, 115200 */
 #define PINCFG_TURNTABLE_UART (&huart6) /* PC6 TX / PC7 RX, 115200 */
-#define PINCFG_RFID_UART (&huart8) /* PE0 RX / PE1 TX, raw IDs, 115200 */
+#define PINCFG_RFID_UART (&huart8) /* PE0 RX / PE1 TX, RFID factory baud 9600 */
 
 /*
  * ============================================================
@@ -68,6 +69,7 @@ typedef enum
     PINCFG_ERR_JY60_DMA_NOT_CIRC = 0x00000010U,
     PINCFG_ERR_ZDT_DMA = 0x00000020U,
     PINCFG_ERR_DMA_CACHE = 0x00000040U,
+    PINCFG_ERR_RDK_BAUDRATE = 0x00000080U,
 
 } PinConfigError_t;
 

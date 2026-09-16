@@ -1,3 +1,5 @@
+> 当前 ZHY 迁移版本请先看 [ZHY_MIGRATION.md](ZHY_MIGRATION.md)；下文旧协议及任务说明为历史记录。
+
 # RoboChassis V2 测试
 
 ## V0.6 当前测试入口（优先于下方历史记录）

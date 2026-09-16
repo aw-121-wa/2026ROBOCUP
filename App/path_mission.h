@@ -53,6 +53,9 @@ typedef struct
     unsigned step, phase, part, point, grabs;
     uint32_t entered, started, stable_since, orbit_ms, previous;
     uint16_t ids, candidate;
+    uint32_t id_list[64]; /* Full UID, wire byte order represented as big-endian integer. */
+    uint8_t id_count;
+    bool id_overflow;
     float orbit_yaw;
     bool waiting, stable, expired;
     PathSend send;
@@ -62,4 +65,5 @@ void Path_Init(PathMission *mission, PathSend send, void *context);
 bool Path_Start(PathMission *mission, uint32_t now, const PathInput *input);
 void Path_Tick(PathMission *mission, uint32_t now, const PathInput *input);
 void Path_Cancel(PathMission *mission);
+void Path_RecordId(PathMission *mission, uint32_t id);
 #endif

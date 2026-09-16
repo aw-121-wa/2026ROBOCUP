@@ -1,3 +1,5 @@
+> 当前 ZHY 迁移版本请先看 [ZHY_MIGRATION.md](ZHY_MIGRATION.md)；下文旧协议及任务说明为历史记录。
+
 # PATH migration implementation plan
 
 ## Approved scope

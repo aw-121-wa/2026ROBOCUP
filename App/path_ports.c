@@ -1,48 +1,99 @@
 #include "path_ports.h"
 #include "path_mission.h"
 #include "rdk_link.h"
-#include "turntable_link.h"
 #include "chassis_control.h"
 #include "pin_config.h"
-#include "path_session.h"
+#include "disc_task_config.h"
 #include <string.h>
-
 static PathMission mission;
 static RdkLink rdk;
-static TurntableLink table;
 volatile PathDiagnostics path_diagnostics;
-static bool initialized, ready, canceled, motion_pending;
-static uint32_t motion_since, motion_timeout;
-static uint32_t last_rx;
+static bool ready, initialized, motion_pending, verified, test_ping, stationary;
+static uint32_t motion_since, motion_timeout, last_rx;
 static volatile uint32_t io_fault;
-static uint8_t rdk_byte, rfid_byte, rdk_tx[80], turn_tx[13];
+static volatile uint32_t rfid_fault; /* Record-only diagnostics, never a motion gate. */
+static uint8_t rx_byte, tx_buffer[80];
 static volatile uint8_t ring[128];
 static volatile unsigned head, tail;
-static volatile uint16_t rfid_ids;
-
-static bool rdk_transmit(void *ctx, const char *data, size_t length)
+/* Added UART8 capture; ZHY UART4 wire protocol remains unchanged. */
+static uint8_t rfid_byte;
+static volatile uint8_t rfid_ring[128];
+static volatile unsigned rfid_head, rfid_tail;
+static volatile bool rfid_capture;
+static uint8_t rfid_frame[28], rfid_length;
+/* Accept auto UID, auto UID+block, and A1 read-UID replies only.
+ * Sliding resynchronization also handles noise and corrupt/partial frames. */
+static void rfid_feed(uint8_t byte)
 {
-    (void)ctx;
-    if (PINCFG_RDK_UART->gState != HAL_UART_STATE_READY)
-        return false;
-    memcpy(rdk_tx, data, length);
-    return HAL_UART_Transmit_IT(PINCFG_RDK_UART, rdk_tx, (uint16_t)length) == HAL_OK;
+    rfid_frame[rfid_length++] = byte;
+    while (rfid_length)
+    {
+        uint8_t *f = rfid_frame;
+        bool valid = f[0] == 4 || f[0] == 1 || f[0] == 3;
+        if (valid && rfid_length < 2) return;
+        if (valid) valid = f[1] == 8 || f[1] == 12 ||
+                           (f[0] == 4 && (f[1] == 22 || f[1] == 28));
+        if (valid && rfid_length < 3) return;
+        if (valid) valid = f[1] == 8 || (f[0] == 4 && ((f[1] == 12 && f[2] == 2) ||
+                                         (f[1] == 22 && f[2] == 3) ||
+                                         (f[1] == 28 && f[2] == 4))) ||
+                           (f[0] == 1 && f[1] == 12 && f[2] == 0xa1);
+        if (valid && rfid_length < 4) return;
+        if (valid) valid = f[3] == 0x20;
+        if (valid && rfid_length < 5) return;
+        if (valid && rfid_length < f[1]) return;
+        if (valid)
+        {
+            uint8_t checksum = 0;
+            for (unsigned i = 0; i < f[1]; ++i) checksum ^= f[i];
+            if (checksum == 0xff)
+            {
+                if (f[4] == 0 && (f[1] == 12 || f[1] == 28))
+                    Path_RecordId(&mission, ((uint32_t)f[7] << 24) |
+                              ((uint32_t)f[8] << 16) | ((uint32_t)f[9] << 8) | f[10]);
+                unsigned consumed = f[1];
+                rfid_length -= consumed;
+                memmove(f, f + consumed, rfid_length);
+                continue;
+            }
+        }
+        --rfid_length;
+        memmove(f, f + 1, rfid_length);
+    }
 }
-static bool turn_transmit(void *ctx, const uint8_t *data, size_t length)
+size_t PathPorts_CopyIds(uint32_t *out, size_t capacity)
+{
+    if (!out || !capacity) return 0;
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    size_t count = mission.id_count < capacity ? mission.id_count : capacity;
+    memcpy(out, mission.id_list, count * sizeof(*out));
+    __set_PRIMASK(mask);
+    return count;
+}
+static void record_pending_ids(void)
+{
+    unsigned id_budget = sizeof(rfid_ring);
+    while (rfid_tail != rfid_head && id_budget--)
+    {
+        uint8_t id = rfid_ring[rfid_tail];
+        rfid_tail = (rfid_tail + 1U) % sizeof(rfid_ring);
+        rfid_feed(id);
+    }
+}
+static bool transmit(void *ctx, const char *s, size_t n)
 {
     (void)ctx;
-    if (PINCFG_TURNTABLE_UART->gState != HAL_UART_STATE_READY)
+    if (n > sizeof(tx_buffer) || PINCFG_RDK_UART->gState != HAL_UART_STATE_READY)
         return false;
-    memcpy(turn_tx, data, length);
-    return HAL_UART_Transmit_IT(PINCFG_TURNTABLE_UART, turn_tx, (uint16_t)length) == HAL_OK;
+    memcpy(tx_buffer, s, n);
+    return HAL_UART_Transmit_IT(PINCFG_RDK_UART, tx_buffer, (uint16_t)n) == HAL_OK;
 }
 static bool send(void *ctx, const PathCommand *c)
 {
     (void)ctx;
     uint32_t now = HAL_GetTick();
     float scale = 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
-    const char *verb = 0;
-    uint32_t timeout = c->timeout_ms;
     switch (c->kind)
     {
     case PC_MOVE:
@@ -50,14 +101,14 @@ static bool send(void *ctx, const PathCommand *c)
             return false;
         motion_pending = true;
         motion_since = now;
-        motion_timeout = timeout;
+        motion_timeout = c->timeout_ms;
         return true;
     case PC_ROTATE:
         if (!Chassis_Rotate(c->x))
             return false;
         motion_pending = true;
         motion_since = now;
-        motion_timeout = timeout;
+        motion_timeout = c->timeout_ms;
         return true;
     case PC_BODY:
         if (!Chassis_Body(c->x * scale, c->y * scale,
@@ -67,7 +118,7 @@ static bool send(void *ctx, const PathCommand *c)
         if (!motion_pending)
         {
             motion_since = now;
-            motion_timeout = 15000;
+            motion_timeout = c->timeout_ms ? c->timeout_ms : 5000;
         }
         motion_pending = true;
         return true;
@@ -75,71 +126,110 @@ static bool send(void *ctx, const PathCommand *c)
         Chassis_Hold();
         motion_pending = false;
         return true;
-    case PC_TURN:
+    case PC_HELLO:
+        return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
+    case PC_DISC:
         if (!Chassis_IsSettled())
             return false;
-        return Turn_Start(&table, c->argument != 0, now);
-    case PC_GROUP:
-    case PC_DISC:
-        if (!Chassis_IsSettled() || table.pending)
+        if (!Rdk_Begin(&rdk, "DISC", 0, now, c->timeout_ms))
             return false;
-        verb = c->kind == PC_GROUP ? "GROUP" : "DISC";
-        if (c->kind == PC_DISC)
-            timeout += 31000; /* recognition budget + full G102 + wire margin */
-        else
-            timeout += 1000;
-        break;
-    case PC_VISION:
-        verb = "VISION";
-        timeout += 2000;
-        break;
-    case PC_HELLO:
-        verb = "HELLO";
-        break;
+        {
+            uint32_t mask = __get_PRIMASK();
+            __disable_irq();
+            rfid_head = rfid_tail = 0;
+            rfid_length = 0;
+            rfid_capture = true;
+            __set_PRIMASK(mask);
+        }
+        return true;
     case PC_CANCEL:
+        rfid_capture = false;
+        record_pending_ids();
         Chassis_Hold();
         motion_pending = false;
-        if (table.pending)
-            Turn_Stop(&table, now);
-        canceled = true;
-        verb = "STOP";
-        timeout += 1000;
-        break;
+        verified = false;
+        return Rdk_Begin(&rdk, "STOP", 0, now, 1);
     default:
-        return false;
+        return false; /* No GROUP/VISION/turntable commands in this scope. */
     }
-    uint32_t arg = (c->kind == PC_DISC || c->kind == PC_VISION) ? c->timeout_ms : c->argument;
-    bool accepted = Rdk_Begin(&rdk, verb, arg, now, timeout);
-    if (accepted && c->kind != PC_CANCEL)
-        canceled = false;
-    return accepted;
 }
 void PathPorts_Init(void)
 {
-    uint32_t session = PathSession_Create();
-    Rdk_Init(&rdk, session, rdk_transmit, 0);
-    Turn_Init(&table, turn_transmit, 0);
+    Rdk_Init(&rdk, 0, transmit, 0);
     Path_Init(&mission, send, 0);
     initialized = true;
-    ready = session != 0 && HAL_UART_Receive_IT(PINCFG_RDK_UART, &rdk_byte, 1) == HAL_OK &&
-            HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) == HAL_OK;
+    ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
+    if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
+        rfid_fault |= 1;
     if (!ready)
         io_fault |= 1;
 }
 bool PathPorts_Busy(void)
 {
-    return initialized &&
-           (mission.result == PATH_RUNNING || rdk.active || table.pending || rdk.locked);
+    return initialized && (mission.result == PATH_RUNNING || rdk.active || rdk.locked);
 }
-bool PathPorts_Start(void)
+bool PathPorts_Ping(void)
 {
     if (!ready || io_fault || PathPorts_Busy() || !Chassis_IsSettled())
         return false;
-    canceled = false;
+    verified = false;
+    test_ping = true;
+    return Rdk_Begin(&rdk, "HELLO", 0, HAL_GetTick(), 2000);
+}
+bool PathPorts_Reset(void)
+{
+    if (PINCFG_RDK_UART->gState != HAL_UART_STATE_READY || Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
+        rdk.active)
+        return false;
+    if (HAL_UART_AbortReceive(PINCFG_RDK_UART) != HAL_OK)
+        return false;
+    bool rfid_abort_ok = HAL_UART_AbortReceive(PINCFG_RFID_UART) == HAL_OK;
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    head = tail = rfid_head = rfid_tail = 0;
+    rfid_length = 0;
+    rfid_capture = false;
+    io_fault = 0;
+    rfid_fault = rfid_abort_ok ? 0U : 2U;
+    __set_PRIMASK(mask);
+    Rdk_Init(&rdk, 0, transmit, 0);
+    /* Link recovery does not erase the RFID result; next accepted task does. */
+    uint32_t saved_ids[64];
+    uint8_t saved_count = mission.id_count;
+    bool saved_overflow = mission.id_overflow;
+    uint16_t saved_mask = mission.ids;
+    memcpy(saved_ids, mission.id_list, sizeof(saved_ids));
+    Path_Init(&mission, send, 0);
+    memcpy(mission.id_list, saved_ids, sizeof(saved_ids));
+    mission.id_count = saved_count;
+    mission.id_overflow = saved_overflow;
+    mission.ids = saved_mask;
+    verified = test_ping = stationary = motion_pending = false;
+    ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
+    if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
+        rfid_fault |= 1;
+    if (!ready)
+        io_fault = 1;
+    return ready;
+}
+static bool start(bool disc_only)
+{
+    if (!ready || io_fault || !verified || PathPorts_Busy() || !Chassis_IsSettled())
+        return false;
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = Chassis_GetState()->fault != 0,
                     .settled = true};
+    stationary = disc_only;
+    test_ping = false;
     return Path_Start(&mission, HAL_GetTick(), &in);
+}
+bool PathPorts_Start(void)
+{
+    return start(false);
+}
+bool PathPorts_Disc(void)
+{
+    return start(true);
 }
 void PathPorts_Cancel(void)
 {
@@ -147,48 +237,61 @@ void PathPorts_Cancel(void)
         return;
     if (mission.result == PATH_RUNNING)
         Path_Cancel(&mission);
-    else if (!canceled && (rdk.active || table.pending))
+    else if (rdk.active && rdk.stage != 1)
     {
-        PathCommand c = {.kind = PC_CANCEL, .timeout_ms = 30000};
-        (void)send(0, &c);
+        (void)Rdk_Begin(&rdk, "STOP", 0, HAL_GetTick(), 1);
+        verified = false;
     }
 }
-void PathPorts_RxComplete(UART_HandleTypeDef *uart)
+void PathPorts_RxComplete(UART_HandleTypeDef *u)
 {
-    if (uart == PINCFG_RDK_UART)
+    if (u == PINCFG_RFID_UART)
     {
-        unsigned next = (head + 1U) % sizeof(ring);
-        if (next == tail)
-            io_fault |= 2;
-        else
+        if (rfid_capture)
         {
-            ring[head] = rdk_byte;
-            head = next;
+            unsigned next = (rfid_head + 1U) % sizeof(rfid_ring);
+            if (next == rfid_tail)
+                rfid_fault |= 64;
+            else
+            {
+                rfid_ring[rfid_head] = rfid_byte;
+                rfid_head = next;
+            }
         }
-        if (HAL_UART_Receive_IT(uart, &rdk_byte, 1) != HAL_OK)
-            io_fault |= 4;
+        if (HAL_UART_Receive_IT(u, &rfid_byte, 1) != HAL_OK)
+            rfid_fault |= 8;
+        return;
     }
-    else if (uart == PINCFG_RFID_UART)
+    if (u != PINCFG_RDK_UART)
+        return;
+    unsigned next = (head + 1U) % sizeof(ring);
+    if (next == tail)
+        io_fault |= 2;
+    else
     {
-        if (rfid_byte >= 1 && rfid_byte <= 9)
-            rfid_ids |= (uint16_t)(1U << rfid_byte);
-        if (HAL_UART_Receive_IT(uart, &rfid_byte, 1) != HAL_OK)
-            io_fault |= 8;
+        ring[head] = rx_byte;
+        head = next;
     }
+    if (HAL_UART_Receive_IT(u, &rx_byte, 1) != HAL_OK)
+        io_fault |= 4;
 }
-void PathPorts_Error(UART_HandleTypeDef *uart)
+void PathPorts_Error(UART_HandleTypeDef *u)
 {
-    if (uart == PINCFG_RDK_UART || uart == PINCFG_RFID_UART || uart == PINCFG_TURNTABLE_UART)
+    if (u == PINCFG_RDK_UART)
         io_fault |= 16;
+    else if (u == PINCFG_RFID_UART)
+        rfid_fault |= 16;
 }
 void PathPorts_Tick(void)
 {
     if (!initialized)
         return;
     uint32_t now = HAL_GetTick();
-    unsigned budget = sizeof(ring);
+    /* Expire before processing newly received replies; a late reply cannot revive a timeout. */
+    Rdk_Tick(&rdk, now);
     if (rdk.length && (uint32_t)(now - last_rx) >= 500)
         rdk.overflow = true;
+    unsigned budget = sizeof(ring);
     while (tail != head && budget--)
     {
         uint8_t b = ring[tail];
@@ -196,10 +299,22 @@ void PathPorts_Tick(void)
         Rdk_Feed(&rdk, b);
         last_rx = now;
     }
-    if (io_fault || Chassis_GetState()->fault || !Chassis_GetState()->armed)
-        PathPorts_Cancel();
-    Rdk_Tick(&rdk, now);
-    Turn_Tick(&table, now, PINCFG_TURNTABLE_UART->gState == HAL_UART_STATE_READY);
+    record_pending_ids();
+    if (io_fault)
+    {
+        rdk.locked = true;
+        rdk.active = false;
+        rdk.stage = 6;
+        rdk.error = 4;
+        rdk.reply = PATH_FAILED;
+    }
+    if (test_ping && rdk.stage == 2)
+    {
+        verified = true;
+        test_ping = false;
+    }
+    if (rdk.locked)
+        verified = false;
     if (motion_pending)
     {
         if ((uint32_t)(now - motion_since) >= motion_timeout)
@@ -214,53 +329,63 @@ void PathPorts_Tick(void)
             motion_pending = false;
         }
     }
-    uint32_t mask = __get_PRIMASK();
-    __disable_irq();
-    uint16_t ids = rfid_ids;
-    rfid_ids = 0;
-    __set_PRIMASK(mask);
     uint8_t gray = 0;
-    if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_8) == GPIO_PIN_RESET)
-        gray |= 8;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_0) == GPIO_PIN_RESET)
         gray |= 4;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_1) == GPIO_PIN_RESET)
         gray |= 2;
-    if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3) == GPIO_PIN_RESET)
-        gray |= 1;
+    bool disc_deadline = mission.result == PATH_RUNNING && mission.step == 3 &&
+                         mission.phase == 1 &&
+                         (uint32_t)(now - mission.entered) >= DISC_TASK_TIMEOUT_MS;
     PathInput in = {.armed = Chassis_GetState()->armed,
-                    .fault = io_fault || Chassis_GetState()->fault || rdk.locked ||
-                             table.reply == PATH_FAILED,
+                    .fault = io_fault || Chassis_GetState()->fault ||
+                             (rdk.locked && !(rdk.error == 1 && disc_deadline)),
                     .settled = Chassis_IsSettled(),
-                    .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
                     .gray = gray,
+                    .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
                     .ir = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_RESET,
-                    .rfid = ids,
-                    .reply = rdk.reply,
-                    .turn_reply = table.reply,
-                    .interrupted_reply = rdk.interrupted_reply};
-    PathResult previous_result = mission.result;
+                    .reply = rdk.reply};
+    PathResult previous = mission.result;
+    unsigned phase = mission.phase;
     Path_Tick(&mission, now, &in);
-    /* Dispatch rejection can set ERROR before the interpreter sends its normal
-     * cleanup. Run cleanup once at this boundary, never on later manual ticks. */
-    if (previous_result == PATH_RUNNING && mission.result >= PATH_CANCELED)
+    if (stationary && phase == 99 && mission.phase == 0 && mission.result == PATH_RUNNING)
+    {
+        mission.step = 3;
+        mission.phase = 1;
+        mission.entered = now;
+        PathCommand c = {.kind = PC_DISC, .timeout_ms = DISC_TASK_TIMEOUT_MS};
+        if (!send(0, &c))
+            mission.result = PATH_ERROR;
+    }
+    if (!stationary && previous == PATH_RUNNING && mission.result == PATH_DONE && mission.step == 3)
+    {
+        mission.result = PATH_RUNNING;
+        mission.step = 4;
+        mission.phase = 0;
+        mission.entered = now;
+        mission.waiting = mission.stable = false;
+    }
+    if (mission.result != PATH_RUNNING || mission.step != 3)
+        rfid_capture = false;
+    if (previous == PATH_RUNNING && mission.result >= PATH_CANCELED)
     {
         Chassis_Hold();
         motion_pending = false;
-        if (!canceled)
-        {
-            PathCommand stop = {.kind = PC_CANCEL, .timeout_ms = 30000};
-            (void)send(0, &stop);
-        }
+        verified = false;
+        if (!rdk.locked)
+            (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
-    path_diagnostics = (PathDiagnostics){mission.result,
-                                         mission.step,
-                                         mission.phase,
-                                         mission.ids,
-                                         (uint32_t)__builtin_popcount(mission.ids),
-                                         rdk.reply,
-                                         table.reply,
-                                         io_fault,
-                                         rdk.session,
-                                         rdk.sequence};
+    path_diagnostics = (PathDiagnostics){.result = mission.result,
+                                         .step = mission.step,
+                                         .phase = mission.phase,
+                                         .accepted_ids = verified, /* Preserve ZHY CH29. */
+                                         .ids = mission.ids,
+                                         .rfid_count = mission.id_count,
+                                         .rfid_fault = rfid_fault | (mission.id_overflow ? 128U : 0U),
+                                         .link_reply = rdk.reply,
+                                         .fault = io_fault,
+                                         .sequence = rdk.sequence,
+                                         .link_stage = rdk.stage,
+                                         .link_error = rdk.error,
+                                         .gray = gray};
 }

@@ -64,6 +64,14 @@ int main(void)
     CHECK(HostCommand_Check(&c, false, false) == HOST_NOT_READY);
     CHECK(HostCommand_Check(&c, true, true) == HOST_BUSY);
     CHECK(HostCommand_Check(&c, true, false) == HOST_OK);
+    CHECK(feed(&p, "PING\r\n", &c) == HOST_OK && c.kind == HOST_PING);
+    CHECK(HostCommand_Check(&c, false, false) == HOST_OK);
+    CHECK(HostCommand_Check(&c, true, true) == HOST_BUSY);
+    CHECK(feed(&p, "RDK_RESET\r\n", &c) == HOST_OK && c.kind == HOST_RDK_RESET);
+    CHECK(HostCommand_Check(&c, false, false) == HOST_OK);
+    CHECK(feed(&p, "DISC\r\n", &c) == HOST_OK && c.kind == HOST_DISC);
+    CHECK(HostCommand_Check(&c, false, false) == HOST_NOT_READY);
+    CHECK(HostCommand_Check(&c, true, false) == HOST_OK);
     puts("Host command tests passed");
     return 0;
 }

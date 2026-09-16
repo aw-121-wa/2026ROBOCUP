@@ -30,6 +30,21 @@ static int parse(char *line, HostCommand *command)
         command->kind = HOST_STOP;
         return HOST_OK;
     }
+    if (!strcmp(line, "PING"))
+    {
+        command->kind = HOST_PING;
+        return HOST_OK;
+    }
+    if (!strcmp(line, "RDK_RESET"))
+    {
+        command->kind = HOST_RDK_RESET;
+        return HOST_OK;
+    }
+    if (!strcmp(line, "DISC"))
+    {
+        command->kind = HOST_DISC;
+        return HOST_OK;
+    }
     char *arg;
     if (!strncmp(line, "FORWARD", 7) && space(line[7]))
     {
@@ -108,9 +123,12 @@ int HostCommand_Check(const HostCommand *command, bool armed, bool busy)
 {
     if (command->kind == HOST_STOP)
         return HOST_OK;
+    if (command->kind == HOST_PING || command->kind == HOST_RDK_RESET)
+        return busy ? HOST_BUSY : HOST_OK;
     if (command->kind == HOST_ARM)
         return busy ? HOST_BUSY : HOST_OK;
-    if (command->kind != HOST_FORWARD && command->kind != HOST_SHIFT && command->kind != HOST_PATH)
+    if (command->kind != HOST_FORWARD && command->kind != HOST_SHIFT &&
+        command->kind != HOST_PATH && command->kind != HOST_DISC)
         return HOST_SYNTAX;
     if (!armed)
         return HOST_NOT_READY;

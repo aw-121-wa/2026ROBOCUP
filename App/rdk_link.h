@@ -9,6 +9,7 @@ typedef struct
     PathReply reply, interrupted_reply;
     uint32_t interrupted_sequence;
     bool active, sent, overflow, locked, carriage;
+    unsigned stage, error;
     char request[80], line[80];
     size_t length;
     RdkTransmit transmit;
