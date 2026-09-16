@@ -1,12 +1,41 @@
 #include "path_ports.h"
 #include "path_mission.h"
 #include "rdk_link.h"
+#include "turntable_link.h"
 #include "chassis_control.h"
 #include "pin_config.h"
 #include "disc_task_config.h"
 #include <string.h>
 static PathMission mission;
 static RdkLink rdk;
+static TurntableLink turn;
+static uint8_t turn_buffer[16];
+static unsigned turn_issued;
+static bool turn_enabled;
+static bool turn_transmit(void *ctx, const uint8_t *data, size_t size)
+{
+    (void)ctx;
+    if (size > sizeof(turn_buffer) || PINCFG_TURNTABLE_UART->gState != HAL_UART_STATE_READY)
+        return false;
+    memcpy(turn_buffer, data, size);
+    return HAL_UART_Transmit_IT(PINCFG_TURNTABLE_UART, turn_buffer, (uint16_t)size) == HAL_OK;
+}
+static void cancel_turn(void)
+{
+    turn_enabled = false;
+    if (turn.pending && !turn.stopping) Turn_Stop(&turn, HAL_GetTick());
+}
+static void service_turn(uint32_t now)
+{
+    if (!Chassis_GetState()->armed || Chassis_GetState()->fault || mission.result >= PATH_CANCELED)
+        cancel_turn();
+    if (turn_enabled && !turn.pending && turn.reply != PATH_FAILED && turn_issued < mission.id_count)
+    {
+        if (Turn_Start(&turn, false, now)) ++turn_issued;
+    }
+    Turn_Tick(&turn, now, PINCFG_TURNTABLE_UART->gState == HAL_UART_STATE_READY);
+    if (turn.reply == PATH_FAILED) turn_enabled = false;
+}
 volatile PathDiagnostics path_diagnostics;
 static bool ready, initialized, motion_pending, verified, test_ping, stationary;
 static uint32_t motion_since, motion_timeout, last_rx;
@@ -143,6 +172,7 @@ static bool send(void *ctx, const PathCommand *c)
         }
         return true;
     case PC_CANCEL:
+        cancel_turn();
         rfid_capture = false;
         record_pending_ids();
         Chassis_Hold();
@@ -155,6 +185,7 @@ static bool send(void *ctx, const PathCommand *c)
 }
 void PathPorts_Init(void)
 {
+    Turn_Init(&turn, turn_transmit, 0);
     Rdk_Init(&rdk, 0, transmit, 0);
     Path_Init(&mission, send, 0);
     initialized = true;
@@ -166,7 +197,8 @@ void PathPorts_Init(void)
 }
 bool PathPorts_Busy(void)
 {
-    return initialized && (mission.result == PATH_RUNNING || rdk.active || rdk.locked);
+    return initialized && (mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
+                           (turn_enabled && turn_issued < mission.id_count));
 }
 bool PathPorts_Ping(void)
 {
@@ -179,7 +211,7 @@ bool PathPorts_Ping(void)
 bool PathPorts_Reset(void)
 {
     if (PINCFG_RDK_UART->gState != HAL_UART_STATE_READY || Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
-        rdk.active)
+        rdk.active || turn.pending)
         return false;
     if (HAL_UART_AbortReceive(PINCFG_RDK_UART) != HAL_OK)
         return false;
@@ -204,6 +236,9 @@ bool PathPorts_Reset(void)
     mission.id_count = saved_count;
     mission.id_overflow = saved_overflow;
     mission.ids = saved_mask;
+    Turn_Init(&turn, turn_transmit, 0);
+    turn_enabled = false;
+    turn_issued = mission.id_count;
     verified = test_ping = stationary = motion_pending = false;
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
     if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
@@ -221,7 +256,11 @@ static bool start(bool disc_only)
                     .settled = true};
     stationary = disc_only;
     test_ping = false;
-    return Path_Start(&mission, HAL_GetTick(), &in);
+    if (!Path_Start(&mission, HAL_GetTick(), &in)) return false;
+    Turn_Init(&turn, turn_transmit, 0);
+    turn_issued = 0;
+    turn_enabled = true;
+    return true;
 }
 bool PathPorts_Start(void)
 {
@@ -235,6 +274,7 @@ void PathPorts_Cancel(void)
 {
     if (!initialized)
         return;
+    cancel_turn();
     if (mission.result == PATH_RUNNING)
         Path_Cancel(&mission);
     else if (rdk.active && rdk.stage != 1)
@@ -376,6 +416,7 @@ void PathPorts_Tick(void)
         if (!rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
+    service_turn(now);
     path_diagnostics = (PathDiagnostics){.result = mission.result,
                                          .step = mission.step,
                                          .phase = mission.phase,
@@ -385,6 +426,7 @@ void PathPorts_Tick(void)
                                          .ir_raw = ir_raw,
                                          .settled = in.settled,
                                          .rfid_fault = rfid_fault | (mission.id_overflow ? 128U : 0U),
+                                         .turn_reply = turn.reply,
                                          .link_reply = rdk.reply,
                                          .fault = io_fault,
                                          .sequence = rdk.sequence,

@@ -13,7 +13,7 @@ static ChassisState state;
 static uint32_t now;
 static uint8_t *rx4, *rx7;
 static char wire[80];
-static unsigned moves, holds, turn_frames;
+static unsigned moves, holds, turn_frames, turn_positions;
 static bool moving, disc_only, rfid_init_failure;
 static float yaw;
 uint32_t HAL_GetTick(void)
@@ -49,7 +49,10 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
         wire[n] = 0;
     }
     else if (u == &huart6)
+    {
         turn_frames++;
+        if (n==13 && b[1]==0xfd) ++turn_positions;
+    }
     else
         return HAL_ERROR;
     return HAL_OK;
@@ -183,8 +186,9 @@ int main(int argc,char **argv)
     } else if (!strcmp(argv[1],"stationary")) {
         five_ids(); reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3);
-        CHECK(path_diagnostics.rfid_count==5 && moves==0 && !PathPorts_Busy());
-        for(unsigned i=0;i<20;i++) tick();
+        CHECK(path_diagnostics.rfid_count==5 && moves==0);
+        for(unsigned i=0;i<1000;i++) tick();
+        CHECK(turn_positions==5 && !PathPorts_Busy());
         CHECK(moves==0);
         state.armed=false; CHECK(PathPorts_Reset()); tick();
         uint32_t saved[9]={0}; const uint32_t expected[]={3,1,9,2,7};
@@ -203,6 +207,9 @@ int main(int argc,char **argv)
         CHECK(path_diagnostics.result==PATH_CANCELED);
         CHECK(path_diagnostics.rfid_count==5 && PathPorts_Busy());
         CHECK(!PathPorts_Start() && !moving);
+        unsigned stopped_positions=turn_positions;
+        for(unsigned i=0;i<500;i++) tick();
+        CHECK(turn_positions==stopped_positions);
         CHECK(!strcmp(wire,"DISC_START\r\n"));
         reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !moving);
@@ -210,7 +217,7 @@ int main(int argc,char **argv)
         id(3); id(3); id(1); id(9); id(2); tick();
         reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.rfid_count==4 && path_diagnostics.step==4);
-        CHECK(path_diagnostics.result==PATH_RUNNING && turn_frames==0);
+        CHECK(path_diagnostics.result==PATH_RUNNING);
     } else if (!strcmp(argv[1],"timeout")) {
         five_ids(); tick(); CHECK(path_diagnostics.rfid_count==5);
         CHECK(path_diagnostics.step==3); /* IDs alone cannot finish the RDK job. */
@@ -244,7 +251,7 @@ int main(int argc,char **argv)
         CHECK(!memcmp(saved,expected,sizeof(expected)));
         CHECK(PathPorts_CopyIds(saved,2)==2 && saved[0]==3 && saved[1]==1);
         CHECK(PathPorts_CopyIds(0,0)==0);
-        CHECK(turn_frames==0); reply("DISC_DONE\r\n"); tick();
+        reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.step==4 && path_diagnostics.result==PATH_RUNNING);
         for(unsigned i=0;i<1500 && path_diagnostics.result==PATH_RUNNING;i++) {
             moving=false;
@@ -252,8 +259,10 @@ int main(int argc,char **argv)
             tick();
         }
         CHECK(path_diagnostics.step==12 && path_diagnostics.result==PATH_DONE);
-        CHECK(!moving && turn_frames==0 && path_diagnostics.rfid_count==6);
+        CHECK(!moving && path_diagnostics.rfid_count==6);
         CHECK(PathPorts_CopyIds(saved,9)==6 && !memcmp(saved,expected,sizeof(expected)));
+        for(unsigned i=0;i<1200 && PathPorts_Busy();i++) tick();
+        CHECK(turn_positions==6);
         CHECK(!strcmp(wire,"DISC_START\r\n"));
     }
     puts("ZHY adapter test passed"); return 0;
