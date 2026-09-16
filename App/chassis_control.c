@@ -467,7 +467,7 @@ static void service_host_commands(uint32_t now)
         {
             float x = command.kind == HOST_FORWARD ? command.distance_mm : 0;
             float y = command.kind == HOST_SHIFT ? command.distance_mm : 0;
-            if (!Chassis_Move(x, y, 450.519f, 550.0f, 550.0f))
+            if (!Chassis_Move(x, y, 550.519f, 550.0f, 550.0f))
                 host_result = HOST_NOT_READY;
         }
     }
