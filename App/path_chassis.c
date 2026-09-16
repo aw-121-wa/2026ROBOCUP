@@ -106,7 +106,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->orbit_yaw = in->yaw_deg;
             m->started = now;
-            if (emit(m, PC_BODY, 62, 0, 49, 0, 15000))
+            if (emit(m, PC_BODY, 58.9f, 0, 49, 0, 15000))
                 m->phase = 2;
         }
         break;
@@ -114,7 +114,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         m->orbit_ms = now - m->started;
         if (m->orbit_ms >= 15000)
             fail(m, PATH_TIMEOUT);
-        else if (in->yaw_deg - m->orbit_yaw >= 360)
+        else if (in->yaw_deg - m->orbit_yaw >= 352)
         {
             hold(m);
             m->phase = 3;

@@ -49,7 +49,7 @@ static int chassis_only(void) {
     CHECK(m.step==7 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==0 && count(&p,PC_TURN)==0);
     bool orbit=false;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && p.commands[i].x==62 && p.commands[i].speed==49) orbit=true;
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x-58.9f)<0.001f && p.commands[i].speed==49) orbit=true;
     CHECK(orbit);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6;
     in.ir=true; in.settled=false;
@@ -61,9 +61,9 @@ static int chassis_only(void) {
     in.settled=true; Path_Tick(&m,100,&in); CHECK(m.phase==2);
 
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
-    m.orbit_yaw=100; in.yaw_deg=459;
+    m.orbit_yaw=100; in.yaw_deg=451;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
-    in.yaw_deg=460; Path_Tick(&m,105,&in); CHECK(m.phase==3 && count(&p,PC_HOLD)==1);
+    in.yaw_deg=452; Path_Tick(&m,105,&in); CHECK(m.phase==3 && count(&p,PC_HOLD)==1);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==25);
     in.ir=true;
