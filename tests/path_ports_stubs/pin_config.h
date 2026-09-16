@@ -3,5 +3,5 @@
 #include "usart.h"
 #define PINCFG_RDK_UART (&huart4)
 #define PINCFG_TURNTABLE_UART (&huart6)
-#define PINCFG_RFID_UART (&huart8)
+#define PINCFG_RFID_UART (&huart7)
 #endif

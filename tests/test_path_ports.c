@@ -6,12 +6,12 @@
 #include <string.h>
 #include <math.h>
 
-UART_HandleTypeDef huart4 = {0, 4}, huart6 = {0, 6}, huart8 = {0, 8};
+UART_HandleTypeDef huart4 = {0, 4}, huart6 = {0, 6}, huart7 = {0, 7};
 ChassisConfig chassis_config = {
     .wheel_radius_mm = 35, .half_track_mm = 128.5f, .half_wheelbase_mm = 130.5f};
 static ChassisState state;
 static uint32_t now;
-static uint8_t *rx4, *rx8;
+static uint8_t *rx4, *rx7;
 static char wire[80];
 static unsigned moves, holds, turn_frames;
 static bool moving, disc_only, rfid_init_failure;
@@ -30,9 +30,9 @@ HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *u, uint8_t *b, uint16_
         return HAL_ERROR;
     if (u == &huart4)
         rx4 = b;
-    else if (u == &huart8)
+    else if (u == &huart7)
     {
-        rx8 = b;
+        rx7 = b;
         if (rfid_init_failure) return HAL_ERROR;
     }
     else
@@ -108,7 +108,7 @@ bool Chassis_Body(float x, float y, float w)
 }
 HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *u)
 {
-    return (u == &huart4 || u == &huart8) ? HAL_OK : HAL_ERROR;
+    return (u == &huart4 || u == &huart7) ? HAL_OK : HAL_ERROR;
 }
 static void tick(void)
 {
@@ -119,7 +119,7 @@ static void reply(const char *line)
 {
     for (const char *p=line; *p; p++) { *rx4=(uint8_t)*p; PathPorts_RxComplete(&huart4); }
 }
-static void raw(uint8_t value) { *rx8=value; PathPorts_RxComplete(&huart8); }
+static void raw(uint8_t value) { *rx7=value; PathPorts_RxComplete(&huart7); }
 static void id(uint32_t value) {
     uint8_t f[12]={4,12,2,32,0,4,0,
         (uint8_t)(value>>24),(uint8_t)(value>>16),(uint8_t)(value>>8),(uint8_t)value,0};
@@ -226,7 +226,7 @@ int main(int argc,char **argv)
         reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.step==4 && path_diagnostics.result==PATH_RUNNING);
     } else if (!strcmp(argv[1],"rfid_fault") || !strcmp(argv[1],"rfid_init") || !strcmp(argv[1],"zero")) {
-        if (!strcmp(argv[1],"rfid_fault")) PathPorts_Error(&huart8);
+        if (!strcmp(argv[1],"rfid_fault")) PathPorts_Error(&huart7);
         reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.step==4 && path_diagnostics.result==PATH_RUNNING);
         CHECK(path_diagnostics.fault==0 && path_diagnostics.rfid_count==0);

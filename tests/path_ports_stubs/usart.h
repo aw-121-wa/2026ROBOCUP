@@ -2,7 +2,7 @@
 #define PATH_PORTS_TEST_USART_H
 #include <stdint.h>
 typedef struct { unsigned gState; unsigned id; } UART_HandleTypeDef;
-extern UART_HandleTypeDef huart4, huart6, huart8;
+extern UART_HandleTypeDef huart4, huart6, huart7;
 typedef enum { HAL_OK, HAL_ERROR } HAL_StatusTypeDef;
 #define HAL_UART_STATE_READY 0U
 #define GPIO_PIN_RESET 0U

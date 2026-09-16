@@ -15,7 +15,7 @@ static volatile uint32_t rfid_fault; /* Record-only diagnostics, never a motion 
 static uint8_t rx_byte, tx_buffer[80];
 static volatile uint8_t ring[128];
 static volatile unsigned head, tail;
-/* Added UART8 capture; ZHY UART4 wire protocol remains unchanged. */
+/* Added UART7 capture; ZHY UART4 wire protocol remains unchanged. */
 static uint8_t rfid_byte;
 static volatile uint8_t rfid_ring[128];
 static volatile unsigned rfid_head, rfid_tail;
