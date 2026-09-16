@@ -1,3 +1,4 @@
+#include "disc_task_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
 #include "chassis_control.h"
@@ -56,7 +57,7 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin)
 {
     (void)port;
-    return (pin == GPIO_PIN_0 || pin == GPIO_PIN_1 || pin == GPIO_PIN_10) ? GPIO_PIN_RESET
+    return (pin == GPIO_PIN_0 || pin == GPIO_PIN_1 || pin == GPIO_PIN_7) ? GPIO_PIN_RESET
                                                                           : GPIO_PIN_SET;
 }
 const ChassisState *Chassis_GetState(void)
@@ -193,7 +194,7 @@ int main(int argc,char **argv)
         CHECK(PathPorts_Ping()); tick(); reply("PONG\r\n"); tick();
         state.armed=true; CHECK(PathPorts_Disc()); CHECK(PathPorts_CopyIds(saved,9)==0);
     } else if (!strcmp(argv[1],"late")) {
-        five_ids(); tick(); now+=20000;
+        five_ids(); tick(); now+=DISC_TASK_TIMEOUT_MS;
         reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.result==PATH_TIMEOUT && !moving);
         CHECK(path_diagnostics.rfid_count==5);
@@ -213,7 +214,7 @@ int main(int argc,char **argv)
     } else if (!strcmp(argv[1],"timeout")) {
         five_ids(); tick(); CHECK(path_diagnostics.rfid_count==5);
         CHECK(path_diagnostics.step==3); /* IDs alone cannot finish the RDK job. */
-        now+=20000; tick();
+        now+=DISC_TASK_TIMEOUT_MS; tick();
         CHECK(path_diagnostics.result==PATH_TIMEOUT && !moving);
         reply("DISC_DONE\r\n"); id(8); tick();
         CHECK(path_diagnostics.result==PATH_TIMEOUT && path_diagnostics.rfid_count==5);

@@ -343,7 +343,7 @@ void PathPorts_Tick(void)
                     .settled = Chassis_IsSettled(),
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
-                    .ir = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_RESET,
+                    .ir = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_7) == GPIO_PIN_RESET,
                     .reply = rdk.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;

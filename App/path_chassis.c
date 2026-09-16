@@ -69,7 +69,7 @@ static bool align(PathMission *m, uint32_t now, const PathInput *in)
         return (uint32_t)(now - m->stable_since) >= 50 && in->settled;
     }
     m->stable = false;
-    (void)emit(m, PC_BODY, 0, -25, 0, 0, 0);
+    (void)emit(m, PC_BODY, 0, 25, 0, 0, 0);
     return false;
 }
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
@@ -98,14 +98,14 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         }
         else
             m->stable = false;
-        (void)emit(m, PC_BODY, 0, -25, 0, 0, 0);
+        (void)emit(m, PC_BODY, 0, 25, 0, 0, 0);
         break;
     case 1:
         if (in->settled)
         {
             m->orbit_yaw = in->yaw_deg;
             m->started = now;
-            if (emit(m, PC_BODY, -62, 0, 49, 0, 15000))
+            if (emit(m, PC_BODY, 62, 0, 49, 0, 15000))
                 m->phase = 2;
         }
         break;
@@ -113,7 +113,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         m->orbit_ms = now - m->started;
         if (m->orbit_ms >= 15000)
             fail(m, PATH_TIMEOUT);
-        else if (in->yaw_deg - m->orbit_yaw >= 352)
+        else if (in->yaw_deg - m->orbit_yaw >= 360)
         {
             hold(m);
             m->phase = 3;
@@ -143,7 +143,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 1:
-        if (move(m, in, -18, 0, 40))
+        if (move(m, in, 18, 0, 40))
             m->phase = 2;
         break;
     case 2:
@@ -158,11 +158,11 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             m->phase = 3;
         break;
     case 3:
-        if (move(m, in, -90, 0, 40))
+        if (move(m, in, 90, 0, 40))
             m->phase = 2;
         break;
     case 4:
-        if (move(m, in, -117, 0, 40))
+        if (move(m, in, 117, 0, 40))
         {
             m->part++;
             m->point = 0;
@@ -176,8 +176,8 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
 }
 static void warehouse(PathMission *m, uint32_t now, const PathInput *in)
 {
-    static const float x[] = {0, -200, -200, -200, 200, 200};
-    static const float y[] = {50, 0, 0, 0, 0, 0};
+    static const float x[] = {0, 200, 200, 200, -200, -200};
+    static const float y[] = {-50, 0, 0, 0, 0, 0};
     if (m->phase == 0)
     {
         if (rotate(m, in, 180))
@@ -210,10 +210,10 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->step)
     {
     case 4:
-        if (rotate(m, in, 180)) next(m, now);
+        next(m, now); /* Keep the heading after the disc task. */
         break;
     case 5:
-        if (move(m, in, -1810, 0, 130)) next(m, now);
+        if (move(m, in, 1710, 0, 130)) next(m, now);
         break;
     case 6:
         pillar(m, now, in);
@@ -223,13 +223,13 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         next(m, now); /* No arm reset in the chassis-only extension. */
         break;
     case 8:
-        if (move(m, in, 330, 0, 130)) next(m, now);
+        if (move(m, in, -330, 0, 130)) next(m, now);
         break;
     case 9:
         stair(m, now, in);
         break;
     case 11:
-        if (move(m, in, 0, 1650, 130)) next(m, now);
+        if (move(m, in, 0, -1650, 130)) next(m, now);
         break;
     case 12:
         warehouse(m, now, in);

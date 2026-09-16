@@ -1,3 +1,4 @@
+#include "disc_task_config.h"
 #include "path_mission.h"
 #include <stdio.h>
 #include <math.h>
@@ -34,8 +35,8 @@ static int disc_contract(void) {
     in.reply=PATH_OK; Path_Tick(&m,105,&in); CHECK(m.result==PATH_DONE);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=3; m.phase=1;
     m.entered=0xfffffff0U; in.reply=PATH_WAIT;
-    Path_Tick(&m,19983,&in); CHECK(m.result==PATH_RUNNING);
-    Path_Tick(&m,19984,&in); CHECK(m.result==PATH_TIMEOUT);
+    Path_Tick(&m,DISC_TASK_TIMEOUT_MS-17U,&in); CHECK(m.result==PATH_RUNNING);
+    Path_Tick(&m,DISC_TASK_TIMEOUT_MS-16U,&in); CHECK(m.result==PATH_TIMEOUT);
     return 0;
 }
 static int chassis_only(void) {
@@ -48,13 +49,20 @@ static int chassis_only(void) {
     CHECK(m.step==7 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==0 && count(&p,PC_TURN)==0);
     bool orbit=false;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && p.commands[i].x==-62 && p.commands[i].speed==49) orbit=true;
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && p.commands[i].x==62 && p.commands[i].speed==49) orbit=true;
     CHECK(orbit);
+    p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
+    m.orbit_yaw=100; in.yaw_deg=459;
+    Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
+    in.yaw_deg=460; Path_Tick(&m,105,&in); CHECK(m.phase==3 && count(&p,PC_HOLD)==1);
+    p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
+    Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==25);
+    in.ir=true;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<5000 && m.step==9;t+=10) Path_Tick(&m,t,&in);
     CHECK(m.step==10 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==0 && count(&p,PC_TURN)==0);
-    const float expected[]={-18,-90,-117,-90,-90,-90,-117,-90};
+    const float expected[]={18,90,117,90,90,90,117,90};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<8 && p.commands[i].x==expected[n] && p.commands[i].y==0); n++;
@@ -64,13 +72,13 @@ static int chassis_only(void) {
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
     for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) Path_Tick(&m,t,&in);
     CHECK(m.result==PATH_DONE);
-    const float wx[]={0,-200,-200,-200,200,200};
+    const float wx[]={0,200,200,200,-200,-200};
     n=0;
     for(unsigned i=0;i<p.n;i++) {
         CHECK(p.commands[i].kind!=PC_GROUP && p.commands[i].kind!=PC_VISION && p.commands[i].kind!=PC_TURN);
         if(p.commands[i].kind==PC_MOVE) {
             CHECK(n<6 && p.commands[i].x==wx[n]);
-            CHECK(p.commands[i].y==(n==0 ? 50 : 0)); n++;
+            CHECK(p.commands[i].y==(n==0 ? -50 : 0)); n++;
         }
     }
     CHECK(n==6 && count(&p,PC_ROTATE)==1);

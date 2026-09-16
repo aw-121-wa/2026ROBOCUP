@@ -73,7 +73,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (m->step == 0)
                 m->waiting = emit(m, PC_MOVE, 1691.4467f, 615.6363f, 85, 30000);
             else if (m->step == 1)
-                m->waiting = emit(m, PC_MOVE, 2200, 0, 130, 30000);
+                m->waiting = emit(m, PC_MOVE, 2150, 0, 130, 30000);
             else
                 m->waiting = emit(m, PC_ROTATE, 180, 0, 0, 15000);
         }
