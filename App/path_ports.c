@@ -337,13 +337,14 @@ void PathPorts_Tick(void)
     bool disc_deadline = mission.result == PATH_RUNNING && mission.step == 3 &&
                          mission.phase == 1 &&
                          (uint32_t)(now - mission.entered) >= DISC_TASK_TIMEOUT_MS;
+    uint32_t ir_raw = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_SET;
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = io_fault || Chassis_GetState()->fault ||
                              (rdk.locked && !(rdk.error == 1 && disc_deadline)),
                     .settled = Chassis_IsSettled(),
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
-                    .ir = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_7) == GPIO_PIN_RESET,
+                    .ir = ir_raw == 0,
                     .reply = rdk.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;
@@ -381,6 +382,8 @@ void PathPorts_Tick(void)
                                          .accepted_ids = verified, /* Preserve ZHY CH29. */
                                          .ids = mission.ids,
                                          .rfid_count = mission.id_count,
+                                         .ir_raw = ir_raw,
+                                         .settled = in.settled,
                                          .rfid_fault = rfid_fault | (mission.id_overflow ? 128U : 0U),
                                          .link_reply = rdk.reply,
                                          .fault = io_fault,

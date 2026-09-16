@@ -11,7 +11,8 @@ typedef enum { HAL_OK, HAL_ERROR } HAL_StatusTypeDef;
 #define GPIO_PIN_1 2U
 #define GPIO_PIN_3 8U
 #define GPIO_PIN_8 256U
-#define GPIO_PIN_7 128U
+#define GPIO_PIN_10 1024U
+#define GPIOB ((void *)2)
 #define GPIOD ((void *)1)
 HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *);
 HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *, uint8_t *, uint16_t);

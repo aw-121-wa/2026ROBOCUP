@@ -77,7 +77,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->phase)
     {
     case 0:
-        if ((uint32_t)(now - m->entered) >= 5000)
+        if ((uint32_t)(now - m->entered) >= 10000)
         {
             fail(m, PATH_TIMEOUT);
             break;
@@ -88,17 +88,18 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             {
                 m->stable = true;
                 m->stable_since = now;
+                hold(m); /* Stop at first detection; debounce without advancing. */
             }
             if ((uint32_t)(now - m->stable_since) >= 30)
             {
-                hold(m);
                 m->phase = 1;
                 break;
             }
+            break; /* Keep stopped while validating the IR level. */
         }
         else
             m->stable = false;
-        (void)emit(m, PC_BODY, 0, 25, 0, 0, 0);
+        (void)emit(m, PC_BODY, 0, 25, 0, 0, 10000);
         break;
     case 1:
         if (in->settled)
@@ -213,7 +214,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         next(m, now); /* Keep the heading after the disc task. */
         break;
     case 5:
-        if (move(m, in, 1710, 0, 130)) next(m, now);
+        if (move(m, in, 1750, 0, 130)) next(m, now);
         break;
     case 6:
         pillar(m, now, in);

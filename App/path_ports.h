@@ -10,6 +10,7 @@ typedef struct
         sequence;
     uint32_t link_stage, link_error, gray;
     uint32_t rfid_fault; /* 1=RX init, 2=abort, 8=rearm, 16=UART, 64=RX overflow, 128=UID list full; nonfatal. */
+    uint32_t ir_raw, settled; /* PD10 electrical level and chassis stop readiness. */
     uint32_t rfid_count; /* Separate from ZHY accepted_ids/PING flag. */
 } PathDiagnostics;
 extern volatile PathDiagnostics path_diagnostics;

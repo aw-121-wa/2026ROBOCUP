@@ -51,9 +51,11 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
 
   GPIO_InitTypeDef inputs={0};
-  inputs.Pin=GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_7; /* Added pillar IR input. */
+  inputs.Pin=GPIO_PIN_0|GPIO_PIN_1; /* Gray sensors. */
   inputs.Mode=GPIO_MODE_INPUT;
   inputs.Pull=GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOD,&inputs);
+  inputs.Pin=GPIO_PIN_10; /* Pillar IR input PD10, active low. */
   HAL_GPIO_Init(GPIOD,&inputs);
 
 }

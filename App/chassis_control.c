@@ -62,9 +62,9 @@ static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
 #if CHASSIS_TELEMETRY_ENABLE
 #if CHASSIS_TELEMETRY_FULL
-static uint8_t telemetry[148]; /* 27 + 8 task/link + 1 RFID count + JustFloat tail. */
+static uint8_t telemetry[156]; /* 27 + 8 task/link + 1 RFID count + 2 IR/settled + JustFloat tail. */
 #else
-static uint8_t telemetry[128]; /* 22 + 8 task/link + 1 RFID count + JustFloat tail. */
+static uint8_t telemetry[136]; /* 22 + 8 task/link + 1 RFID count + 2 IR/settled + JustFloat tail. */
 #endif
 #endif
 static HostParser host_parser;
@@ -403,7 +403,9 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
                         (float)path_diagnostics.link_error,
                         (float)path_diagnostics.gray,
                         (float)path_diagnostics.phase,
-                        (float)path_diagnostics.rfid_count};
+                        (float)path_diagnostics.rfid_count,
+                        (float)path_diagnostics.ir_raw,
+                        (float)path_diagnostics.settled};
     _Static_assert(sizeof(channels) + 4 == sizeof(telemetry), "VOFA frame size mismatch");
     const size_t channel_bytes = sizeof(channels);
     memcpy(telemetry, channels, channel_bytes);

@@ -51,6 +51,15 @@ static int chassis_only(void) {
     bool orbit=false;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && p.commands[i].x==62 && p.commands[i].speed==49) orbit=true;
     CHECK(orbit);
+    p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6;
+    in.ir=true; in.settled=false;
+    Path_Tick(&m,0,&in);
+    CHECK(count(&p,PC_HOLD)==1 && count(&p,PC_BODY)==0);
+    Path_Tick(&m,20,&in); CHECK(m.phase==0 && count(&p,PC_BODY)==0);
+    Path_Tick(&m,30,&in); CHECK(m.phase==1);
+    Path_Tick(&m,40,&in); CHECK(count(&p,PC_BODY)==0);
+    in.settled=true; Path_Tick(&m,100,&in); CHECK(m.phase==2);
+
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
     m.orbit_yaw=100; in.yaw_deg=459;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
@@ -87,7 +96,9 @@ static int chassis_only(void) {
 static int chassis_errors(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
     m.result=PATH_RUNNING; m.step=6; in.ir=false;
-    Path_Tick(&m,5000,&in); CHECK(m.result==PATH_TIMEOUT);
+    Path_Tick(&m,5000,&in); CHECK(m.result==PATH_RUNNING);
+    CHECK(p.commands[p.n-1].timeout_ms==10000);
+    Path_Tick(&m,10000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
     Path_Tick(&m,15000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9; in.gray=0;

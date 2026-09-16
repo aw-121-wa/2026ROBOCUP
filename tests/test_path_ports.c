@@ -56,8 +56,8 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin)
 {
-    (void)port;
-    return (pin == GPIO_PIN_0 || pin == GPIO_PIN_1 || pin == GPIO_PIN_7) ? GPIO_PIN_RESET
+    return ((port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
+            (port == GPIOD && pin == GPIO_PIN_10)) ? GPIO_PIN_RESET
                                                                           : GPIO_PIN_SET;
 }
 const ChassisState *Chassis_GetState(void)
