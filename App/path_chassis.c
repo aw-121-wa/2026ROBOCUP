@@ -3,6 +3,11 @@
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
                  uint32_t timeout)
 {
+    if (m->global_translation_inverted && (k == PC_MOVE || k == PC_BODY))
+    {
+        x = -x;
+        y = -y;
+    }
     PathCommand c = {k, x, y, v, arg, timeout};
     if (m->send(m->context, &c))
         return true;
@@ -51,9 +56,9 @@ static bool rotate(PathMission *m, const PathInput *in, float deg)
     m->waiting = false;
     return true;
 }
-static bool align(PathMission *m, uint32_t now, const PathInput *in)
+static bool align(PathMission *m, uint32_t now, const PathInput *in, uint32_t timeout_ms)
 {
-    if ((uint32_t)(now - m->entered) >= 5000)
+    if ((uint32_t)(now - m->entered) >= timeout_ms)
     {
         fail(m, PATH_TIMEOUT);
         return false;
@@ -136,7 +141,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->phase)
     {
     case 0:
-        if (align(m, now, in))
+        if (align(m, now, in, 100000U))
         {
             m->phase = 1;
             m->part = 0;
@@ -189,7 +194,7 @@ static void warehouse(PathMission *m, uint32_t now, const PathInput *in)
     }
     else if (m->phase == 1)
     {
-        if (align(m, now, in))
+        if (align(m, now, in, 5000U))
         {
             m->phase = 2;
             m->point = 0;
@@ -224,7 +229,21 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         next(m, now); /* No arm reset in the chassis-only extension. */
         break;
     case 8:
-        if (move(m, in, -330, 0, 130)) next(m, now);
+        if (m->phase == 0)
+        {
+            if (move(m, in, -330, 0, 130))
+                m->phase = 1;
+        }
+        else if (m->phase == 1)
+        {
+            if (rotate(m, in, 180))
+            {
+                m->global_translation_inverted = true;
+                next(m, now);
+            }
+        }
+        else
+            fail(m, PATH_ERROR);
         break;
     case 9:
         stair(m, now, in);

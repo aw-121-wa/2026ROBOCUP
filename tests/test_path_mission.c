@@ -67,6 +67,22 @@ static int chassis_only(void) {
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==25);
     in.ir=true;
+
+    /* After the post-pillar lateral move, turn 180 degrees but preserve the old global path. */
+    p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=8; in.settled=true; in.gray=6;
+    Path_Tick(&m,0,&in);
+    CHECK(p.n==1 && p.commands[0].kind==PC_MOVE && p.commands[0].x==-330 && p.commands[0].y==0);
+    Path_Tick(&m,10,&in);
+    CHECK(m.step==8 && m.phase==1);
+    Path_Tick(&m,20,&in);
+    CHECK(count(&p,PC_ROTATE)==1 && fabsf(p.commands[p.n-1].x-180.0f)<0.001f);
+    Path_Tick(&m,30,&in);
+    CHECK(m.step==9 && m.phase==0);
+    in.gray=0; Path_Tick(&m,40,&in);
+    CHECK(p.commands[p.n-1].kind==PC_BODY && p.commands[p.n-1].x==0 && p.commands[p.n-1].y==-25);
+    in.gray=6; Path_Tick(&m,50,&in); Path_Tick(&m,100,&in); Path_Tick(&m,110,&in);
+    CHECK(p.commands[p.n-1].kind==PC_MOVE && p.commands[p.n-1].x==-18 && p.commands[p.n-1].y==0);
+
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<5000 && m.step==9;t+=10) Path_Tick(&m,t,&in);
     CHECK(m.step==10 && m.result==PATH_RUNNING);
@@ -102,7 +118,9 @@ static int chassis_errors(void) {
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
     Path_Tick(&m,15000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9; in.gray=0;
-    Path_Tick(&m,5000,&in); CHECK(m.result==PATH_TIMEOUT);
+    Path_Tick(&m,5000,&in); CHECK(m.result==PATH_RUNNING);
+    Path_Tick(&m,99999,&in); CHECK(m.result==PATH_RUNNING);
+    Path_Tick(&m,100000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9; m.ids=0x3e;
     Path_Cancel(&m); CHECK(m.result==PATH_CANCELED && m.ids==0x3e);
     unsigned n=p.n; Path_Tick(&m,5010,&in); CHECK(p.n==n);

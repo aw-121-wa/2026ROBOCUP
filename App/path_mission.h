@@ -57,7 +57,7 @@ typedef struct
     uint8_t id_count;
     bool id_overflow;
     float orbit_yaw;
-    bool waiting, stable, expired;
+    bool waiting, stable, expired, global_translation_inverted;
     PathSend send;
     void *context;
 } PathMission;
