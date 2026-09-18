@@ -1,33 +1,30 @@
 #!/usr/bin/env python3
-"""Boot-time bridge: wait for STM32 commands and launch the validated disc task.
-
-Protocol on STM32 link (/dev/ttyUSB0 @ 115200 by default):
-  STM32 -> RDK:  PING\r\n
-  RDK   -> STM32: PONG\r\n
-
-  STM32 -> RDK:  DISC_START\r\n
-  RDK   -> STM32: DISC_ACK\r\n
-  (run existing validated G101 + red-disc vision + G102x5 task)
-  RDK   -> STM32: DISC_DONE\r\n on exit code 0
-  RDK   -> STM32: DISC_ERROR\r\n on non-zero exit code
-
-The existing vision/servo task is intentionally launched as a child process so
-its tested behavior and calibration remain unchanged.
-"""
+"""Concurrent STM32 bridge for the validated disc task and RFID gate."""
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import os
-import subprocess
+import re
 import sys
+import threading
 import time
 from typing import Callable, Sequence
+
+ROOT = Path(__file__).resolve().parents[1]
+TOOLS_DIR = Path(__file__).resolve().parent
+for path in (ROOT, TOOLS_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 try:
     import serial  # type: ignore
 except ImportError:
     serial = None
+
+from disc_rfid_gate import DiscRfidGate
+from vision_servo_direct_test import build_parser as build_disc_parser, run_disc_task
+
+DEFAULT_DISC_TIMEOUT_S = 60.0
 
 
 def normalize_command(raw: bytes | str) -> str:
@@ -36,41 +33,116 @@ def normalize_command(raw: bytes | str) -> str:
     return raw.strip().upper()
 
 
-def build_disc_command(project_root: Path) -> list[str]:
-    script = project_root / "tools" / "vision_servo_direct_test.py"
-    config = project_root / "rdk_vision" / "config.yaml"
-    return [
-        sys.executable,
-        str(script),
-        "--config",
-        str(config),
-        "--color",
-        "red",
-        "--servo-port",
-        "/dev/ttyS1",
-        "--servo-baud",
-        "9600",
-        "--prep-group",
-        "101",
-        "--trigger-group",
-        "102",
-        "--repeat",
-        "1",
-        "--max-actions",
-        "5",
-        "--trigger-x",
-        "380",
-        "--servo-timeout",
-        "30",
-    ]
+def build_disc_arguments(project_root: Path):
+    return build_disc_parser().parse_args(
+        [
+            "--config", str(project_root / "rdk_vision" / "config.yaml"),
+            "--color", "red",
+            "--servo-port", "/dev/ttyS1",
+            "--servo-baud", "9600",
+            "--prep-group", "101",
+            "--trigger-group", "102",
+            "--repeat", "1",
+            "--max-actions", "5",
+            "--trigger-x", "380",
+            "--servo-timeout", "30",
+        ]
+    )
+
+
+def run_disc_in_process(project_root: Path, *, rfid_gate, on_action_complete) -> int:
+    return run_disc_task(
+        build_disc_arguments(project_root),
+        rfid_gate=rfid_gate,
+        on_action_complete=on_action_complete,
+    )
+
+
+class SerialLineWriter:
+    """Serialize complete CRLF frames from the main and disc threads."""
+
+    def __init__(self, serial_port, log=print):
+        self._serial = serial_port
+        self._log = log
+        self._lock = threading.Lock()
+        self._error = None
+
+    def __call__(self, text: str) -> None:
+        payload = (text + "\r\n").encode("ascii")
+        with self._lock:
+            try:
+                self._serial.write(payload)
+                self._serial.flush()
+            except Exception as exc:
+                self._error = exc
+                raise
+        self._log(f"STM32 TX: {text}")
+
+    def raise_if_failed(self) -> None:
+        with self._lock:
+            error = self._error
+        if error is not None:
+            raise RuntimeError(f"serial TX failed: {error!r}") from error
 
 
 class BridgeCore:
-    """Pure command core so the serial bridge can be unit tested."""
+    """Non-blocking command router with exactly one disc worker."""
 
-    def __init__(self, send_line: Callable[[str], None], run_disc: Callable[[], int]):
+    def __init__(
+        self,
+        send_line: Callable[[str], None],
+        run_disc: Callable[..., int],
+        *,
+        clock=time.monotonic,
+        disc_timeout_s: float = DEFAULT_DISC_TIMEOUT_S,
+    ):
         self._send_line = send_line
         self._run_disc = run_disc
+        self._clock = clock
+        self._disc_timeout_s = float(disc_timeout_s)
+        self._lock = threading.Lock()
+        self._worker = None
+        self._gate = None
+        self._deadline = None
+
+    @property
+    def gate(self):
+        with self._lock:
+            return self._gate
+
+    @property
+    def disc_active(self) -> bool:
+        with self._lock:
+            return self._worker is not None
+
+    def _action_complete(self, index: int) -> None:
+        self._send_line(f"DISC_ACTION_DONE {index}")
+
+    def _worker_main(self, gate: DiscRfidGate) -> None:
+        try:
+            try:
+                rc = int(
+                    self._run_disc(
+                        rfid_gate=gate,
+                        on_action_complete=self._action_complete,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 - service boundary
+                print(f"DISC task exception: {exc!r}", flush=True)
+                rc = 1
+            success = rc == 0 and gate.is_complete()
+            if not success:
+                gate.cancel()
+            try:
+                self._send_line("DISC_DONE" if success else "DISC_ERROR")
+            except Exception as exc:  # transport is owned by the serial loop
+                print(f"DISC terminal TX failed: {exc!r}", flush=True)
+        finally:
+            with self._lock:
+                if self._gate is gate:
+                    self._worker = None
+                    self._gate = None
+                    self._deadline = None
 
     def handle(self, command: str) -> None:
         command = normalize_command(command)
@@ -78,27 +150,76 @@ class BridgeCore:
             self._send_line("PONG")
             return
         if command == "DISC_START":
+            with self._lock:
+                if self._worker is not None:
+                    print("Duplicate DISC_START ignored: disc task is active", flush=True)
+                    return
+                gate = DiscRfidGate(max_actions=5)
+                worker = threading.Thread(
+                    target=self._worker_main,
+                    args=(gate,),
+                    name="disc-task",
+                    daemon=True,
+                )
+                self._gate = gate
+                self._worker = worker
+                self._deadline = self._clock() + self._disc_timeout_s
             self._send_line("DISC_ACK")
-            try:
-                rc = int(self._run_disc())
-            except Exception as exc:  # noqa: BLE001 - service boundary
-                print(f"DISC task exception: {exc!r}", flush=True)
-                rc = 1
-            self._send_line("DISC_DONE" if rc == 0 else "DISC_ERROR")
+            worker.start()
+            return
+        if command == "DISC_CANCEL":
+            gate = self.gate
+            if gate is None:
+                print("Protocol warning: ignored DISC_CANCEL without active task", flush=True)
+            else:
+                gate.cancel()
+                print("DISC CANCELLED: ACTION GATE CLOSED", flush=True)
+            return
+        match = re.fullmatch(r"DISC_RFID_OK ([1-5])", command)
+        if match:
+            index = int(match.group(1))
+            gate = self.gate
+            if gate is None or not gate.on_rfid_confirmed(index):
+                print(f"Protocol warning: ignored {command}", flush=True)
+            else:
+                print(f"RFID CONFIRMED #{index}", flush=True)
+                if index < gate.max_actions:
+                    print("ACTION GATE OPEN", flush=True)
             return
         if command:
             self._send_line("ERR_UNKNOWN")
 
+    def cancel_active(self) -> None:
+        gate = self.gate
+        if gate is not None:
+            gate.cancel()
 
-def run_disc_subprocess(project_root: Path) -> int:
-    cmd = build_disc_command(project_root)
-    print("Launching disc task:", flush=True)
-    print("  " + " ".join(cmd), flush=True)
-    env = dict(os.environ)
-    env["PYTHONUNBUFFERED"] = "1"
-    completed = subprocess.run(cmd, cwd=project_root, env=env, check=False)
-    print(f"Disc task exited rc={completed.returncode}", flush=True)
-    return int(completed.returncode)
+    def tick(self) -> None:
+        with self._lock:
+            gate = self._gate
+            deadline = self._deadline
+            if gate is not None and deadline is not None and self._clock() >= deadline:
+                self._deadline = None
+            else:
+                gate = None
+        if gate is not None:
+            print("DISC overall timeout: action gate closed", flush=True)
+            gate.cancel()
+
+    def shutdown(self) -> None:
+        self.cancel_active()
+        with self._lock:
+            worker = self._worker
+        if worker is not None and worker is not threading.current_thread():
+            worker.join()
+
+    def wait_for_idle(self, timeout_s: float) -> bool:
+        with self._lock:
+            worker = self._worker
+        if worker is None:
+            return True
+        worker.join(timeout_s)
+        return not worker.is_alive()
 
 
 def open_serial(port: str, baudrate: int, timeout: float):
@@ -115,34 +236,25 @@ def open_serial(port: str, baudrate: int, timeout: float):
     )
 
 
-def service_loop(
-    project_root: Path,
-    port: str,
-    baudrate: int,
-    reconnect_delay_s: float,
-) -> None:
+def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s: float) -> None:
     while True:
         ser = None
+        core = None
         try:
             print(f"Opening STM32 link {port} @ {baudrate}...", flush=True)
             ser = open_serial(port, baudrate, timeout=0.1)
             ser.reset_input_buffer()
             ser.reset_output_buffer()
             print("STM32 bridge ready; waiting for PING / DISC_START", flush=True)
-
-            def send_line(text: str) -> None:
-                payload = (text + "\r\n").encode("ascii")
-                ser.write(payload)
-                ser.flush()
-                print(f"STM32 TX: {text}", flush=True)
-
+            send_line = SerialLineWriter(ser, log=lambda text: print(text, flush=True))
             core = BridgeCore(
                 send_line=send_line,
-                run_disc=lambda: run_disc_subprocess(project_root),
+                run_disc=lambda **kwargs: run_disc_in_process(project_root, **kwargs),
             )
             rx = bytearray()
-
             while True:
+                send_line.raise_if_failed()
+                core.tick()
                 chunk = ser.read(64)
                 if not chunk:
                     continue
@@ -151,16 +263,16 @@ def service_loop(
                     raw_line, _, remainder = rx.partition(b"\n")
                     rx[:] = remainder
                     command = normalize_command(raw_line.rstrip(b"\r"))
-                    if not command:
-                        continue
-                    print(f"STM32 RX: {command}", flush=True)
-                    core.handle(command)
-
+                    if command:
+                        print(f"STM32 RX: {command}", flush=True)
+                        core.handle(command)
         except KeyboardInterrupt:
             raise
         except Exception as exc:  # noqa: BLE001 - reconnect boundary
             print(f"STM32 bridge serial error: {exc!r}", flush=True)
         finally:
+            if core is not None:
+                core.shutdown()
             if ser is not None:
                 try:
                     ser.close()
@@ -178,14 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--stm32-baud", type=int, default=115200)
     parser.add_argument("--reconnect-delay", type=float, default=1.0)
     args = parser.parse_args(argv)
-
-    project_root = Path(args.project_root).resolve()
-    service_loop(
-        project_root=project_root,
-        port=args.stm32_port,
-        baudrate=args.stm32_baud,
-        reconnect_delay_s=args.reconnect_delay,
-    )
+    service_loop(Path(args.project_root).resolve(), args.stm32_port, args.stm32_baud, args.reconnect_delay)
     return 0
 
 

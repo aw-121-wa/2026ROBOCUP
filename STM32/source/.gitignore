@@ -1,9 +1,0 @@
-/build/
-/.superpowers/
-/.em_skill.json
-*.elf
-*.hex
-*.bin
-*.map
-*.su
-

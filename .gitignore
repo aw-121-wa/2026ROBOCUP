@@ -1,0 +1,11 @@
+/build/
+/.superpowers/
+/.em_skill.json
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.elf
+*.hex
+*.bin
+*.map
+*.su

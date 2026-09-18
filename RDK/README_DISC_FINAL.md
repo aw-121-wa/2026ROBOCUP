@@ -18,10 +18,10 @@
 
 - 圆盘顺时针；当前相机画面中球从右向左运动。
 - G101 启动时执行 1 次。
-- G102 完成 5 次后任务结束。
+- standalone 工具中 G102 完成 5 次后任务结束；bridge 模式还必须等待 RFID #5。
 - 默认 trigger_x=380；X 越大触发越早，X 越小触发越晚。
 - 支持 TRIGGER_EARLY / TRIGGER_EDGE / TRIGGER_VALID。
-- G102 完成后立即重新识别，不等待目标离开两帧。
+- standalone 中 G102 完成后立即重新识别。bridge 中视觉同样从不停止，但 G102 completion 后关闭动作权限；等待 RFID 时 eligible trigger 只记录为 suppressed。
 
 ## 运行
 
@@ -51,13 +51,16 @@ RDK 串口分工：
 - `/dev/ttyS1` @ 9600: 幻尔舵控板
 - `/dev/ttyUSB0` @ 115200: STM32 UART4 (PC10/PC11 经 USB-TTL)
 
-第一版 ASCII 协议（均以 `\r\n` 结尾）：
+ASCII 协议（均以 `\r\n` 结尾）：
 
 - STM32 -> RDK: `PING`；RDK -> STM32: `PONG`
 - STM32 -> RDK: `DISC_START`
+- STM32 -> RDK: `DISC_CANCEL`（仅取消/超时/故障安全路径）
 - RDK 先回复 `DISC_ACK`
-- 然后运行现有圆盘任务：G101 x1 -> 红球识别 -> G102 x5
-- 成功后回复 `DISC_DONE`
+- G102 #N 收到正确完成帧后，RDK -> STM32：`DISC_ACTION_DONE N`
+- STM32 只在对应 gate 读到新 distinct UID 后回复：`DISC_RFID_OK N`
+- RFID wait 期间视觉持续工作，trigger 继续计算，但禁止发送 G102
+- 严格重复 N=1..5；`DISC_RFID_OK 5` 后成功回复 `DISC_DONE`
 - 任务进程异常退出时回复 `DISC_ERROR`
 
 ### 手动运行 bridge（安装 systemd 前先测试）
