@@ -29,7 +29,7 @@ static int begin_disc(RdkLink *r, uint32_t started, uint32_t timeout) {
 int main(void) {
     RdkLink r;
     CHECK(connect(&r) == 0);
-    CHECK(!Rdk_Begin(&r, "GROUP", 0, 1, 1000));
+    CHECK(!Rdk_Begin(&r, "GROUP", 255, 1, 1000));
     CHECK(!Rdk_Begin(&r, "VISION", 0, 1, 1000));
     CHECK(Rdk_Begin(&r, "DISC", 0, 10, 20000));
     Rdk_Tick(&r, 10);
@@ -53,7 +53,7 @@ int main(void) {
     n = sends;
     CHECK(Rdk_Begin(&r, "STOP", 0, 20011, 1));
     Rdk_Tick(&r, 20011);
-    CHECK(sends == n); /* ZHY has no remote STOP. */
+    CHECK(sends == n + 1 && !strcmp(wire, "DISC_CANCEL\r\n"));
     CHECK(connect(&r) == 0);
     CHECK(Rdk_Begin(&r, "DISC", 0, 10, 20000));
     Rdk_Tick(&r, 10); feed(&r, "DISC_DONE\r\n");

@@ -16,6 +16,9 @@ typedef struct
     size_t aux_length;
     uint8_t disc_action_done_index, disc_action_event_index, disc_rfid_sent_index;
     bool aux_pending, cancel_after_aux, disc_action_event_pending;
+    uint32_t group;
+    bool pillar_ready, pillar_ending;
+    uint8_t ball_index, stopped_index, resume_index;
     RdkTransmit transmit;
     void *context;
 } RdkLink;
@@ -25,4 +28,6 @@ void Rdk_Feed(RdkLink *r, uint8_t byte);
 void Rdk_Tick(RdkLink *r, uint32_t now);
 bool Rdk_TakeDiscActionDone(RdkLink *r, uint8_t *index);
 bool Rdk_SendDiscRfidOk(RdkLink *r, uint8_t index);
+bool Rdk_PillarStopped(RdkLink *r, uint8_t index);
+bool Rdk_PillarEnd(RdkLink *r);
 #endif

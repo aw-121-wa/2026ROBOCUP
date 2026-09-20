@@ -40,6 +40,16 @@ class DiscRfidGate:
                 or frame_timestamp >= self._action_allowed_since
             )
 
+    def dispatch_if_allowed(self, dispatch, frame_timestamp=None) -> bool:
+        """Serialize a short command write with cancel; never wait for completion here."""
+        with self._lock:
+            if (not self.action_allowed or self._complete or self._cancelled
+                    or (frame_timestamp is not None and self._action_allowed_since is not None
+                        and frame_timestamp < self._action_allowed_since)):
+                return False
+            dispatch()
+            return True
+
     def on_action_complete(self, index: int) -> bool:
         with self._lock:
             if (

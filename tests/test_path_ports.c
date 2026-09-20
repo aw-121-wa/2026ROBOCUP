@@ -14,6 +14,8 @@ static uint8_t *rx4, *rx7;
 static char wire[80];
 static unsigned holds, turn_positions;
 static bool moving, rfid_init_failure;
+static bool gray_line = true;
+static float yaw;
 
 uint32_t HAL_GetTick(void) { return now; }
 uint32_t PathSession_Create(void) { return 123; }
@@ -34,13 +36,13 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
-    return ((port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
+    return ((gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
             (port == GPIOD && pin == GPIO_PIN_10)) ? GPIO_PIN_RESET : GPIO_PIN_SET;
 }
 const ChassisState *Chassis_GetState(void) { return &state; }
 bool Chassis_MotionBusy(void) { return moving; }
 bool Chassis_IsSettled(void) { return !moving; }
-float Chassis_ContinuousYaw(void) { return 0; }
+float Chassis_ContinuousYaw(void) { return yaw; }
 void Chassis_Hold(void) { moving = false; ++holds; }
 bool Chassis_Move(float x, float y, float v, float a, float d) {
     (void)x; (void)y; (void)v; (void)a; (void)d;
@@ -69,13 +71,22 @@ static void make_id(uint32_t value, uint8_t out[12]) {
 }
 static void id(uint32_t value) { uint8_t f[12]; make_id(value, f); for (unsigned i=0;i<12;i++) raw(f[i]); }
 
-static int start_disc(void) {
+static int start_disc(bool full) {
     PathPorts_Init();
-    CHECK(PathPorts_Ping()); tick(); CHECK(!strcmp(wire, "PING\r\n"));
-    reply("PONG\r\n"); tick(); CHECK(path_diagnostics.accepted_ids == 1);
+    CHECK(PathPorts_Busy()); tick(); CHECK(!strcmp(wire, "PING\r\n"));
+    reply("PONG\r\n"); tick(); CHECK(path_diagnostics.accepted_ids == 0);
+    CHECK(PathPorts_Busy()); tick(); CHECK(!strcmp(wire,"GROUP 0\r\n"));
+    reply("GROUP_ACK 0\r\n"); tick(); CHECK(PathPorts_Busy());
+    reply("GROUP_DONE 0\r\n"); tick(); CHECK(path_diagnostics.accepted_ids == 1);
     state.armed = true;
     id(0x01020304); tick(); /* Capture is closed before a disc action gate. */
-    CHECK(PathPorts_Disc()); tick(); reply("PONG\r\n"); tick(); tick();
+    CHECK(full ? PathPorts_Start() : PathPorts_Disc()); tick(); reply("PONG\r\n"); tick(); tick();
+    if (full) {
+        for(unsigned i=0;i<30 && strcmp(wire,"GROUP 100\r\n");i++) { moving=false; tick(); }
+        CHECK(!strcmp(wire,"GROUP 100\r\n"));
+        reply("GROUP_ACK 100\r\nGROUP_DONE 100\r\n"); tick();
+        for(unsigned i=0;i<30 && strcmp(wire,"DISC_START\r\n");i++) tick();
+    }
     CHECK(!strcmp(wire, "DISC_START\r\n"));
     reply("DISC_ACK\r\n"); tick();
     CHECK(path_diagnostics.rfid_count == 0);
@@ -106,10 +117,89 @@ static int complete_gate(uint8_t index, uint32_t uid) {
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
+    if (!strncmp(argv[1],"boot_",5)) {
+        PathPorts_Init(); tick(); CHECK(!strcmp(wire,"PING\r\n"));
+        CHECK(PathPorts_Busy() && !PathPorts_Start());
+        if (!strcmp(argv[1],"boot_retry")) {
+            now+=2000; tick(); CHECK(PathPorts_Busy());
+            now+=1000; tick(); CHECK(!strcmp(wire,"PING\r\n"));
+        }
+        reply("PONG\r\n"); tick(); tick(); CHECK(!strcmp(wire,"GROUP 0\r\n"));
+        reply("GROUP_ACK 0\r\n"); tick(); CHECK(PathPorts_Busy());
+        if (!strcmp(argv[1],"boot_retry")) {
+            reply("GROUP_DONE 0\r\n"); tick(); CHECK(!PathPorts_Busy());
+            CHECK(path_diagnostics.accepted_ids==1);
+            CHECK(PathPorts_Ping()); tick(); reply("PONG\r\n"); tick(); tick();
+            CHECK(!strcmp(wire,"PING\r\n")); /* No second G0. */
+        } else if (!strcmp(argv[1],"boot_error")) {
+            reply("GROUP_ERROR 0\r\n"); tick(); tick();
+            CHECK(PathPorts_Busy() && !PathPorts_Start());
+            CHECK(path_diagnostics.accepted_ids==0 && !strcmp(wire,"DISC_CANCEL\r\n"));
+        } else if (!strcmp(argv[1],"boot_stop")) {
+            PathPorts_Cancel(); tick(); CHECK(!strcmp(wire,"DISC_CANCEL\r\n"));
+            reply("GROUP_DONE 0\r\n"); tick(); CHECK(PathPorts_Busy());
+            CHECK(path_diagnostics.accepted_ids==0);
+        } else CHECK(0);
+        puts("boot test passed"); return 0;
+    }
     rfid_init_failure = !strcmp(argv[1], "rfid_init");
-    CHECK(start_disc() == 0);
+    CHECK(start_disc(!strcmp(argv[1], "full_path")) == 0);
 
-    if (!strcmp(argv[1], "frames")) {
+    if (!strcmp(argv[1], "full_path")) {
+        for (uint8_t i=1;i<=5;i++) CHECK(complete_gate(i,i)==0);
+        reply("DISC_DONE\r\n"); tick(); tick(); tick();
+        CHECK(!strcmp(wire,"GROUP 1\r\n")); CHECK(!moving);
+        reply("GROUP_ACK 1\r\nGROUP_DONE 1\r\n"); tick(); tick(); CHECK(moving);
+        moving=false;
+        for(unsigned i=0;i<30 && strcmp(wire,"PILLAR_START\r\n");i++) tick();
+        CHECK(!strcmp(wire,"PILLAR_START\r\n")); CHECK(!moving);
+        reply("PILLAR_ACK\r\n"); tick(); CHECK(!moving);
+        reply("PILLAR_READY\r\n"); tick(); CHECK(moving);
+        yaw=-2.0f; reply("PILLAR_BALL 1\r\n"); tick(); CHECK(!moving);
+        tick(); tick(); CHECK(!strcmp(wire,"PILLAR_STOPPED 1\r\n"));
+        id(99); tick(); CHECK(path_diagnostics.rfid_count==5);
+        reply("PILLAR_ACTION_DONE 1\r\n"); tick();
+        CHECK(path_diagnostics.disc_waiting_rfid==1);
+        id(1); tick(); CHECK(path_diagnostics.rfid_count==5);
+        id(99); tick(); tick(); CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
+        CHECK(!moving && path_diagnostics.rfid_count==6);
+        reply("PILLAR_RESUME 1\r\n"); tick(); CHECK(moving);
+        yaw=-6.15f; tick(); CHECK(!moving); tick(); tick();
+        CHECK(!strcmp(wire,"PILLAR_END\r\n"));
+        reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==7);
+        for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"GROUP 2\r\n") && !moving);
+        reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
+        for(unsigned i=0;i<20 && path_diagnostics.step!=9;i++) {moving=false; tick();}
+        CHECK(path_diagnostics.step==9);
+        gray_line=false; tick(); CHECK(moving);
+        now+=10000; tick(); CHECK(moving && !path_diagnostics.fault);
+        CHECK(path_diagnostics.result==PATH_RUNNING); /* Body watchdog also exceeds 5s. */
+        gray_line=true;
+        for(unsigned i=0;i<40 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"GROUP 105\r\n") && !moving);
+        reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick(); tick(); tick();
+        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving);
+        reply("STAIR_ACK 1\r\nSTAIR_NONE 1\r\n"); tick();
+        for(unsigned i=0;i<20 && strcmp(wire,"STAIR_CHECK 2\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"STAIR_CHECK 2\r\n"));
+        reply("STAIR_ACK 2\r\nSTAIR_ACTION_DONE 2\r\n"); tick();
+        CHECK(path_diagnostics.disc_waiting_rfid==1 && !moving);
+        id(99); tick(); CHECK(path_diagnostics.rfid_count==6 && !moving);
+        id(101); tick(); tick();
+        CHECK(!strcmp(wire,"STAIR_RFID_OK 2\r\n") && !moving);
+        reply("STAIR_DONE 2\r\n"); tick();
+        for(unsigned i=0;i<20 && strcmp(wire,"STAIR_CHECK 3\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"STAIR_CHECK 3\r\n"));
+        reply("STAIR_ACK 3\r\nSTAIR_ACTION_DONE 3\r\n"); tick();
+        id(101); tick(); CHECK(path_diagnostics.rfid_count==7 && !moving);
+        id(102); tick(); tick(); CHECK(!strcmp(wire,"STAIR_RFID_OK 3\r\n") && !moving);
+        reply("STAIR_DONE 3\r\n"); tick();
+        for(unsigned i=0;i<100 && path_diagnostics.result==PATH_RUNNING;i++) {moving=false; tick();}
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9 && !moving);
+        CHECK(path_diagnostics.rfid_count==8);
+        CHECK(!strcmp(wire,"STAIR_RFID_OK 3\r\n")); /* No more grabs after two stair UIDs. */
+    } else if (!strcmp(argv[1], "frames")) {
         CHECK(action_done(1) == 0);
         uint8_t f[12]; make_id(0x4596b78a, f);
         for (unsigned i=0;i<6;i++) raw(f[i]);
@@ -157,10 +247,14 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[1], "link_fault")) {
         CHECK(action_done(1) == 0); id(44); tick(); /* RFID_OK is queued, not sent. */
         CHECK(path_diagnostics.rfid_count == 1);
+        huart4.gState=1; /* Cancellation must survive temporarily busy TX. */
         PathPorts_Error(&huart4); tick();
         CHECK(strcmp(wire, "DISC_RFID_OK 1\r\n") != 0);
         CHECK(path_diagnostics.result == PATH_ERROR);
         CHECK(path_diagnostics.disc_action_allowed == 0);
+        tick(); CHECK(strcmp(wire,"DISC_CANCEL\r\n")!=0);
+        huart4.gState=HAL_UART_STATE_READY;
+        tick(); CHECK(!strcmp(wire,"DISC_CANCEL\r\n"));
     } else if (!strcmp(argv[1], "stationary")) {
         for (uint8_t i=1;i<=5;i++) CHECK(complete_gate(i, 100+i) == 0);
         reply("DISC_DONE\r\n"); tick(); CHECK(path_diagnostics.result == PATH_DONE);

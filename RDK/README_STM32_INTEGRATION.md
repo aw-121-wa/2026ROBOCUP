@@ -1,4 +1,12 @@
+> 2026-09-20: Stair task now ends PATH after eight points; see [stair sequence and deployment](README_STAIR_TASK.md). This supersedes the old chassis-only stair/warehouse continuation below.
+
 # RDK 圆盘任务：STM32 融合基线
+
+> **当前绕桩方案：** 共享圆盘视觉参数、正常识别停车、反向绕桩，见 [README_PILLAR_NORMAL.md](README_PILLAR_NORMAL.md)。以下独立 ROI 方案已停用。
+
+> 绕桩 ROI 已与圆盘分离，共享 HSV/基础标定；增量上传和专用预览见 [README_PILLAR_ROI.md](README_PILLAR_ROI.md)。
+
+> 2026-09-19 已扩展上电 G0、PATH G100/G1 与 G103/G104 绕桩视觉，最新流程见 [PATH_ACTION_SEQUENCE.md](../docs/PATH_ACTION_SEQUENCE.md)。以下圆盘协议继续保留。
 
 本包是当前实机测试后的 RDK 圆盘任务基线，用于继续与 STM32F750 底盘任务层融合。
 

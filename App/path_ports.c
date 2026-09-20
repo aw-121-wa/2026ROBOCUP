@@ -38,6 +38,9 @@ static void service_turn(uint32_t now)
 }
 volatile PathDiagnostics path_diagnostics;
 static bool ready, initialized, motion_pending, verified, test_ping, stationary;
+/* 0 wait/retry PING, 1 handshake, 2 G0 pending, 3 ready, 4 stopped/failed. */
+static unsigned boot;
+static uint32_t boot_retry;
 static uint32_t motion_since, motion_timeout, last_rx;
 static volatile uint32_t io_fault;
 static volatile uint32_t rfid_fault;
@@ -204,6 +207,23 @@ static bool send(void *ctx, const PathCommand *c)
         return true;
     case PC_HELLO:
         return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
+    case PC_GROUP:
+        return Chassis_IsSettled() && Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
+    case PC_STAIR:
+        if (!Chassis_IsSettled() || mission.id_count >= 64 ||
+            !Rdk_Begin(&rdk, "STAIR", c->argument, now, c->timeout_ms)) return false;
+        close_rfid_gate();
+        disc_action_done_index = disc_rfid_confirmed_index = 0;
+        return true;
+    case PC_VISION:
+        if (!Chassis_IsSettled() || !Rdk_Begin(&rdk, "PILLAR", 0, now, c->timeout_ms)) return false;
+        close_rfid_gate();
+        disc_action_done_index = disc_rfid_confirmed_index = 0;
+        return true;
+    case PC_PILLAR_STOPPED:
+        return Chassis_IsSettled() && Rdk_PillarStopped(&rdk, (uint8_t)c->argument);
+    case PC_PILLAR_END:
+        return Chassis_IsSettled() && Rdk_PillarEnd(&rdk);
     case PC_DISC:
         if (!Chassis_IsSettled())
             return false;
@@ -231,7 +251,7 @@ static bool send(void *ctx, const PathCommand *c)
         verified = false;
         return Rdk_Begin(&rdk, "STOP", 0, now, 1);
     default:
-        return false; /* No GROUP/VISION/turntable commands in this scope. */
+        return false;
     }
 }
 void PathPorts_Init(void)
@@ -248,15 +268,16 @@ void PathPorts_Init(void)
 }
 bool PathPorts_Busy(void)
 {
-    return initialized && (mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
+    return initialized && (boot != 3 || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
                            (turn_enabled && turn_issued < mission.id_count));
 }
 bool PathPorts_Ping(void)
 {
-    if (!ready || io_fault || PathPorts_Busy() || !Chassis_IsSettled())
+    if (!ready || io_fault || rdk.active || rdk.locked || mission.result == PATH_RUNNING || !Chassis_IsSettled())
         return false;
     verified = false;
     test_ping = true;
+    if (boot == 0) boot = 1;
     return Rdk_Begin(&rdk, "HELLO", 0, HAL_GetTick(), 2000);
 }
 bool PathPorts_Reset(void)
@@ -294,6 +315,8 @@ bool PathPorts_Reset(void)
     turn_enabled = false;
     turn_issued = mission.id_count;
     verified = test_ping = stationary = motion_pending = false;
+    boot = 0;
+    boot_retry = HAL_GetTick();
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
     if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
         rfid_fault |= 1;
@@ -329,6 +352,12 @@ void PathPorts_Cancel(void)
     if (!initialized)
         return;
     cancel_turn();
+    if (boot != 3)
+    {
+        boot = 4;
+        verified = false;
+        (void)Rdk_Begin(&rdk, "STOP", 0, HAL_GetTick(), 1);
+    }
     if (mission.result == PATH_RUNNING)
         Path_Cancel(&mission);
     else if (rdk.active && rdk.stage != 1)
@@ -381,10 +410,19 @@ void PathPorts_Tick(void)
     if (!initialized)
         return;
     uint32_t now = HAL_GetTick();
+    if (boot == 0 && ready && !io_fault && !Chassis_GetState()->fault &&
+        (int32_t)(now - boot_retry) >= 0 && Chassis_IsSettled())
+    {
+        if (Rdk_Begin(&rdk, "HELLO", 0, now, 2000)) boot = 1;
+    }
     /* Never emit a queued permission after a fault already visible this tick. */
     if (io_fault || Chassis_GetState()->fault ||
         (mission.result == PATH_RUNNING && !Chassis_GetState()->armed))
-        rdk.aux_pending = false;
+    {
+        if (!rdk.cancel_after_aux) rdk.aux_pending = false;
+        if (rdk.active) (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
+        if (boot != 3) boot = 4;
+    }
     /* Expire before processing newly received replies; a late reply cannot revive a timeout. */
     Rdk_Tick(&rdk, now);
     if (rdk.length && (uint32_t)(now - last_rx) >= 500)
@@ -412,7 +450,24 @@ void PathPorts_Tick(void)
         rdk.error = 4;
         rdk.reply = PATH_FAILED;
     }
-    if (test_ping && rdk.stage == 2)
+    if (boot == 1 && rdk.locked && rdk.error == 1 && !io_fault)
+    {
+        Rdk_Init(&rdk, 0, transmit, 0);
+        boot = 0;
+        boot_retry = now + 1000;
+    }
+    if (boot == 1 && !rdk.active && rdk.stage == 2 && !rdk.locked)
+    {
+        if (!Chassis_GetState()->fault && Chassis_IsSettled() &&
+            Rdk_Begin(&rdk, "GROUP", 0, now, 30000)) boot = 2;
+    }
+    else if (boot == 2 && !rdk.active && rdk.reply == PATH_OK && !rdk.locked)
+    {
+        boot = 3;
+        verified = true;
+        test_ping = false;
+    }
+    if (boot == 3 && test_ping && rdk.stage == 2 && !rdk.active)
     {
         verified = true;
         test_ping = false;
@@ -449,6 +504,9 @@ void PathPorts_Tick(void)
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
                     .ir = ir_raw == 0,
+                    .vision_ready = rdk.pillar_ready,
+                    .ball_index = rdk.ball_index,
+                    .resume_index = rdk.resume_index,
                     .reply = rdk.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;
@@ -470,7 +528,8 @@ void PathPorts_Tick(void)
         mission.entered = now;
         mission.waiting = mission.stable = false;
     }
-    if (mission.result != PATH_RUNNING || mission.step != 3 || rdk.locked)
+    if (mission.result != PATH_RUNNING ||
+        (mission.step != 3 && mission.step != 6 && mission.step != 9) || rdk.locked)
         close_rfid_gate();
     if (previous == PATH_RUNNING && mission.result >= PATH_CANCELED)
     {

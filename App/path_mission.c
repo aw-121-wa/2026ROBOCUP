@@ -1,7 +1,7 @@
 #include "path_mission.h"
 #include "disc_task_config.h"
 #include "path_chassis.h"
-/* Disc only; RDK owns G101, vision and five G102 actions. */
+/* Approach + G100 + disc; RDK owns G101, vision and five G102 actions. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float speed, uint32_t t)
 {
     PathCommand c = {.kind = k, .x = x, .y = y, .speed = speed, .timeout_ms = t};
@@ -49,7 +49,8 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         PathChassis_Tick(m, now, in);
         return;
     }
-    uint32_t limit = m->step == 3 ? (m->phase == 0 ? 5000U : DISC_TASK_TIMEOUT_MS) : 30000U;
+    uint32_t limit = m->step == 3 ? (m->phase == 0 ? 5000U :
+                                    m->phase == 1 ? DISC_TASK_TIMEOUT_MS : 30000U) : 30000U;
     if ((uint32_t)(now - m->entered) >= limit)
     {
         fail(m, PATH_TIMEOUT);
@@ -81,6 +82,23 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->step++;
             m->waiting = false;
+            m->entered = now;
+            if (m->step == 3) m->phase = 2; /* G100 before disc alignment/start. */
+        }
+        return;
+    }
+    if (m->phase == 2)
+    {
+        if (!m->waiting)
+        {
+            PathCommand c = {.kind = PC_GROUP, .argument = 100, .timeout_ms = 30000};
+            if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
+        }
+        else if (in->reply == PATH_FAILED) fail(m, PATH_ERROR);
+        else if (in->reply == PATH_OK)
+        {
+            m->waiting = false;
+            m->phase = 0;
             m->entered = now;
         }
         return;
@@ -128,7 +146,9 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
 
 void Path_RecordId(PathMission *m, uint32_t id)
 {
-    if (m->result != PATH_RUNNING || m->step != 3 || m->phase != 1)
+    if (m->result != PATH_RUNNING ||
+        !((m->step == 3 && m->phase == 1) || (m->step == 6 && m->phase == 6) ||
+          (m->step == 9 && m->phase == 2 && m->waiting && m->grabs < 2)))
         return;
     for (unsigned i = 0; i < m->id_count; ++i)
         if (m->id_list[i] == id) return;

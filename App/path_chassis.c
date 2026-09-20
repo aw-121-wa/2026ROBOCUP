@@ -1,5 +1,5 @@
 #include "path_chassis.h"
-/* Added after ZHY disc completion. No RDK, arm, RFID quota or turntable commands. */
+/* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
                  uint32_t timeout)
 {
@@ -51,9 +51,9 @@ static bool rotate(PathMission *m, const PathInput *in, float deg)
     m->waiting = false;
     return true;
 }
-static bool align(PathMission *m, uint32_t now, const PathInput *in)
+static bool align(PathMission *m, uint32_t now, const PathInput *in, uint32_t timeout, float lateral)
 {
-    if ((uint32_t)(now - m->entered) >= 5000)
+    if ((uint32_t)(now - m->entered) >= timeout)
     {
         fail(m, PATH_TIMEOUT);
         return false;
@@ -69,11 +69,18 @@ static bool align(PathMission *m, uint32_t now, const PathInput *in)
         return (uint32_t)(now - m->stable_since) >= 50 && in->settled;
     }
     m->stable = false;
-    (void)emit(m, PC_BODY, 0, 25, 0, 0, 0);
+    (void)emit(m, PC_BODY, 0, lateral, 0, 0, timeout);
     return false;
 }
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
+    if (in->reply == PATH_FAILED ||
+        (m->phase >= 4 && (uint32_t)(now - m->entered) >=
+                          (m->phase == 7 ? 5000U : 60000U)))
+    {
+        fail(m, in->reply == PATH_FAILED ? PATH_ERROR : PATH_TIMEOUT);
+        return;
+    }
     switch (m->phase)
     {
     case 0:
@@ -104,69 +111,153 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
     case 1:
         if (in->settled)
         {
-            m->orbit_yaw = in->yaw_deg;
-            m->started = now;
-            if (emit(m, PC_BODY, 58.9f, 0, 49, 0, 15000))
-                m->phase = 2;
+            if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
+            {
+                m->phase = 4; /* RDK runs G103 + camera warmup, then READY. */
+                m->entered = now;
+            }
         }
         break;
     case 2:
-        m->orbit_ms = now - m->started;
+        m->orbit_ms += now - m->previous;
+        m->previous = now;
         if (m->orbit_ms >= 15000)
             fail(m, PATH_TIMEOUT);
-        else if (in->yaw_deg - m->orbit_yaw >= 352)
+        else if (in->ball_index > m->grabs)
+        {
+            hold(m);
+            m->phase = 5;
+            m->entered = now;
+        }
+        else if (m->orbit_yaw - in->yaw_deg >= 352)
         {
             hold(m);
             m->phase = 3;
         }
         break;
     case 3:
-        if (in->settled)
-            next(m, now);
+        if (in->ball_index > m->grabs)
+        {
+            hold(m);
+            m->phase = 5;
+            m->entered = now;
+        }
+        else if (in->settled)
+        {
+            if (emit(m, PC_PILLAR_END, 0, 0, 0, 0, 5000))
+            {
+                m->phase = 7;
+                m->entered = now;
+            }
+        }
+        break;
+    case 4:
+        if (in->vision_ready)
+        {
+            m->orbit_yaw = in->yaw_deg;
+            m->orbit_ms = 0;
+            m->previous = now;
+            if (in->ball_index > m->grabs)
+            {
+                hold(m);
+                m->phase = 5;
+                m->entered = now;
+            }
+            else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000)) m->phase = 2;
+        }
+        break;
+    case 5:
+        if (in->settled && emit(m, PC_PILLAR_STOPPED, 0, 0, 0, in->ball_index, 0))
+        {
+            m->phase = 6;
+            m->entered = now;
+        }
+        break;
+    case 6:
+        if (in->resume_index > m->grabs)
+        {
+            m->grabs = in->resume_index;
+            m->previous = now;
+            if (in->ball_index > m->grabs)
+            {
+                hold(m);
+                m->phase = 5;
+                m->entered = now;
+            }
+            else if (m->orbit_yaw - in->yaw_deg >= 352)
+                m->phase = 3;
+            else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000 - m->orbit_ms)) m->phase = 2;
+        }
+        break;
+    case 7:
+        if (in->reply == PATH_OK) next(m, now);
         break;
     default:
         fail(m, PATH_ERROR);
         break;
     }
 }
+static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id)
+{
+    if (!m->waiting)
+    {
+        m->entered = now;
+        m->waiting = emit(m, PC_GROUP, 0, 0, 0, id, 30000);
+    }
+    else if (in->reply == PATH_FAILED || (uint32_t)(now - m->entered) >= 30000)
+        fail(m, in->reply == PATH_FAILED ? PATH_ERROR : PATH_TIMEOUT);
+    else if (in->reply == PATH_OK)
+    {
+        m->waiting = false;
+        return true;
+    }
+    return false;
+}
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    /* Original three scanning sections (2, 4, 2 positions), chassis only. */
-    const unsigned points[] = {2, 4, 2};
+    static const float retreat[] = {-90, -117, -90, -90, -90, -117, -90};
     switch (m->phase)
     {
     case 0:
-        if (align(m, now, in))
+        if (align(m, now, in, 50000, -25)) /* Body -Y is right. */
         {
             m->phase = 1;
-            m->part = 0;
-            m->point = 0;
+            m->point = m->grabs = 0; /* Stair count excludes disc and pillar balls. */
+            m->waiting = false;
         }
         break;
     case 1:
-        if (move(m, in, 18, 0, 40))
-            m->phase = 2;
+        if (group(m, now, in, 105)) m->phase = 2;
         break;
     case 2:
-        if (++m->point == points[m->part])
+        if (m->grabs >= 2)
+            m->phase = 3; /* Still visit every remaining point. */
+        else if (!m->waiting)
         {
-            if (m->part == 2)
-                next(m, now);
-            else
-                m->phase = 4;
+            if (in->settled)
+            {
+                m->entered = now;
+                m->waiting = emit(m, PC_STAIR, 0, 0, 0, m->point + 1, 70000);
+            }
         }
-        else
+        else if (in->reply == PATH_FAILED || (uint32_t)(now - m->entered) >= 70000)
+            fail(m, in->reply == PATH_FAILED ? PATH_ERROR : PATH_TIMEOUT);
+        else if (in->reply == PATH_OK || in->reply == PATH_NONE)
+        {
+            if (in->reply == PATH_OK) ++m->grabs; /* DONE requires confirmed RFID. */
+            m->waiting = false;
             m->phase = 3;
+        }
         break;
     case 3:
-        if (move(m, in, 90, 0, 40))
-            m->phase = 2;
-        break;
-    case 4:
-        if (move(m, in, 117, 0, 40))
+        if (m->point == 7)
         {
-            m->part++;
-            m->point = 0;
+            hold(m);
+            if (m->result == PATH_RUNNING) m->result = PATH_DONE;
+        }
+        else if (move(m, in, retreat[m->point], 0, 40))
+        {
+            ++m->point;
             m->phase = 2;
         }
         break;
@@ -189,7 +280,7 @@ static void warehouse(PathMission *m, uint32_t now, const PathInput *in)
     }
     else if (m->phase == 1)
     {
-        if (align(m, now, in))
+        if (align(m, now, in, 5000, 25))
         {
             m->phase = 2;
             m->point = 0;
@@ -211,7 +302,11 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->step)
     {
     case 4:
-        next(m, now); /* Keep the heading after the disc task. */
+        if ((uint32_t)(now - m->entered) >= 30000U || in->reply == PATH_FAILED)
+            fail(m, PATH_ERROR);
+        else if (!m->waiting)
+            m->waiting = emit(m, PC_GROUP, 0, 0, 0, 1, 30000);
+        else if (in->reply == PATH_OK) next(m, now);
         break;
     case 5:
         if (move(m, in, 1750, 0, 130)) next(m, now);
@@ -224,7 +319,19 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         next(m, now); /* No arm reset in the chassis-only extension. */
         break;
     case 8:
-        if (move(m, in, -330, 0, 130)) next(m, now);
+        if (m->phase == 0)
+        {
+            if (move(m, in, -330, 0, 130)) m->phase = 1;
+        }
+        else if (m->phase == 1)
+        {
+            if (group(m, now, in, 2)) m->phase = 2;
+        }
+        else if (m->phase == 2)
+        {
+            if (rotate(m, in, 180)) next(m, now);
+        }
+        else fail(m, PATH_ERROR);
         break;
     case 9:
         stair(m, now, in);

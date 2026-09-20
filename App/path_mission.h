@@ -29,7 +29,10 @@ typedef enum
     PC_DISC,
     PC_TURN,
     PC_CANCEL,
-    PC_HELLO
+    PC_HELLO,
+    PC_PILLAR_STOPPED,
+    PC_PILLAR_END,
+    PC_STAIR
 } PathCommandKind;
 typedef struct
 {
@@ -45,6 +48,8 @@ typedef struct
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
+    bool vision_ready;
+    uint8_t ball_index, resume_index;
 } PathInput;
 typedef bool (*PathSend)(void *context, const PathCommand *command);
 typedef struct

@@ -174,6 +174,9 @@ def run_disc_task(
     *,
     rfid_gate: DiscRfidGate | None = None,
     on_action_complete=None,
+    on_ready=None,
+    before_action=None,
+    should_finish=None,
     config=None,
     detector=None,
     trigger=None,
@@ -200,7 +203,7 @@ def run_disc_task(
             args.trigger_visible_scale,
         )
 
-    if not config.roi.x < trigger_x < roi_right:
+    if trigger is None and not config.roi.x < trigger_x < roi_right:
         raise ValueError(
             f"trigger_x must be inside ROI: {config.roi.x} < X < {roi_right}; "
             f"got {trigger_x}"
@@ -255,6 +258,8 @@ def run_disc_task(
             raise RuntimeError("camera ready but no latest frame is available")
 
         last_frame_id = snapshot.frame_id
+        if on_ready is not None:
+            on_ready()
         last_reason = None
         last_suppressed_event = None
         last_suppressed_at = 0.0
@@ -264,21 +269,26 @@ def run_disc_task(
             f"Camera ready: frame={snapshot.frame_id}, shape={snapshot.frame.shape}, "
             f"color={args.color}"
         )
-        print(
-            "CLOCKWISE DISC / CAMERA MOTION: RIGHT -> LEFT\n"
-            f"ROI x=[{config.roi.x}, {roi_right}), reference="
-            f"{config.ball.reference_width}x{config.ball.reference_height}\n"
-            f"EARLY TRIGGER: bbox.left <= {trigger_x} while bbox.right touches "
-            f"ROI right edge (tolerance={args.edge_tolerance_px}px).\n"
-            "For right-to-left motion: increase --trigger-x to trigger EARLIER; "
-            "decrease it to trigger LATER."
-        )
+        if isinstance(trigger, RightToLeftDiscTrigger):
+            print(
+                "CLOCKWISE DISC / CAMERA MOTION: RIGHT -> LEFT\n"
+                f"ROI x=[{config.roi.x}, {roi_right}), reference="
+                f"{config.ball.reference_width}x{config.ball.reference_height}\n"
+                f"EARLY TRIGGER: bbox.left <= {trigger_x} while bbox.right touches "
+                f"ROI right edge (tolerance={args.edge_tolerance_px}px).\n"
+                "For right-to-left motion: increase --trigger-x to trigger EARLIER; "
+                "decrease it to trigger LATER."
+            )
+        else:
+            print(f"PILLAR NORMAL DETECTION: ROI={config.roi}; no early trigger or position window")
         print(
             f"Task limit: {args.max_actions if args.max_actions else 'infinite'} "
             f"completed G{args.trigger_group} actions; immediate_rearm=True."
         )
 
         while True:
+            if should_finish is not None and should_finish():
+                return 0
             if rfid_gate is not None:
                 if rfid_gate.is_complete():
                     print(
@@ -344,6 +354,10 @@ def run_disc_task(
                 continue
 
             next_action = action_count + 1
+            if before_action is not None and not before_action(next_action):
+                return 0 if should_finish is not None and should_finish() else 1
+            if rfid_gate is not None and rfid_gate.is_cancelled():
+                return 1
             detected_ns = time.monotonic_ns()
             print(
                 f"{event} #{next_action} frame={snapshot.frame_id}; "

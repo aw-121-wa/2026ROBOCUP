@@ -44,15 +44,15 @@ static int disc_contract(void) {
 }
 static int chassis_only(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
-    m.result=PATH_RUNNING; m.step=6; in.reply=PATH_FAILED;
+    m.result=PATH_RUNNING; m.step=6; in.vision_ready=true;
     for(unsigned t=0;t<10000 && m.step==6;t+=10) {
-        if(m.phase==2) in.yaw_deg+=1.0f;
+        if(m.phase==2) in.yaw_deg-=1.0f;
         Path_Tick(&m,t,&in);
     }
     CHECK(m.step==7 && m.result==PATH_RUNNING);
-    CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==0 && count(&p,PC_TURN)==0);
+    CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==1 && count(&p,PC_TURN)==0);
     bool orbit=false;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x-58.9f)<0.001f && p.commands[i].speed==49) orbit=true;
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+58.9f)<0.001f && p.commands[i].speed==-49) orbit=true;
     CHECK(orbit);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6;
     in.ir=true; in.settled=false;
@@ -61,26 +61,27 @@ static int chassis_only(void) {
     Path_Tick(&m,20,&in); CHECK(m.phase==0 && count(&p,PC_BODY)==0);
     Path_Tick(&m,30,&in); CHECK(m.phase==1);
     Path_Tick(&m,40,&in); CHECK(count(&p,PC_BODY)==0);
-    in.settled=true; Path_Tick(&m,100,&in); CHECK(m.phase==2);
+    in.settled=true; Path_Tick(&m,100,&in); CHECK(m.phase==4);
+    Path_Tick(&m,105,&in); CHECK(m.phase==2);
 
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
-    m.orbit_yaw=100; in.yaw_deg=451;
+    m.orbit_yaw=100; in.yaw_deg=-251;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
-    in.yaw_deg=452; Path_Tick(&m,105,&in); CHECK(m.phase==3 && count(&p,PC_HOLD)==1);
+    in.yaw_deg=-252; Path_Tick(&m,105,&in); CHECK(m.phase==3 && count(&p,PC_HOLD)==1);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==25);
     in.ir=true;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
-    for(unsigned t=0;t<5000 && m.step==9;t+=10) Path_Tick(&m,t,&in);
-    CHECK(m.step==10 && m.result==PATH_RUNNING);
-    CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==0 && count(&p,PC_TURN)==0);
-    const float expected[]={18,90,117,90,90,90,117,90};
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) Path_Tick(&m,t,&in);
+    CHECK(m.step==9 && m.result==PATH_DONE && m.grabs==2);
+    CHECK(count(&p,PC_GROUP)==1 && count(&p,PC_STAIR)==2 && count(&p,PC_TURN)==0);
+    const float expected[]={-90,-117,-90,-90,-90,-117,-90};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
-        CHECK(n<8 && p.commands[i].x==expected[n] && p.commands[i].y==0); n++;
+        CHECK(n<7 && p.commands[i].x==expected[n] && p.commands[i].y==0); n++;
     }
-    CHECK(n==8);
-    Path_Tick(&m,5000,&in); CHECK(m.step==11); /* No G0 between tasks. */
+    CHECK(n==7);
+    Path_Tick(&m,5000,&in); CHECK(m.step==9 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
     for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) Path_Tick(&m,t,&in);
     CHECK(m.result==PATH_DONE);
@@ -105,7 +106,8 @@ static int chassis_errors(void) {
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
     Path_Tick(&m,15000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9; in.gray=0;
-    Path_Tick(&m,5000,&in); CHECK(m.result==PATH_TIMEOUT);
+    Path_Tick(&m,5000,&in); CHECK(m.result==PATH_RUNNING);
+    Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9; m.ids=0x3e;
     Path_Cancel(&m); CHECK(m.result==PATH_CANCELED && m.ids==0x3e);
     unsigned n=p.n; Path_Tick(&m,5010,&in); CHECK(p.n==n);

@@ -1,0 +1,15 @@
+# Only pillar geometry. HSV, camera, ball size/shape filters come from config.yaml.
+# Initial coordinates estimated from the user's stationary grab-position image.
+frame_width: 640
+frame_height: 480
+roi:
+  x: 230
+  y: 90
+  width: 230
+  height: 230
+  edge_margin: 4
+grab:
+  center_x: 342
+  center_y: 199
+  tolerance_x: 12
+  tolerance_y: 12
