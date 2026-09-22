@@ -37,7 +37,7 @@ static void service_turn(uint32_t now)
     if (turn.reply == PATH_FAILED) turn_enabled = false;
 }
 volatile PathDiagnostics path_diagnostics;
-static bool ready, initialized, motion_pending, verified, test_ping, stationary;
+static bool ready, initialized, motion_pending, motion_continuous, verified, test_ping, stationary;
 /* 0 wait/retry PING, 1 handshake, 2 G0 pending, 3 ready, 4 stopped/failed. */
 static unsigned boot;
 static uint32_t boot_retry;
@@ -176,14 +176,26 @@ static bool send(void *ctx, const PathCommand *c)
     switch (c->kind)
     {
     case PC_MOVE:
-        if (!Chassis_Move(c->x, c->y, c->speed * scale, 550, 550))
+        if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale, 550, 550,
+                                  c->start_speed * scale, c->end_speed * scale))
             return false;
         motion_pending = true;
+        motion_continuous = c->continuous;
         motion_since = now;
         motion_timeout = c->timeout_ms;
         return true;
+    case PC_ARC:
+        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, 550, 550,
+                             c->start_speed * scale, c->end_speed * scale))
+            return false;
+        motion_pending = true;
+        motion_continuous = c->continuous;
+        motion_since = now;
+        motion_timeout = c->timeout_ms;
+        return true;
+    case PC_ALIGN_ZERO:
     case PC_ROTATE:
-        if (!Chassis_Rotate(c->x))
+        if (!(c->kind == PC_ALIGN_ZERO ? Chassis_AlignZero() : Chassis_Rotate(c->x)))
             return false;
         motion_pending = true;
         motion_since = now;
@@ -204,6 +216,7 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_HOLD:
         Chassis_Hold();
         motion_pending = false;
+        motion_continuous = false;
         return true;
     case PC_HELLO:
         return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
@@ -314,7 +327,7 @@ bool PathPorts_Reset(void)
     Turn_Init(&turn, turn_transmit, 0);
     turn_enabled = false;
     turn_issued = mission.id_count;
-    verified = test_ping = stationary = motion_pending = false;
+    verified = test_ping = stationary = motion_pending = motion_continuous = false;
     boot = 0;
     boot_retry = HAL_GetTick();
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
@@ -474,6 +487,7 @@ void PathPorts_Tick(void)
     }
     if (rdk.locked)
         verified = false;
+    bool motion_done = false;
     if (motion_pending)
     {
         if ((uint32_t)(now - motion_since) >= motion_timeout)
@@ -481,11 +495,16 @@ void PathPorts_Tick(void)
             io_fault |= 32;
             Chassis_Hold();
             motion_pending = false;
+            motion_continuous = false;
         }
         else if (!Chassis_MotionBusy())
         {
-            Chassis_Hold();
+            if (!motion_continuous)
+                Chassis_Hold();
+            else
+                motion_done = true;
             motion_pending = false;
+            motion_continuous = false;
         }
     }
     uint8_t gray = 0;
@@ -501,8 +520,10 @@ void PathPorts_Tick(void)
                     .fault = io_fault || Chassis_GetState()->fault ||
                              (rdk.locked && !(rdk.error == 1 && disc_deadline)),
                     .settled = Chassis_IsSettled(),
+                    .motion_done = motion_done,
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
+                    .imu_yaw_deg = Chassis_MeasuredYaw(),
                     .ir = ir_raw == 0,
                     .vision_ready = rdk.pillar_ready,
                     .ball_index = rdk.ball_index,

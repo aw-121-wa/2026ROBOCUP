@@ -1,10 +1,39 @@
 #include "path_mission.h"
 #include "disc_task_config.h"
 #include "path_chassis.h"
+#define START_BLEND_RADIUS_MM 800.0f
+#define START_BLEND_SPEED_RPM 60.0f
+#define START_DIAG_X_MM 1558.8922f
+#define START_DIAG_Y_MM 567.3904f
+#define START_FORWARD_MM 2008.9384f
 /* Approach + G100 + disc; RDK owns G101, vision and five G102 actions. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float speed, uint32_t t)
 {
     PathCommand c = {.kind = k, .x = x, .y = y, .speed = speed, .timeout_ms = t};
+    if (m->send(m->context, &c))
+        return true;
+    m->result = PATH_ERROR;
+    return false;
+}
+static bool emit_move(PathMission *m, float x, float y, float speed,
+                      float start_speed, float end_speed, bool continuous)
+{
+    PathCommand c = {.kind = PC_MOVE, .x = x, .y = y, .speed = speed,
+                     .start_speed = start_speed, .end_speed = end_speed,
+                     .continuous = continuous, .timeout_ms = 30000};
+    if (m->send(m->context, &c))
+        return true;
+    m->result = PATH_ERROR;
+    return false;
+}
+static bool emit_arc(PathMission *m)
+{
+    /* 800 mm circular fillet: tangent to the incoming +20 deg line and outgoing 0 deg line.
+     * Tangent offset is R*tan(10 deg)=141.0616 mm, so the final global endpoint is unchanged. */
+    PathCommand c = {.kind = PC_ARC, .x = START_BLEND_RADIUS_MM, .y = 20.0f, .angle = -20.0f,
+                     .speed = 85.0f, .start_speed = START_BLEND_SPEED_RPM,
+                     .end_speed = START_BLEND_SPEED_RPM, .continuous = true,
+                     .timeout_ms = 30000};
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -71,14 +100,34 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
     {
         if (!m->waiting)
         {
-            if (m->step == 0)
-                m->waiting = emit(m, PC_MOVE, 1691.4467f, 615.6363f, 85, 30000);
+            if (m->step == 0 && m->part == 0)
+                m->waiting = emit_move(m, START_DIAG_X_MM, START_DIAG_Y_MM, 85.0f, 0,
+                                       START_BLEND_SPEED_RPM, true);
+            else if (m->step == 0)
+                m->waiting = emit_arc(m);
             else if (m->step == 1)
-                m->waiting = emit(m, PC_MOVE, 2150, 0, 130, 30000);
+                m->waiting = emit_move(m, START_FORWARD_MM, 0, 130.0f,
+                                       START_BLEND_SPEED_RPM, 0, false);
             else
-                m->waiting = emit(m, PC_ROTATE, 180.5f, 0, 0, 15000);
+                m->waiting = emit(m, PC_ROTATE, 180.0f, 0, 0, 15000);
         }
-        else if (in->settled)
+        else if (m->step == 0 && in->motion_done)
+        {
+            if (m->part == 0)
+            {
+                m->part = 1;
+                m->waiting = emit_arc(m);
+            }
+            else
+            {
+                m->step = 1;
+                m->part = 0;
+                m->waiting = emit_move(m, START_FORWARD_MM, 0, 130.0f,
+                                       START_BLEND_SPEED_RPM, 0, false);
+            }
+            m->entered = now;
+        }
+        else if (m->step != 0 && in->settled)
         {
             m->step++;
             m->waiting = false;

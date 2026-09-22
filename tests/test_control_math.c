@@ -8,6 +8,20 @@ int main(void)
     assert(fabsf(Heading_Update(0, 1, 0.005f, 2, 0.1f, 0.2f, 1, &i) + 0.2f) < 0.001f);
     assert(Heading_Update(10, 0, 1, 2, 1, 0, 1, &i) == 1);
     assert(i == 0.5f);
+    HeadingEstimator est = {0};
+    assert(HeadingEstimator_Update(&est, 0, 1, 1, 0.005f, true));
+    assert(HeadingEstimator_Update(&est, 0, 1, 1, 0.005f, true));
+    assert(fabsf(est.yaw_rad - 0.005f) < 1e-5f); /* 200 Hz propagation between 20 Hz angles. */
+    assert(HeadingEstimator_Update(&est, 0.05f, 2, 1, 0.005f, true));
+    assert(fabsf(est.yaw_rad - 0.05f) < 1e-5f); /* New angle frame anchors drift. */
+    assert(!HeadingEstimator_Update(&est, 0, 2, 0, 0.005f, false) && !est.ready);
+    float arc_x, arc_y;
+    Motion_ArcDirection(20.0f * 0.017453292519943295f,
+                        -20.0f * 0.017453292519943295f, 0, 100, &arc_x, &arc_y);
+    assert(fabsf(arc_x - cosf(20.0f * 0.017453292519943295f)) < 1e-6f);
+    Motion_ArcDirection(20.0f * 0.017453292519943295f,
+                        -20.0f * 0.017453292519943295f, 100, 100, &arc_x, &arc_y);
+    assert(fabsf(arc_x - 1.0f) < 1e-6f && fabsf(arc_y) < 1e-6f);
     float rpm[4] = {60, 60, 60, 60}, velocity[3];
     ChassisOdomDelta d =
         ChassisOdom_Integrate((Geometry){35, 300}, rpm, 0, 1, 1, 1, 0, 0.01f, velocity);

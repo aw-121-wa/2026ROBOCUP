@@ -1,9 +1,11 @@
 #include "path_chassis.h"
+#include "stair_heading.h"
 /* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
                  uint32_t timeout)
 {
-    PathCommand c = {k, x, y, v, arg, timeout};
+    PathCommand c = {.kind = k, .x = x, .y = y, .speed = v,
+                     .argument = arg, .timeout_ms = timeout};
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -129,7 +131,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 352)
+        else if (m->orbit_yaw - in->yaw_deg >= 354)
         {
             hold(m);
             m->phase = 3;
@@ -184,7 +186,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 352)
+            else if (m->orbit_yaw - in->yaw_deg >= 354)
                 m->phase = 3;
             else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
@@ -227,7 +229,12 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 1:
-        if (group(m, now, in, 105)) m->phase = 2;
+        if (group(m, now, in, 105))
+        {
+            m->phase = 4;
+            m->entered = now;
+            m->stable = false;
+        }
         break;
     case 2:
         if (m->grabs >= 2)
@@ -258,8 +265,46 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         else if (move(m, in, retreat[m->point], 0, 40))
         {
             ++m->point;
-            m->phase = 2;
+            m->phase = 4;
+            m->entered = now;
+            m->stable = false;
         }
+        break;
+    case 4: /* Every point: settle and verify heading before RDK recognition. */
+        if (!isfinite(in->imu_yaw_deg))
+        {
+            fail(m, PATH_ERROR);
+            break;
+        }
+        if ((uint32_t)(now - m->entered) >= STAIR_HEADING_TIMEOUT_MS)
+        {
+            /* Best effort: stop correcting, then recognize without restarting alignment. */
+            hold(m);
+            m->waiting = false;
+            m->stable = false;
+            m->phase = 2;
+            break;
+        }
+        if (!in->settled)
+        {
+            m->stable = false;
+            break;
+        }
+        m->waiting = false;
+        if (fabsf(StairHeading_Error(in->imu_yaw_deg)) > STAIR_HEADING_TOLERANCE_DEG)
+        {
+            m->stable = false;
+            m->waiting = emit(m, PC_ALIGN_ZERO, 0, 0, 0, 0,
+                              /* Mission owns the 300 ms deadline; watchdog must not fault first. */
+                              STAIR_HEADING_TIMEOUT_MS + 1000U);
+        }
+        else if (!m->stable)
+        {
+            m->stable = true;
+            m->stable_since = now;
+        }
+        else if ((uint32_t)(now - m->stable_since) >= STAIR_HEADING_STABLE_MS)
+            m->phase = 2;
         break;
     default:
         fail(m, PATH_ERROR);

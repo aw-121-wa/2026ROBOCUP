@@ -1,0 +1,7 @@
+# Stair heading alignment implementation plan
+
+Replace the proposed line correction with heading alignment only. Retain existing entrance gray alignment. At all eight stair points, before recognition (including points still visited after two grabs), wait for stop and align to the latest validated JY60 angle zero using the shortest rotation. The target is JY60 yaw_deg == 0; do not subtract the software startup reference or use the extrapolated heading for this correction. Both the rotation feedback and recognition gate use this measured angle; existing IMU validity checks remain active.
+
+1. Test that G105 completion does not immediately start recognition while yaw is outside +/-0.2 degrees.
+2. Add PC_ALIGN_ZERO, reusing the chassis rotation controller with a local 0.15-degree completion tolerance; keep ordinary rotations at 0.3 degrees. Use a 300 ms mission deadline and accept settled heading within +/-0.2 degrees continuously for 100 ms early. At the deadline, end correction and proceed to recognition after the existing motor-settled interlock, even if heading remains outside tolerance. Do not restart alignment or fail PATH due to this deadline. Keep the lower-level watchdog longer than this best-effort deadline.
+3. Test all eight point gates, positive/negative/multiple-turn headings, drift, timeout, STOP/fault, and command rejection. Build affected host tests and Release firmware. Hardware accuracy remains unverified.

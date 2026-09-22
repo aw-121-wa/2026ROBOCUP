@@ -15,7 +15,8 @@ static char wire[80];
 static unsigned holds, turn_positions;
 static bool moving, rfid_init_failure;
 static bool gray_line = true;
-static float yaw;
+static float yaw, measured_yaw;
+static unsigned zero_aligns;
 
 uint32_t HAL_GetTick(void) { return now; }
 uint32_t PathSession_Create(void) { return 123; }
@@ -43,13 +44,25 @@ const ChassisState *Chassis_GetState(void) { return &state; }
 bool Chassis_MotionBusy(void) { return moving; }
 bool Chassis_IsSettled(void) { return !moving; }
 float Chassis_ContinuousYaw(void) { return yaw; }
+float Chassis_MeasuredYaw(void) { return measured_yaw; }
 void Chassis_Hold(void) { moving = false; ++holds; }
 bool Chassis_Move(float x, float y, float v, float a, float d) {
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (!state.armed || moving) return false;
     moving = true; return true;
 }
+bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
+                          float start_speed, float end_speed) {
+    (void)start_speed; (void)end_speed;
+    return Chassis_Move(x, y, v, a, d);
+}
+bool Chassis_MoveArc(float radius, float start_angle, float turn, float v, float a, float d,
+                     float start_speed, float end_speed) {
+    (void)radius; (void)start_angle; (void)turn; (void)start_speed; (void)end_speed;
+    return Chassis_Move(1, 0, v, a, d);
+}
 bool Chassis_Rotate(float deg) { return Chassis_Move(deg, 0, 1, 1, 1); }
+bool Chassis_AlignZero(void) { measured_yaw=0; zero_aligns++; return Chassis_Rotate(0); }
 bool Chassis_Body(float x, float y, float w) {
     (void)x; (void)y; (void)w; moving = true; return state.armed;
 }
@@ -164,7 +177,7 @@ int main(int argc, char **argv) {
         id(99); tick(); tick(); CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
         CHECK(!moving && path_diagnostics.rfid_count==6);
         reply("PILLAR_RESUME 1\r\n"); tick(); CHECK(moving);
-        yaw=-6.15f; tick(); CHECK(!moving); tick(); tick();
+        yaw=-6.19f; tick(); CHECK(!moving); tick(); tick();
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));
         reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==7);
         for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
@@ -178,10 +191,12 @@ int main(int argc, char **argv) {
         gray_line=true;
         for(unsigned i=0;i<40 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"GROUP 105\r\n") && !moving);
-        reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick(); tick(); tick();
-        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving);
+        measured_yaw=5;
+        reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();
+        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 1\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving && zero_aligns==1);
         reply("STAIR_ACK 1\r\nSTAIR_NONE 1\r\n"); tick();
-        for(unsigned i=0;i<20 && strcmp(wire,"STAIR_CHECK 2\r\n");i++) {moving=false; tick();}
+        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 2\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"STAIR_CHECK 2\r\n"));
         reply("STAIR_ACK 2\r\nSTAIR_ACTION_DONE 2\r\n"); tick();
         CHECK(path_diagnostics.disc_waiting_rfid==1 && !moving);
@@ -189,13 +204,13 @@ int main(int argc, char **argv) {
         id(101); tick(); tick();
         CHECK(!strcmp(wire,"STAIR_RFID_OK 2\r\n") && !moving);
         reply("STAIR_DONE 2\r\n"); tick();
-        for(unsigned i=0;i<20 && strcmp(wire,"STAIR_CHECK 3\r\n");i++) {moving=false; tick();}
+        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 3\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"STAIR_CHECK 3\r\n"));
         reply("STAIR_ACK 3\r\nSTAIR_ACTION_DONE 3\r\n"); tick();
         id(101); tick(); CHECK(path_diagnostics.rfid_count==7 && !moving);
         id(102); tick(); tick(); CHECK(!strcmp(wire,"STAIR_RFID_OK 3\r\n") && !moving);
         reply("STAIR_DONE 3\r\n"); tick();
-        for(unsigned i=0;i<100 && path_diagnostics.result==PATH_RUNNING;i++) {moving=false; tick();}
+        for(unsigned i=0;i<300 && path_diagnostics.result==PATH_RUNNING;i++) {moving=false; tick();}
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9 && !moving);
         CHECK(path_diagnostics.rfid_count==8);
         CHECK(!strcmp(wire,"STAIR_RFID_OK 3\r\n")); /* No more grabs after two stair UIDs. */

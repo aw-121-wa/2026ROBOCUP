@@ -32,18 +32,23 @@ typedef enum
     PC_HELLO,
     PC_PILLAR_STOPPED,
     PC_PILLAR_END,
-    PC_STAIR
+    PC_STAIR,
+    PC_ARC,
+    PC_ALIGN_ZERO
 } PathCommandKind;
 typedef struct
 {
     PathCommandKind kind;
-    float x, y, speed;
+    float x, y, angle, speed;
+    float start_speed, end_speed;
+    bool continuous;
     uint32_t argument, timeout_ms;
 } PathCommand;
 typedef struct
 {
-    bool armed, fault, settled;
+    bool armed, fault, settled, motion_done;
     float yaw_deg;
+    float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
     uint8_t gray; /* active-low converted bits MID2 IN2 IN1 MID1: target 0b0110 */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
