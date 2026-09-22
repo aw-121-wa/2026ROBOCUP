@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "path_chassis.h"
 #include "stair_heading.h"
 /* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
@@ -76,7 +77,7 @@ static bool align(PathMission *m, uint32_t now, const PathInput *in, uint32_t ti
 }
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
-    if (in->reply == PATH_FAILED ||
+    if ((PATH_VISION_ENABLE && in->reply == PATH_FAILED) ||
         (m->phase >= 4 && (uint32_t)(now - m->entered) >=
                           (m->phase == 7 ? 5000U : 60000U)))
     {
@@ -113,6 +114,14 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
     case 1:
         if (in->settled)
         {
+            if (!PATH_VISION_ENABLE)
+            {
+                m->orbit_yaw = in->yaw_deg;
+                m->orbit_ms = 0;
+                m->previous = now;
+                if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000)) m->phase = 2;
+                break;
+            }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
             {
                 m->phase = 4; /* RDK runs G103 + camera warmup, then READY. */
@@ -125,20 +134,27 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         m->previous = now;
         if (m->orbit_ms >= 15000)
             fail(m, PATH_TIMEOUT);
-        else if (in->ball_index > m->grabs)
+        else if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
         {
             hold(m);
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 354)
+        else if (m->orbit_yaw - in->yaw_deg >= 356)
         {
             hold(m);
+            m->entered = now;
             m->phase = 3;
         }
         break;
     case 3:
-        if (in->ball_index > m->grabs)
+        if (!PATH_VISION_ENABLE)
+        {
+            /* Let the post-orbit angle settle before capturing the retreat heading. */
+            if (in->settled && (uint32_t)(now - m->entered) >= 300U) next(m, now);
+            break;
+        }
+        if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
         {
             hold(m);
             m->phase = 5;
@@ -159,7 +175,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->orbit_yaw = in->yaw_deg;
             m->orbit_ms = 0;
             m->previous = now;
-            if (in->ball_index > m->grabs)
+            if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
             {
                 hold(m);
                 m->phase = 5;
@@ -180,13 +196,13 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->grabs = in->resume_index;
             m->previous = now;
-            if (in->ball_index > m->grabs)
+            if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
             {
                 hold(m);
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 354)
+            else if (m->orbit_yaw - in->yaw_deg >= 356)
                 m->phase = 3;
             else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
@@ -201,6 +217,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 }
 static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id)
 {
+    if (!PATH_VISION_ENABLE) return true;
     if (!m->waiting)
     {
         m->entered = now;
@@ -237,6 +254,11 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 2:
+        if (!PATH_VISION_ENABLE)
+        {
+            if (in->settled) m->phase = 3;
+            break;
+        }
         if (m->grabs >= 2)
             m->phase = 3; /* Still visit every remaining point. */
         else if (!m->waiting)
@@ -295,7 +317,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->stable = false;
             m->waiting = emit(m, PC_ALIGN_ZERO, 0, 0, 0, 0,
-                              /* Mission owns the 300 ms deadline; watchdog must not fault first. */
+                              /* Mission owns the calibration deadline; watchdog must not fault first. */
                               STAIR_HEADING_TIMEOUT_MS + 1000U);
         }
         else if (!m->stable)
@@ -347,6 +369,11 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->step)
     {
     case 4:
+        if (!PATH_VISION_ENABLE)
+        {
+            next(m, now);
+            break;
+        }
         if ((uint32_t)(now - m->entered) >= 30000U || in->reply == PATH_FAILED)
             fail(m, PATH_ERROR);
         else if (!m->waiting)

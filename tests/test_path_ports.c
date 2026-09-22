@@ -130,6 +130,31 @@ static int complete_gate(uint8_t index, uint32_t uid) {
 
 int main(int argc, char **argv) {
     CHECK(argc == 2);
+    if (!strcmp(argv[1], "no_vision")) {
+        PathPorts_Init(); tick();
+        CHECK(!PathPorts_Busy() && wire[0]==0 && rx4==NULL && rx7==NULL);
+        CHECK(!PathPorts_Start()); /* ARM is still mandatory. */
+        state.armed=true; CHECK(PathPorts_Start());
+        unsigned previous_phase=99;
+        for(unsigned i=0;i<3000 && PathPorts_Busy();i++) {
+            moving=false;
+            if(path_diagnostics.step==6 && path_diagnostics.phase==2) yaw-=0.03f;
+            if(path_diagnostics.step==9 && path_diagnostics.phase==4 && previous_phase!=4)
+                measured_yaw=5;
+            previous_phase=path_diagnostics.phase;
+            tick();
+            CHECK(wire[0]==0 && !path_diagnostics.fault);
+        }
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9);
+        CHECK(zero_aligns==8 && path_diagnostics.rfid_count==0);
+        CHECK(!PathPorts_Disc() && !PathPorts_Ping());
+        CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
+        CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());
+        CHECK(PathPorts_Start()); tick(); state.fault=2; tick();
+        CHECK(path_diagnostics.result==PATH_ERROR && !moving && wire[0]==0);
+        puts("no-vision route, 8 heading points, restart, STOP and fault passed");
+        return 0;
+    }
     if (!strncmp(argv[1],"boot_",5)) {
         PathPorts_Init(); tick(); CHECK(!strcmp(wire,"PING\r\n"));
         CHECK(PathPorts_Busy() && !PathPorts_Start());
@@ -177,7 +202,7 @@ int main(int argc, char **argv) {
         id(99); tick(); tick(); CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
         CHECK(!moving && path_diagnostics.rfid_count==6);
         reply("PILLAR_RESUME 1\r\n"); tick(); CHECK(moving);
-        yaw=-6.19f; tick(); CHECK(!moving); tick(); tick();
+        yaw=-6.22f; tick(); CHECK(!moving); tick(); tick();
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));
         reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==7);
         for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}

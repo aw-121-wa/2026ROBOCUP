@@ -23,10 +23,10 @@ static int gate(void) {
     PathMission m; PathInput in; init(&m,&in);
     Path_Tick(&m,10,&in); CHECK(checks==0 && corrections==1);
     in.settled=false; Path_Tick(&m,100,&in); CHECK(corrections==1 && checks==0);
-    in.settled=true; in.imu_yaw_deg=0.19f; Path_Tick(&m,110,&in);
+    in.settled=true; in.imu_yaw_deg=0.09f; Path_Tick(&m,110,&in);
     Path_Tick(&m,159,&in); CHECK(checks==0);
-    in.imu_yaw_deg=0.21f; Path_Tick(&m,160,&in); CHECK(corrections==2 && checks==0);
-    in.imu_yaw_deg=-0.19f; Path_Tick(&m,170,&in); Path_Tick(&m,269,&in); CHECK(checks==0);
+    in.imu_yaw_deg=0.11f; Path_Tick(&m,160,&in); CHECK(corrections==2 && checks==0);
+    in.imu_yaw_deg=-0.09f; Path_Tick(&m,170,&in); Path_Tick(&m,269,&in); CHECK(checks==0);
     Path_Tick(&m,270,&in); Path_Tick(&m,275,&in); CHECK(checks==1 && last.kind==PC_STAIR);
     return 0;
 }
@@ -44,12 +44,12 @@ static int all_points(void) {
 }
 static int failures(void) {
     PathMission m; PathInput in; init(&m,&in); Path_Tick(&m,10,&in);
-    in.settled=false; Path_Tick(&m,304,&in); CHECK(holds==0 && checks==0);
-    Path_Tick(&m,305,&in); CHECK(m.result==PATH_RUNNING && checks==0 && holds==1);
+    in.settled=false; Path_Tick(&m,1004,&in); CHECK(holds==0 && checks==0);
+    Path_Tick(&m,1005,&in); CHECK(m.result==PATH_RUNNING && checks==0 && holds==1);
     unsigned before=corrections;
-    in.settled=true; Path_Tick(&m,310,&in);
+    in.settled=true; Path_Tick(&m,1010,&in);
     CHECK(checks==1 && corrections==before && last.kind==PC_STAIR);
-    in.reply=PATH_NONE; Path_Tick(&m,315,&in); Path_Tick(&m,320,&in);
+    in.reply=PATH_NONE; Path_Tick(&m,1015,&in); Path_Tick(&m,1020,&in);
     CHECK(last.kind==PC_MOVE && m.result==PATH_RUNNING);
     init(&m,&in); Path_Tick(&m,10,&in); Path_Cancel(&m); unsigned n=corrections;
     Path_Tick(&m,20,&in); CHECK(m.result==PATH_CANCELED && corrections==n && checks==0);

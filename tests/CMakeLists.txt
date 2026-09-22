@@ -102,3 +102,15 @@ target_include_directories(test_forward_comp PRIVATE ../App ../Algorithm ../DRIV
 target_compile_options(test_forward_comp PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_forward_comp PRIVATE m)
 add_test(NAME forward_comp COMMAND test_forward_comp)
+
+# Keep the original vision path covered while firmware defaults to temporary bypass.
+foreach(target test_stair_heading test_stair test_action_sequence test_path_ports test_path_mission)
+    target_compile_definitions(${target} PRIVATE PATH_VISION_ENABLE=1)
+endforeach()
+add_executable(test_path_no_vision test_path_ports.c ../App/path_ports.c ../App/path_mission.c
+    ../App/path_chassis.c ../App/rdk_link.c ../App/turntable_link.c)
+target_include_directories(test_path_no_vision PRIVATE path_ports_stubs ../App ../DRIVER/inc)
+target_compile_options(test_path_no_vision PRIVATE -Wall -Wextra -Werror)
+target_compile_definitions(test_path_no_vision PRIVATE PATH_VISION_ENABLE=0)
+target_link_libraries(test_path_no_vision PRIVATE m)
+add_test(NAME path_no_vision COMMAND test_path_no_vision no_vision)

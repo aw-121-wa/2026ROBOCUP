@@ -27,7 +27,7 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 36.4583f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
                                 .rpm_limit = 200.0f,
-                                .kp = 1.8f,
+                                .kp = 4.0f,
                                 .ki = 0.00f,
                                 .gyro_damping = 0.15f,
                                 .wz_limit = 1.9f,
@@ -52,12 +52,12 @@ static float jog_x, jog_y, jog_w, jog_remaining;
 static bool path_rotation, path_body, path_arc, zero_output;
 static float path_target, body_x, body_y, body_w, arc_start, arc_turn;
 static uint8_t rotate_stable_count;
-static float rotate_tolerance_deg = 0.3f;
+static float rotate_tolerance_deg = 0.05f;
 static bool rotate_measured_zero;
 static uint32_t moving_tick;
 static uint32_t last_cycle, last_gyro, bias_count;
 #if CHASSIS_TELEMETRY_ENABLE
-static uint32_t telemetry_cycle;
+static uint32_t telemetry_cycle, telemetry_sequence;
 #endif
 static uint8_t tx[ZDT_MULTI_SPEED_SIZE] __attribute__((aligned(32)));
 static volatile bool tx_done, tx_busy, tx_error;
@@ -67,9 +67,9 @@ static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
 #if CHASSIS_TELEMETRY_ENABLE
 #if CHASSIS_TELEMETRY_FULL
-static uint8_t telemetry[156]; /* 27 + 8 task/link + 1 RFID count + 2 IR/settled + JustFloat tail. */
+static uint8_t telemetry[200]; /* 38 existing + 11 diagnostic floats + tail. */
 #else
-static uint8_t telemetry[136]; /* 22 + 8 task/link + 1 RFID count + 2 IR/settled + JustFloat tail. */
+static uint8_t telemetry[180]; /* 33 existing + 11 diagnostic floats + tail. */
 #endif
 #endif
 static HostParser host_parser;
@@ -169,14 +169,14 @@ static void service_tx(void)
     {
         if (!pending_valid)
             return;
-        int16_t physical_rpm[4];
+        int16_t physical_deci_rpm[4];
         for (int i = 0; i < 4; ++i)
-            physical_rpm[i] = (int16_t)((int)state.rpm_pending[i] * chassis_config.motor_sign[i]);
+            physical_deci_rpm[i] = (int16_t)lroundf(state.rpm_pending[i] * 10.0f * chassis_config.motor_sign[i]);
         tx_mode = chassis_config.command_mode;
         if (tx_mode == ZDT_MULTI_COMMAND)
         {
             tx_length =
-                ZDT_BuildMultiSpeed(tx, sizeof(tx), chassis_config.motor_id, physical_rpm, 0);
+                ZDT_BuildMultiSpeedDeci(tx, sizeof(tx), chassis_config.motor_id, physical_deci_rpm, 0);
             if (tx_length == 0)
             {
                 state.fault |= 4;
@@ -187,7 +187,7 @@ static void service_tx(void)
         else if (tx_mode == ZDT_LEGACY_SYNC)
         {
             for (int i = 0; i < 4; ++i)
-                ZDT_BuildLegacySpeed(&tx[i * 8], chassis_config.motor_id[i], physical_rpm[i], 0);
+                ZDT_BuildLegacySpeedDeci(&tx[i * 8], chassis_config.motor_id[i], physical_deci_rpm[i], 0);
             ZDT_BuildSync(&tx[32]);
         }
         else
@@ -365,7 +365,7 @@ bool Chassis_Rotate(float degrees)
 {
     if (!state.armed || Chassis_MotionBusy() || !isfinite(degrees) || fabsf(degrees) > 360)
         return false;
-    rotate_tolerance_deg = 0.3f;
+    rotate_tolerance_deg = 0.05f;
     rotate_measured_zero = false;
     path_target = path_yaw.continuous + degrees * RAD;
     path_rotation = true;
@@ -419,6 +419,15 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
         return;
     telemetry_cycle = now;
     const JY60_State_t *imu = JY60_GetState();
+    /* These snapshots never write the sensor or controller state. */
+    unsigned mode = (!state.armed || zero_output) ? 0U :
+                    path_rotation ? (rotate_measured_zero ? 3U : 2U) :
+                    path_body ? 4U : jog_remaining > 0 ? 5U : planner.active ? 1U : 0U;
+    float feedback = mode == 3 ? imu->yaw_deg :
+                     mode == 2 ? path_yaw.continuous / RAD : state.yaw_rad / RAD;
+    float target = mode == 3 ? 0 : mode == 2 ? path_target / RAD : heading / RAD;
+    float error = mode == 2 ? target - feedback :
+                  Angle_Wrap((target - feedback) * RAD) / RAD;
     float channels[] = {vx,
                         vy,
                         wz,
@@ -458,7 +467,18 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
                         (float)path_diagnostics.phase,
                         (float)path_diagnostics.rfid_count,
                         (float)path_diagnostics.ir_raw,
-                        (float)path_diagnostics.settled};
+                        (float)path_diagnostics.settled,
+                        (float)(HAL_GetTick() & 0x00ffffffU),
+                        (float)(telemetry_sequence++ & 0x00ffffffU),
+                        imu->yaw_deg,
+                        (float)(imu->angle_frame_count & 0x00ffffffU),
+                        (float)mode,
+                        target,
+                        feedback,
+                        error,
+                        (float)path_diagnostics.point,
+                        (float)(path_diagnostics.phase_elapsed_ms & 0x00ffffffU),
+                        (float)imu->angle_age_ms};
     _Static_assert(sizeof(channels) + 4 == sizeof(telemetry), "VOFA frame size mismatch");
     const size_t channel_bytes = sizeof(channels);
     memcpy(telemetry, channels, channel_bytes);
@@ -723,7 +743,8 @@ void Chassis_Update(void)
             rotate_limit = fminf(limit, chassis_config.wz_limit * 0.6f);
         else
             rotate_limit = fminf(limit, 0.25f * chassis_config.wz_limit);
-        wz = Heading_Update(error, gyro_rad_s, dt, chassis_config.kp, chassis_config.ki,
+        wz = Heading_Update(error, gyro_rad_s, dt,
+                            rotate_measured_zero ? STAIR_HEADING_KP : chassis_config.kp, chassis_config.ki,
                             chassis_config.gyro_damping, rotate_limit,
                             &integral);
         if (abs_error < rotate_tolerance_deg * RAD && fabsf(imu->gz_dps - state.gyro_bias_dps) < 2)
@@ -775,7 +796,7 @@ void Chassis_Update(void)
     for (int i = 0; i < 4; i++)
     {
         state.rpm_requested[i] = out[i];
-        state.rpm_pending[i] = roundf(state.rpm_requested[i]);
+        state.rpm_pending[i] = roundf(state.rpm_requested[i] * 10.0f) * 0.1f;
     }
     pending_valid = true;
     service_tx();

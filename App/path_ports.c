@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
 #include "rdk_link.h"
@@ -261,6 +262,7 @@ static bool send(void *ctx, const PathCommand *c)
         record_pending_ids();
         Chassis_Hold();
         motion_pending = false;
+        if (!PATH_VISION_ENABLE) return true;
         verified = false;
         return Rdk_Begin(&rdk, "STOP", 0, now, 1);
     default:
@@ -273,6 +275,12 @@ void PathPorts_Init(void)
     Rdk_Init(&rdk, 0, transmit, 0);
     Path_Init(&mission, send, 0);
     initialized = true;
+    if (!PATH_VISION_ENABLE)
+    {
+        boot = 3;
+        ready = verified = true;
+        return;
+    }
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
     if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
         rfid_fault |= 1;
@@ -281,11 +289,13 @@ void PathPorts_Init(void)
 }
 bool PathPorts_Busy(void)
 {
+    if (!PATH_VISION_ENABLE) return initialized && mission.result == PATH_RUNNING;
     return initialized && (boot != 3 || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
                            (turn_enabled && turn_issued < mission.id_count));
 }
 bool PathPorts_Ping(void)
 {
+    if (!PATH_VISION_ENABLE) return false;
     if (!ready || io_fault || rdk.active || rdk.locked || mission.result == PATH_RUNNING || !Chassis_IsSettled())
         return false;
     verified = false;
@@ -295,6 +305,7 @@ bool PathPorts_Ping(void)
 }
 bool PathPorts_Reset(void)
 {
+    if (!PATH_VISION_ENABLE) return false;
     if (PINCFG_RDK_UART->gState != HAL_UART_STATE_READY || Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
         rdk.active || turn.pending)
         return false;
@@ -349,7 +360,7 @@ static bool start(bool disc_only)
     if (!Path_Start(&mission, HAL_GetTick(), &in)) return false;
     Turn_Init(&turn, turn_transmit, 0);
     turn_issued = 0;
-    turn_enabled = true;
+    turn_enabled = PATH_VISION_ENABLE != 0;
     return true;
 }
 bool PathPorts_Start(void)
@@ -358,12 +369,18 @@ bool PathPorts_Start(void)
 }
 bool PathPorts_Disc(void)
 {
+    if (!PATH_VISION_ENABLE) return false;
     return start(true);
 }
 void PathPorts_Cancel(void)
 {
     if (!initialized)
         return;
+    if (!PATH_VISION_ENABLE)
+    {
+        Path_Cancel(&mission);
+        return;
+    }
     cancel_turn();
     if (boot != 3)
     {
@@ -381,6 +398,7 @@ void PathPorts_Cancel(void)
 }
 void PathPorts_RxComplete(UART_HandleTypeDef *u)
 {
+    if (!PATH_VISION_ENABLE) return;
     if (u == PINCFG_RFID_UART)
     {
         if (rfid_capture)
@@ -413,6 +431,7 @@ void PathPorts_RxComplete(UART_HandleTypeDef *u)
 }
 void PathPorts_Error(UART_HandleTypeDef *u)
 {
+    if (!PATH_VISION_ENABLE) return;
     if (u == PINCFG_RDK_UART)
         io_fault |= 16;
     else if (u == PINCFG_RFID_UART)
@@ -485,7 +504,7 @@ void PathPorts_Tick(void)
         verified = true;
         test_ping = false;
     }
-    if (rdk.locked)
+    if (PATH_VISION_ENABLE && rdk.locked)
         verified = false;
     bool motion_done = false;
     if (motion_pending)
@@ -518,7 +537,7 @@ void PathPorts_Tick(void)
     uint32_t ir_raw = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_SET;
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = io_fault || Chassis_GetState()->fault ||
-                             (rdk.locked && !(rdk.error == 1 && disc_deadline)),
+                             (PATH_VISION_ENABLE && rdk.locked && !(rdk.error == 1 && disc_deadline)),
                     .settled = Chassis_IsSettled(),
                     .motion_done = motion_done,
                     .gray = gray,
@@ -556,14 +575,16 @@ void PathPorts_Tick(void)
     {
         Chassis_Hold();
         motion_pending = false;
-        verified = false;
-        if (!rdk.locked)
+        if (PATH_VISION_ENABLE) verified = false;
+        if (PATH_VISION_ENABLE && !rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
     service_turn(now);
     path_diagnostics = (PathDiagnostics){.result = mission.result,
                                          .step = mission.step,
                                          .phase = mission.phase,
+                                         .point = mission.step == 9 ? mission.point + 1U : 0U,
+                                         .phase_elapsed_ms = now - mission.entered,
                                          .accepted_ids = verified, /* Preserve ZHY CH29. */
                                          .ids = mission.ids,
                                          .rfid_count = mission.id_count,

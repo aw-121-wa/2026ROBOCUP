@@ -38,7 +38,7 @@ int main(void) {
     Path_Tick(&m,20000,&in); CHECK(m.phase==6); /* RFID wait is not orbit time. */
     in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-58.9f && last.speed==-49);
     in.yaw_deg=-351; Path_Tick(&m,20010,&in); CHECK(m.phase==2);
-    in.yaw_deg=-354; Path_Tick(&m,20015,&in); CHECK(m.phase==3 && last.kind==PC_HOLD);
+    in.yaw_deg=-356; Path_Tick(&m,20015,&in); CHECK(m.phase==3 && last.kind==PC_HOLD);
     Path_Tick(&m,20020,&in); CHECK(last.kind==PC_PILLAR_END);
     in.reply=PATH_OK; Path_Tick(&m,20025,&in); CHECK(m.step==7);
 

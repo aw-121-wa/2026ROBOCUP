@@ -16,6 +16,7 @@ typedef struct
     uint32_t disc_rfid_confirmed_index;
     uint32_t disc_waiting_rfid;
     uint32_t disc_action_allowed;
+    uint32_t point, phase_elapsed_ms; /* Read-only diagnostics. */
 } PathDiagnostics;
 extern volatile PathDiagnostics path_diagnostics;
 /* RAM first-seen list of up to 64 distinct full four-byte UIDs.

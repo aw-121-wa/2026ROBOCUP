@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "path_mission.h"
 #include "disc_task_config.h"
 #include "path_chassis.h"
@@ -57,6 +58,11 @@ bool Path_Start(PathMission *m, uint32_t now, const PathInput *in)
     void *c = m->context;
     *m =
         (PathMission){.send = s, .context = c, .result = PATH_RUNNING, .phase = 99, .entered = now};
+    if (!PATH_VISION_ENABLE)
+    {
+        m->phase = 0;
+        return true;
+    }
     return emit(m, PC_HELLO, 0, 0, 0, 2000);
 }
 void Path_Cancel(PathMission *m)
@@ -138,6 +144,12 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
     }
     if (m->phase == 2)
     {
+        if (!PATH_VISION_ENABLE)
+        {
+            m->phase = 0;
+            m->entered = now;
+            return;
+        }
         if (!m->waiting)
         {
             PathCommand c = {.kind = PC_GROUP, .argument = 100, .timeout_ms = 30000};
@@ -164,6 +176,11 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             }
             if ((uint32_t)(now - m->stable_since) >= 50 && in->settled)
             {
+                if (!PATH_VISION_ENABLE)
+                {
+                    m->result = PATH_DONE;
+                    return;
+                }
                 m->phase = 1;
                 m->entered = now;
                 if (!emit(m, PC_DISC, 0, 0, 0, DISC_TASK_TIMEOUT_MS))
@@ -195,6 +212,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
 
 void Path_RecordId(PathMission *m, uint32_t id)
 {
+    if (!PATH_VISION_ENABLE) return;
     if (m->result != PATH_RUNNING ||
         !((m->step == 3 && m->phase == 1) || (m->step == 6 && m->phase == 6) ||
           (m->step == 9 && m->phase == 2 && m->waiting && m->grabs < 2)))
