@@ -1,0 +1,445 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineSystem.cmake:228 (message)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      The target system is: Generic -  - arm
+      The host system is: Windows - 10.0.26200 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" failed.
+      Compiler: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc.exe 
+      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage;-mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage
+      Id flags:  
+      
+      The output was:
+      1
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-exit.o): in function `exit':
+      (.text.exit+0x14): undefined reference to `_exit'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-closer.o): in function `_close_r':
+      (.text._close_r+0xc): undefined reference to `_close'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-lseekr.o): in function `_lseek_r':
+      (.text._lseek_r+0x10): undefined reference to `_lseek'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-readr.o): in function `_read_r':
+      (.text._read_r+0x10): undefined reference to `_read'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-writer.o): in function `_write_r':
+      (.text._write_r+0x10): undefined reference to `_write'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-sbrkr.o): in function `_sbrk_r':
+      (.text._sbrk_r+0xc): undefined reference to `_sbrk'
+      collect2.exe: error: ld returned 1 exit status
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc.exe 
+      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage;-mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage
+      Id flags: -c 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.su"
+      
+      The C compiler identification is GNU, found in:
+        F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/3.28.1/CompilerIdC/CMakeCCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-g++.exe 
+      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage;-mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage;-fno-rtti;-fno-exceptions;-fno-threadsafe-statics
+      Id flags:  
+      
+      The output was:
+      1
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-exit.o): in function `exit':
+      (.text.exit+0x14): undefined reference to `_exit'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-closer.o): in function `_close_r':
+      (.text._close_r+0xc): undefined reference to `_close'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-lseekr.o): in function `_lseek_r':
+      (.text._lseek_r+0x10): undefined reference to `_lseek'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-readr.o): in function `_read_r':
+      (.text._read_r+0x10): undefined reference to `_read'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-writer.o): in function `_write_r':
+      (.text._write_r+0x10): undefined reference to `_write'
+      E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/ld.exe: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard\\libc.a(libc_a-sbrkr.o): in function `_sbrk_r':
+      (.text._sbrk_r+0xc): undefined reference to `_sbrk'
+      collect2.exe: error: ld returned 1 exit status
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-g++.exe 
+      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage;-mcpu=cortex-m7;-mfpu=fpv5-sp-d16;-mfloat-abi=hard;-Wall;-fdata-sections;-ffunction-sections;-fstack-usage;-fno-rtti;-fno-exceptions;-fno-threadsafe-statics
+      Id flags: -c 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.su"
+      
+      The CXX compiler identification is GNU, found in:
+        F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/3.28.1/CompilerIdCXX/CMakeCXXCompilerId.o
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:28 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-atx25o"
+      binary: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-atx25o"
+    cmakeVariables:
+      CMAKE_C_FLAGS: " -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage"
+      CMAKE_C_FLAGS_DEBUG: "-O0 -g3"
+      CMAKE_EXE_LINKER_FLAGS: "-mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -T \"F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/STM32F750xx_FLASH.ld\" --specs=nano.specs -Wl,-Map=chassis_motor.map -Wl,--gc-sections -Wl,--print-memory-usage"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-atx25o'
+        
+        Run Build Command(s): E:/cubeclt/STM32CubeCLT_1.18.0/Ninja/bin/ninja.exe -v cmTC_e8715
+        [1/2] E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-gcc.exe   -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage  -std=gnu11   -v -o CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj -c E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCCompilerABI.c
+        Using built-in specs.
+        COLLECT_GCC=E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-gcc.exe
+        Target: arm-none-eabi
+        Configured with: /build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/src/gcc/configure --build=x86_64-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw --libexecdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib --infodir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/info --mandir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/man --htmldir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/html --pdfdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/pdf --enable-languages=c,c++ --enable-mingw-wildcard --disable-decimal-float --disable-libffi --disable-libgomp --disable-libmudflap --disable-libquadmath --disable-libssp --disable-libstdcxx-pch --disable-nls --disable-shared --disable-threads --disable-tls --with-gnu-as --with-gnu-ld --with-headers=yes --with-newlib --with-python-dir=share/gcc-arm-none-eabi --with-sysroot=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/arm-none-eabi --with-libiconv-prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-gmp=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpfr=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpc=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-isl=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-pkgversion='GNU Tools for STM32 13.3.rel1.20240926-1715' --with-multilib-list=rmprofile,aprofile
+        Thread model: single
+        Supported LTO compression algorithms: zlib
+        gcc version 13.3.1 20240614 (GNU Tools for STM32 13.3.rel1.20240926-1715) 
+        COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-std=gnu11' '-v' '-o' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_e8715.dir/'
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/cc1.exe -quiet -v -imultilib thumb/v7e-m+fp/hard -iprefix E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/ -isysroot E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi -D__USES_INITFINI__ E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_e8715.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -mlibarch=armv7e-m+fpv5 -march=armv7e-m+fpv5 -Wall -std=gnu11 -version -fstack-usage -fdata-sections -ffunction-sections -fstack-usage -o C:\\Users\\zhy\\AppData\\Local\\Temp\\ccmGMvIb.s
+        GNU C11 (GNU Tools for STM32 13.3.rel1.20240926-1715) version 13.3.1 20240614 (arm-none-eabi)
+        	compiled by GNU C version 7.3-win32 20180312, GMP version 6.2.1, MPFR version 3.1.6, MPC version 1.0.3, isl version isl-0.15-1-g835ea3a-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib/gcc/arm-none-eabi/13.3.1/../../../../include"
+        ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/usr/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include-fixed
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include
+        End of search list.
+        Compiler executable checksum: ff0140b734b22faecf673fec3a6a923f
+        COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-std=gnu11' '-v' '-o' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_e8715.dir/'
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv7e-m+fpv5 -mfloat-abi=hard -mfloat-abi=hard -mfpu=fpv5-sp-d16 -mfpu=fpv5-sp-d16 -meabi=5 -o CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj C:\\Users\\zhy\\AppData\\Local\\Temp\\ccmGMvIb.s
+        GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (GNU Tools for STM32 13.3.rel1.20240926-1715) 2.42.0.20240614
+        COMPILER_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/
+        LIBRARY_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v7e-m+fp/hard/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/thumb/v7e-m+fp/hard/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/
+        COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-std=gnu11' '-v' '-o' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.'\x0d
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && E:\\cubeclt\\STM32CubeCLT_1.18.0\\CMake\\bin\\cmake.exe -E rm -f libcmTC_e8715.a && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ar.exe qc libcmTC_e8715.a  CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ranlib.exe libcmTC_e8715.a && cd ."
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        end of search list found
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include]
+        implicit include dirs: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include-fixed;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(arm-none-eabi-g\\+\\+\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-atx25o']
+        ignore line: []
+        ignore line: [Run Build Command(s): E:/cubeclt/STM32CubeCLT_1.18.0/Ninja/bin/ninja.exe -v cmTC_e8715]
+        ignore line: [[1/2] E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-gcc.exe   -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage  -std=gnu11   -v -o CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj -c E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCCompilerABI.c]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-gcc.exe]
+        ignore line: [Target: arm-none-eabi]
+        ignore line: [Configured with: /build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/src/gcc/configure --build=x86_64-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw --libexecdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib --infodir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/info --mandir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/man --htmldir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/html --pdfdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/pdf --enable-languages=c,c++ --enable-mingw-wildcard --disable-decimal-float --disable-libffi --disable-libgomp --disable-libmudflap --disable-libquadmath --disable-libssp --disable-libstdcxx-pch --disable-nls --disable-shared --disable-threads --disable-tls --with-gnu-as --with-gnu-ld --with-headers=yes --with-newlib --with-python-dir=share/gcc-arm-none-eabi --with-sysroot=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/arm-none-eabi --with-libiconv-prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-gmp=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpfr=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpc=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-isl=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-pkgversion='GNU Tools for STM32 13.3.rel1.20240926-1715' --with-multilib-list=rmprofile,aprofile]
+        ignore line: [Thread model: single]
+        ignore line: [Supported LTO compression algorithms: zlib]
+        ignore line: [gcc version 13.3.1 20240614 (GNU Tools for STM32 13.3.rel1.20240926-1715) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-std=gnu11' '-v' '-o' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_e8715.dir/']
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/cc1.exe -quiet -v -imultilib thumb/v7e-m+fp/hard -iprefix E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/ -isysroot E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi -D__USES_INITFINI__ E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_e8715.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -mlibarch=armv7e-m+fpv5 -march=armv7e-m+fpv5 -Wall -std=gnu11 -version -fstack-usage -fdata-sections -ffunction-sections -fstack-usage -o C:\\Users\\zhy\\AppData\\Local\\Temp\\ccmGMvIb.s]
+        ignore line: [GNU C11 (GNU Tools for STM32 13.3.rel1.20240926-1715) version 13.3.1 20240614 (arm-none-eabi)]
+        ignore line: [	compiled by GNU C version 7.3-win32 20180312  GMP version 6.2.1  MPFR version 3.1.6  MPC version 1.0.3  isl version isl-0.15-1-g835ea3a-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib/gcc/arm-none-eabi/13.3.1/../../../../include"]
+        ignore line: [ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/usr/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: ff0140b734b22faecf673fec3a6a923f]
+        ignore line: [COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-std=gnu11' '-v' '-o' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_e8715.dir/']
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv7e-m+fpv5 -mfloat-abi=hard -mfloat-abi=hard -mfpu=fpv5-sp-d16 -mfpu=fpv5-sp-d16 -meabi=5 -o CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj C:\\Users\\zhy\\AppData\\Local\\Temp\\ccmGMvIb.s]
+        ignore line: [GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (GNU Tools for STM32 13.3.rel1.20240926-1715) 2.42.0.20240614]
+        ignore line: [COMPILER_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/]
+        ignore line: [LIBRARY_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v7e-m+fp/hard/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/thumb/v7e-m+fp/hard/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-std=gnu11' '-v' '-o' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.'\x0d]
+        ignore line: [[2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && E:\\cubeclt\\STM32CubeCLT_1.18.0\\CMake\\bin\\cmake.exe -E rm -f libcmTC_e8715.a && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ar.exe qc libcmTC_e8715.a  CMakeFiles/cmTC_e8715.dir/CMakeCCompilerABI.c.obj && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ranlib.exe libcmTC_e8715.a && cd ."]
+        ignore line: []
+        ignore line: []
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:28 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-w7idcu"
+      binary: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-w7idcu"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: " -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -fno-rtti -fno-exceptions -fno-threadsafe-statics"
+      CMAKE_CXX_FLAGS_DEBUG: "-O0 -g3"
+      CMAKE_EXE_LINKER_FLAGS: "-mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -T \"F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/STM32F750xx_FLASH.ld\" --specs=nano.specs -Wl,-Map=chassis_motor.map -Wl,--gc-sections -Wl,--print-memory-usage"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-w7idcu'
+        
+        Run Build Command(s): E:/cubeclt/STM32CubeCLT_1.18.0/Ninja/bin/ninja.exe -v cmTC_65e2d
+        [1/2] E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-g++.exe   -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -fno-rtti -fno-exceptions -fno-threadsafe-statics    -v -o CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj -c E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp
+        Using built-in specs.
+        COLLECT_GCC=E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-g++.exe
+        Target: arm-none-eabi
+        Configured with: /build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/src/gcc/configure --build=x86_64-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw --libexecdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib --infodir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/info --mandir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/man --htmldir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/html --pdfdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/pdf --enable-languages=c,c++ --enable-mingw-wildcard --disable-decimal-float --disable-libffi --disable-libgomp --disable-libmudflap --disable-libquadmath --disable-libssp --disable-libstdcxx-pch --disable-nls --disable-shared --disable-threads --disable-tls --with-gnu-as --with-gnu-ld --with-headers=yes --with-newlib --with-python-dir=share/gcc-arm-none-eabi --with-sysroot=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/arm-none-eabi --with-libiconv-prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-gmp=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpfr=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpc=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-isl=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-pkgversion='GNU Tools for STM32 13.3.rel1.20240926-1715' --with-multilib-list=rmprofile,aprofile
+        Thread model: single
+        Supported LTO compression algorithms: zlib
+        gcc version 13.3.1 20240614 (GNU Tools for STM32 13.3.rel1.20240926-1715) 
+        COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-fno-rtti' '-fno-exceptions' '-fno-threadsafe-statics' '-v' '-o' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_65e2d.dir/'
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/cc1plus.exe -quiet -v -imultilib thumb/v7e-m+fp/hard -iprefix E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/ -isysroot E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi -D__USES_INITFINI__ E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_65e2d.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -mlibarch=armv7e-m+fpv5 -march=armv7e-m+fpv5 -Wall -version -fstack-usage -fdata-sections -ffunction-sections -fstack-usage -fno-rtti -fno-exceptions -fno-threadsafe-statics -o C:\\Users\\zhy\\AppData\\Local\\Temp\\ccpzmcoF.s
+        GNU C++17 (GNU Tools for STM32 13.3.rel1.20240926-1715) version 13.3.1 20240614 (arm-none-eabi)
+        	compiled by GNU C version 7.3-win32 20180312, GMP version 6.2.1, MPFR version 3.1.6, MPC version 1.0.3, isl version isl-0.15-1-g835ea3a-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib/gcc/arm-none-eabi/13.3.1/../../../../include"
+        ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/usr/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include-fixed
+         E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include
+        End of search list.
+        Compiler executable checksum: 81f15da80051adef2eee7279f6f54e34
+        COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-fno-rtti' '-fno-exceptions' '-fno-threadsafe-statics' '-v' '-o' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_65e2d.dir/'
+         E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv7e-m+fpv5 -mfloat-abi=hard -mfloat-abi=hard -mfpu=fpv5-sp-d16 -mfpu=fpv5-sp-d16 -meabi=5 -o CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj C:\\Users\\zhy\\AppData\\Local\\Temp\\ccpzmcoF.s
+        GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (GNU Tools for STM32 13.3.rel1.20240926-1715) 2.42.0.20240614
+        COMPILER_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/
+        LIBRARY_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v7e-m+fp/hard/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/thumb/v7e-m+fp/hard/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/
+        COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-fno-rtti' '-fno-exceptions' '-fno-threadsafe-statics' '-v' '-o' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.'\x0d
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && E:\\cubeclt\\STM32CubeCLT_1.18.0\\CMake\\bin\\cmake.exe -E rm -f libcmTC_65e2d.a && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ar.exe qc libcmTC_65e2d.a  CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ranlib.exe libcmTC_65e2d.a && cd ."
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+          add: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        end of search list found
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1/backward]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/include-fixed] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1/backward]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        collapse include dir [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include] ==> [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include]
+        implicit include dirs: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include/c++/13.3.1/backward;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/arm-none-eabi/13.3.1/include-fixed;E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/arm-none-eabi/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerABI.cmake:159 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:28 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(arm-none-eabi-g\\+\\+\\.exe|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: 'F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/Release-Path/CMakeFiles/CMakeScratch/TryCompile-w7idcu']
+        ignore line: []
+        ignore line: [Run Build Command(s): E:/cubeclt/STM32CubeCLT_1.18.0/Ninja/bin/ninja.exe -v cmTC_65e2d]
+        ignore line: [[1/2] E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-g++.exe   -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard  -Wall -fdata-sections -ffunction-sections -fstack-usage -fno-rtti -fno-exceptions -fno-threadsafe-statics    -v -o CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj -c E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-g++.exe]
+        ignore line: [Target: arm-none-eabi]
+        ignore line: [Configured with: /build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/src/gcc/configure --build=x86_64-linux-gnu --host=x86_64-w64-mingw32 --target=arm-none-eabi --prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw --libexecdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib --infodir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/info --mandir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/man --htmldir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/html --pdfdir=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/share/doc/gcc-arm-none-eabi/pdf --enable-languages=c,c++ --enable-mingw-wildcard --disable-decimal-float --disable-libffi --disable-libgomp --disable-libmudflap --disable-libquadmath --disable-libssp --disable-libstdcxx-pch --disable-nls --disable-shared --disable-threads --disable-tls --with-gnu-as --with-gnu-ld --with-headers=yes --with-newlib --with-python-dir=share/gcc-arm-none-eabi --with-sysroot=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/arm-none-eabi --with-libiconv-prefix=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-gmp=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpfr=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-mpc=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-isl=/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/build-mingw/host-libs/usr --with-host-libstdcxx='-static-libgcc -Wl,-Bstatic,-lstdc++,-Bdynamic -lm' --with-pkgversion='GNU Tools for STM32 13.3.rel1.20240926-1715' --with-multilib-list=rmprofile,aprofile]
+        ignore line: [Thread model: single]
+        ignore line: [Supported LTO compression algorithms: zlib]
+        ignore line: [gcc version 13.3.1 20240614 (GNU Tools for STM32 13.3.rel1.20240926-1715) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-fno-rtti' '-fno-exceptions' '-fno-threadsafe-statics' '-v' '-o' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_65e2d.dir/']
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/cc1plus.exe -quiet -v -imultilib thumb/v7e-m+fp/hard -iprefix E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/ -isysroot E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi -D__USES_INITFINI__ E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_65e2d.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -mlibarch=armv7e-m+fpv5 -march=armv7e-m+fpv5 -Wall -version -fstack-usage -fdata-sections -ffunction-sections -fstack-usage -fno-rtti -fno-exceptions -fno-threadsafe-statics -o C:\\Users\\zhy\\AppData\\Local\\Temp\\ccpzmcoF.s]
+        ignore line: [GNU C++17 (GNU Tools for STM32 13.3.rel1.20240926-1715) version 13.3.1 20240614 (arm-none-eabi)]
+        ignore line: [	compiled by GNU C version 7.3-win32 20180312  GMP version 6.2.1  MPFR version 3.1.6  MPC version 1.0.3  isl version isl-0.15-1-g835ea3a-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/build/gnu-tools-for-stm32_13.3.rel1.20240926-1715/install-mingw/lib/gcc/arm-none-eabi/13.3.1/../../../../include"]
+        ignore line: [ignoring nonexistent directory "E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../arm-none-eabi/usr/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        ignore line: [ E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/arm-none-eabi/thumb/v7e-m+fp/hard]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include/c++/13.3.1/backward]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/include-fixed]
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/lib/gcc/../../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: 81f15da80051adef2eee7279f6f54e34]
+        ignore line: [COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-fno-rtti' '-fno-exceptions' '-fno-threadsafe-statics' '-v' '-o' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_65e2d.dir/']
+        ignore line: [ E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/as.exe -v -march=armv7e-m+fpv5 -mfloat-abi=hard -mfloat-abi=hard -mfpu=fpv5-sp-d16 -mfpu=fpv5-sp-d16 -meabi=5 -o CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj C:\\Users\\zhy\\AppData\\Local\\Temp\\ccpzmcoF.s]
+        ignore line: [GNU assembler version 2.42.0 (arm-none-eabi) using BFD version (GNU Tools for STM32 13.3.rel1.20240926-1715) 2.42.0.20240614]
+        ignore line: [COMPILER_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/bin/]
+        ignore line: [LIBRARY_PATH=E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/thumb/v7e-m+fp/hard/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/thumb/v7e-m+fp/hard/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/thumb/v7e-m+fp/hard/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../lib/gcc/arm-none-eabi/13.3.1/../../../../arm-none-eabi/lib/]
+        ignore line: [E:/cubeclt/STM32CubeCLT_1.18.0/GNU-tools-for-STM32/bin/../arm-none-eabi/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-fstack-usage' '-mcpu=cortex-m7' '-mfpu=fpv5-sp-d16' '-mfloat-abi=hard' '-Wall' '-fdata-sections' '-ffunction-sections' '-fstack-usage' '-fno-rtti' '-fno-exceptions' '-fno-threadsafe-statics' '-v' '-o' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mthumb' '-mlibarch=armv7e-m+fpv5' '-march=armv7e-m+fpv5' '-dumpdir' 'CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.'\x0d]
+        ignore line: [[2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && E:\\cubeclt\\STM32CubeCLT_1.18.0\\CMake\\bin\\cmake.exe -E rm -f libcmTC_65e2d.a && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ar.exe qc libcmTC_65e2d.a  CMakeFiles/cmTC_65e2d.dir/CMakeCXXCompilerABI.cpp.obj && E:\\cubeclt\\STM32CubeCLT_1.18.0\\GNU-tools-for-STM32\\bin\\arm-none-eabi-ranlib.exe libcmTC_65e2d.a && cd ."]
+        ignore line: []
+        ignore line: []
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineCompilerId.cmake:1131 (message)"
+      - "E:/cubeclt/STM32CubeCLT_1.18.0/CMake/share/cmake-3.28/Modules/CMakeDetermineASMCompiler.cmake:131 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "CMakeLists.txt:32 (enable_language)"
+    message: |
+      Checking whether the ASM compiler is GNU using "--version" matched "(GNU assembler)|(GCC)|(Free Software Foundation)":
+      arm-none-eabi-gcc.exe (GNU Tools for STM32 13.3.rel1.20240926-1715) 13.3.1 20240614
+      Copyright (C) 2023 Free Software Foundation, Inc.
+      This is free software; see the source for copying conditions.  There is NO
+      warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+      
+...

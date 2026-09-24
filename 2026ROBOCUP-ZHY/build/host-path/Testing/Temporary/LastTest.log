@@ -1,0 +1,846 @@
+Start testing: Sep 24 16:47 中国标准时间
+----------------------------------------------------------
+1/53 Testing: ball_inventory
+1/53 Test: ball_inventory
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_ball_inventory.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"ball_inventory" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+block validation, arbitrary slot order, conflicts and sorted unload passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ball_inventory" end time: Sep 24 16:47 中国标准时间
+"ball_inventory" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/53 Testing: warehouse
+2/53 Test: warehouse
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_warehouse.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"warehouse" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+warehouse sorted rows, missing cells, three columns and failure gates passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"warehouse" end time: Sep 24 16:47 中国标准时间
+"warehouse" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/53 Testing: stair_heading
+3/53 Test: stair_heading
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_stair_heading.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"stair_heading" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+stair heading: gate, drift, 8 points, wrap, timeout, cancel, fault passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"stair_heading" end time: Sep 24 16:47 中国标准时间
+"stair_heading" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/53 Testing: stair
+4/53 Test: stair
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_stair.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"stair" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"stair" end time: Sep 24 16:47 中国标准时间
+"stair" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/53 Testing: action_sequence
+5/53 Test: action_sequence
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_action_sequence.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"action_sequence" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+action sequence passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"action_sequence" end time: Sep 24 16:47 中国标准时间
+"action_sequence" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/53 Testing: path_ports_boot_retry
+6/53 Test: path_ports_boot_retry
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "boot_retry"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_boot_retry" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+boot test passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_boot_retry" end time: Sep 24 16:47 中国标准时间
+"path_ports_boot_retry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/53 Testing: path_ports_boot_error
+7/53 Test: path_ports_boot_error
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "boot_error"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_boot_error" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+boot test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_boot_error" end time: Sep 24 16:47 中国标准时间
+"path_ports_boot_error" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/53 Testing: path_ports_boot_stop
+8/53 Test: path_ports_boot_stop
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "boot_stop"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_boot_stop" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+boot test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_boot_stop" end time: Sep 24 16:47 中国标准时间
+"path_ports_boot_stop" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/53 Testing: path_ports_full_path
+9/53 Test: path_ports_full_path
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "full_path"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_full_path" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_full_path" end time: Sep 24 16:47 中国标准时间
+"path_ports_full_path" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/53 Testing: path_ports_full_path9
+10/53 Test: path_ports_full_path9
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "full_path9"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_full_path9" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_full_path9" end time: Sep 24 16:47 中国标准时间
+"path_ports_full_path9" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/53 Testing: path_ports_frames
+11/53 Test: path_ports_frames
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "frames"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_frames" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_frames" end time: Sep 24 16:47 中国标准时间
+"path_ports_frames" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/53 Testing: path_ports_stop
+12/53 Test: path_ports_stop
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "stop"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_stop" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_stop" end time: Sep 24 16:47 中国标准时间
+"path_ports_stop" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/53 Testing: path_ports_rfid
+13/53 Test: path_ports_rfid
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "rfid"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_rfid" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_rfid" end time: Sep 24 16:47 中国标准时间
+"path_ports_rfid" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/53 Testing: path_ports_missing
+14/53 Test: path_ports_missing
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "missing"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_missing" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_missing" end time: Sep 24 16:47 中国标准时间
+"path_ports_missing" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/53 Testing: path_ports_timeout
+15/53 Test: path_ports_timeout
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "timeout"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_timeout" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_timeout" end time: Sep 24 16:47 中国标准时间
+"path_ports_timeout" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/53 Testing: path_ports_overflow
+16/53 Test: path_ports_overflow
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "overflow"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_overflow" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_overflow" end time: Sep 24 16:47 中国标准时间
+"path_ports_overflow" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/53 Testing: path_ports_error
+17/53 Test: path_ports_error
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "error"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_error" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_error" end time: Sep 24 16:47 中国标准时间
+"path_ports_error" time elapsed: 00:00:00
+----------------------------------------------------------
+
+18/53 Testing: path_ports_pending_stop
+18/53 Test: path_ports_pending_stop
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "pending_stop"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_pending_stop" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_pending_stop" end time: Sep 24 16:47 中国标准时间
+"path_ports_pending_stop" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/53 Testing: path_ports_stationary
+19/53 Test: path_ports_stationary
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "stationary"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_stationary" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_stationary" end time: Sep 24 16:47 中国标准时间
+"path_ports_stationary" time elapsed: 00:00:00
+----------------------------------------------------------
+
+20/53 Testing: path_ports_late
+20/53 Test: path_ports_late
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "late"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_late" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_late" end time: Sep 24 16:47 中国标准时间
+"path_ports_late" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/53 Testing: path_ports_zero
+21/53 Test: path_ports_zero
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "zero"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_zero" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_zero" end time: Sep 24 16:47 中国标准时间
+"path_ports_zero" time elapsed: 00:00:00
+----------------------------------------------------------
+
+22/53 Testing: path_ports_rfid_fault
+22/53 Test: path_ports_rfid_fault
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "rfid_fault"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_rfid_fault" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_rfid_fault" end time: Sep 24 16:47 中国标准时间
+"path_ports_rfid_fault" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/53 Testing: path_ports_rfid_init
+23/53 Test: path_ports_rfid_init
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "rfid_init"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_rfid_init" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_rfid_init" end time: Sep 24 16:47 中国标准时间
+"path_ports_rfid_init" time elapsed: 00:00:00
+----------------------------------------------------------
+
+24/53 Testing: path_ports_link_fault
+24/53 Test: path_ports_link_fault
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "link_fault"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_link_fault" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_link_fault" end time: Sep 24 16:47 中国标准时间
+"path_ports_link_fault" time elapsed: 00:00:00
+----------------------------------------------------------
+
+25/53 Testing: path_ports_uid_only
+25/53 Test: path_ports_uid_only
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "uid_only"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_uid_only" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_uid_only" end time: Sep 24 16:47 中国标准时间
+"path_ports_uid_only" time elapsed: 00:00:00
+----------------------------------------------------------
+
+26/53 Testing: path_ports_invalid_block
+26/53 Test: path_ports_invalid_block
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "invalid_block"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_invalid_block" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_invalid_block" end time: Sep 24 16:47 中国标准时间
+"path_ports_invalid_block" time elapsed: 00:00:00
+----------------------------------------------------------
+
+27/53 Testing: path_ports_store_wait
+27/53 Test: path_ports_store_wait
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "store_wait"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_store_wait" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_store_wait" end time: Sep 24 16:47 中国标准时间
+"path_ports_store_wait" time elapsed: 00:00:00
+----------------------------------------------------------
+
+28/53 Testing: path_ports_duplicate_cell
+28/53 Test: path_ports_duplicate_cell
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "duplicate_cell"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_duplicate_cell" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_duplicate_cell" end time: Sep 24 16:47 中国标准时间
+"path_ports_duplicate_cell" time elapsed: 00:00:00
+----------------------------------------------------------
+
+29/53 Testing: path_ports_turn_error
+29/53 Test: path_ports_turn_error
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "turn_error"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_turn_error" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_turn_error" end time: Sep 24 16:47 中国标准时间
+"path_ports_turn_error" time elapsed: 00:00:00
+----------------------------------------------------------
+
+30/53 Testing: path_ports_store_cancel
+30/53 Test: path_ports_store_cancel
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "store_cancel"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_store_cancel" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_store_cancel" end time: Sep 24 16:47 中国标准时间
+"path_ports_store_cancel" time elapsed: 00:00:00
+----------------------------------------------------------
+
+31/53 Testing: path_ports_queued_fault
+31/53 Test: path_ports_queued_fault
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_ports.exe" "queued_fault"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_ports_queued_fault" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY adapter test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_ports_queued_fault" end time: Sep 24 16:47 中国标准时间
+"path_ports_queued_fault" time elapsed: 00:00:00
+----------------------------------------------------------
+
+32/53 Testing: path_yaw
+32/53 Test: path_yaw
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_yaw.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_yaw" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+continuous path yaw passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_yaw" end time: Sep 24 16:47 中国标准时间
+"path_yaw" time elapsed: 00:00:00
+----------------------------------------------------------
+
+33/53 Testing: path_session_good
+33/53 Test: path_session_good
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "good"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_good" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_good" end time: Sep 24 16:47 中国标准时间
+"path_session_good" time elapsed: 00:00:00
+----------------------------------------------------------
+
+34/53 Testing: path_session_clock
+34/53 Test: path_session_clock
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "clock"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_clock" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_clock" end time: Sep 24 16:47 中国标准时间
+"path_session_clock" time elapsed: 00:00:00
+----------------------------------------------------------
+
+35/53 Testing: path_session_input
+35/53 Test: path_session_input
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "input"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_input" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_input" end time: Sep 24 16:47 中国标准时间
+"path_session_input" time elapsed: 00:00:00
+----------------------------------------------------------
+
+36/53 Testing: path_session_used
+36/53 Test: path_session_used
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "used"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_used" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_used" end time: Sep 24 16:47 中国标准时间
+"path_session_used" time elapsed: 00:00:00
+----------------------------------------------------------
+
+37/53 Testing: path_session_seed
+37/53 Test: path_session_seed
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "seed"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_seed" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_seed" end time: Sep 24 16:47 中国标准时间
+"path_session_seed" time elapsed: 00:00:00
+----------------------------------------------------------
+
+38/53 Testing: path_session_timeout
+38/53 Test: path_session_timeout
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "timeout"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_timeout" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_timeout" end time: Sep 24 16:47 中国标准时间
+"path_session_timeout" time elapsed: 00:00:00
+----------------------------------------------------------
+
+39/53 Testing: path_session_zero
+39/53 Test: path_session_zero
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_session.exe" "zero"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_session_zero" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+session nonce test passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"path_session_zero" end time: Sep 24 16:47 中国标准时间
+"path_session_zero" time elapsed: 00:00:00
+----------------------------------------------------------
+
+40/53 Testing: turntable_link
+40/53 Test: turntable_link
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_turntable_link.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"turntable_link" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+Turntable transport tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"turntable_link" end time: Sep 24 16:47 中国标准时间
+"turntable_link" time elapsed: 00:00:00
+----------------------------------------------------------
+
+41/53 Testing: rdk_link
+41/53 Test: rdk_link
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_rdk_link.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"rdk_link" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY link tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"rdk_link" end time: Sep 24 16:47 中国标准时间
+"rdk_link" time elapsed: 00:00:00
+----------------------------------------------------------
+
+42/53 Testing: path_mission
+42/53 Test: path_mission
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_mission.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_mission" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+ZHY mission and chassis-only tests passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"path_mission" end time: Sep 24 16:47 中国标准时间
+"path_mission" time elapsed: 00:00:00
+----------------------------------------------------------
+
+43/53 Testing: relative_yaw
+43/53 Test: relative_yaw
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_relative_yaw.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"relative_yaw" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+relative yaw tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"relative_yaw" end time: Sep 24 16:47 中国标准时间
+"relative_yaw" time elapsed: 00:00:00
+----------------------------------------------------------
+
+44/53 Testing: host_uart
+44/53 Test: host_uart
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_host_uart.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"host_uart" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+Host UART transport tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"host_uart" end time: Sep 24 16:47 中国标准时间
+"host_uart" time elapsed: 00:00:00
+----------------------------------------------------------
+
+45/53 Testing: host_command
+45/53 Test: host_command
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_host_command.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"host_command" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+Host command tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"host_command" end time: Sep 24 16:47 中国标准时间
+"host_command" time elapsed: 00:00:00
+----------------------------------------------------------
+
+46/53 Testing: dwt_init
+46/53 Test: dwt_init
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_dwt.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"dwt_init" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+DWT initialization tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"dwt_init" end time: Sep 24 16:47 中国标准时间
+"dwt_init" time elapsed: 00:00:00
+----------------------------------------------------------
+
+47/53 Testing: test_progress
+47/53 Test: test_progress
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_progress.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"test_progress" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+progress planner passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_progress" end time: Sep 24 16:47 中国标准时间
+"test_progress" time elapsed: 00:00:00
+----------------------------------------------------------
+
+48/53 Testing: test_health
+48/53 Test: test_health
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_health.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"test_health" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_health" end time: Sep 24 16:47 中国标准时间
+"test_health" time elapsed: 00:00:00
+----------------------------------------------------------
+
+49/53 Testing: motion
+49/53 Test: motion
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_motion.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"motion" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+motion tests passed
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"motion" end time: Sep 24 16:47 中国标准时间
+"motion" time elapsed: 00:00:00
+----------------------------------------------------------
+
+50/53 Testing: control_math
+50/53 Test: control_math
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_control_math.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"control_math" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"control_math" end time: Sep 24 16:47 中国标准时间
+"control_math" time elapsed: 00:00:00
+----------------------------------------------------------
+
+51/53 Testing: multi_frame
+51/53 Test: multi_frame
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_multi.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"multi_frame" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"multi_frame" end time: Sep 24 16:47 中国标准时间
+"multi_frame" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/53 Testing: forward_comp
+52/53 Test: forward_comp
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_forward_comp.exe"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"forward_comp" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"forward_comp" end time: Sep 24 16:47 中国标准时间
+"forward_comp" time elapsed: 00:00:00
+----------------------------------------------------------
+
+53/53 Testing: path_no_vision
+53/53 Test: path_no_vision
+Command: "F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path/test_path_no_vision.exe" "no_vision"
+Directory: F:/licang2026/2026ROBOCUP-ZHY/2026ROBOCUP-ZHY/build/host-path
+"path_no_vision" start time: Sep 24 16:47 中国标准时间
+Output:
+----------------------------------------------------------
+no-vision route, 8 heading points, restart, STOP and fault passed
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"path_no_vision" end time: Sep 24 16:47 中国标准时间
+"path_no_vision" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Sep 24 16:47 中国标准时间
