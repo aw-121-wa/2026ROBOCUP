@@ -8,8 +8,11 @@ typedef struct
     float deceleration, brake_distance, brake_speed;
     bool braking;
     float brake_output;
+    float start_speed, end_speed;
 } Planner;
 bool Planner_Start(Planner *p, float distance, float vmax, float acceleration, float deceleration);
+bool Planner_StartBoundary(Planner *p, float distance, float vmax, float acceleration,
+                           float deceleration, float start_speed, float end_speed);
 float Planner_Update(Planner *p, float dt); /* Legacy time-profile test interface. */
 /* Speeds are signed projections in the same units/frame as progress_mm.
  * committed_speed includes an immutable batch not yet applied.

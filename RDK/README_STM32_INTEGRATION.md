@@ -1,4 +1,4 @@
-> 2026-09-20: Stair task now ends PATH after eight points; see [stair sequence and deployment](README_STAIR_TASK.md). This supersedes the old chassis-only stair/warehouse continuation below.
+> 2026-09-24：阶梯八点结束后继续 G3 → 后退 100 mm → 固定方向左移 1500 mm 并逆时针旋转 180° → 停稳 → 后退 200 mm → 向右灰度找线（50 秒）→ 三列仓库任务 → PATH_DONE。每列前后退 200 mm，按 RFID 块 1 编号选择储球槽，再执行 G109/G110/G111。详见 [仓库任务及增量部署](README_WAREHOUSE_TASK.md) 与 [阶梯后续流程](../docs/STAIR_EXIT.md)。此前“阶梯完成/找线完成即结束”的说明已被替代。
 
 # RDK 圆盘任务：STM32 融合基线
 

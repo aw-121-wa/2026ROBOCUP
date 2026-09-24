@@ -2,6 +2,7 @@
 #define PATH_MISSION_H
 #include <stdbool.h>
 #include <stdint.h>
+#include "ball_inventory.h"
 typedef enum
 {
     PATH_IDLE,
@@ -32,18 +33,24 @@ typedef enum
     PC_HELLO,
     PC_PILLAR_STOPPED,
     PC_PILLAR_END,
-    PC_STAIR
+    PC_STAIR,
+    PC_ARC,
+    PC_ALIGN_ZERO,
+    PC_MOVE_ROTATE
 } PathCommandKind;
 typedef struct
 {
     PathCommandKind kind;
-    float x, y, speed;
+    float x, y, angle, speed;
+    float start_speed, end_speed;
+    bool continuous;
     uint32_t argument, timeout_ms;
 } PathCommand;
 typedef struct
 {
-    bool armed, fault, settled;
+    bool armed, fault, settled, motion_done;
     float yaw_deg;
+    float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
     uint8_t gray; /* active-low converted bits MID2 IN2 IN1 MID1: target 0b0110 */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
@@ -60,6 +67,7 @@ typedef struct
     uint16_t ids, candidate;
     uint32_t id_list[64]; /* Full UID, wire byte order represented as big-endian integer. */
     uint8_t id_count;
+    BallInventory inventory;
     bool id_overflow;
     float orbit_yaw;
     bool waiting, stable, expired;

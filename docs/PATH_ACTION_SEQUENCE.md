@@ -1,4 +1,4 @@
-> 2026-09-20: Stair task now ends PATH after eight points; see [stair sequence and deployment](../RDK/README_STAIR_TASK.md). This supersedes the old chassis-only stair/warehouse continuation below.
+> 2026-09-24：阶梯结束后执行 G3、后退 100、固定左移 1300 同时逆时针转 180°、向右灰度找线，再按 RFID 块 1 编号完成三列仓库放球。以 [阶梯后续流程](STAIR_EXIT.md) 和 [仓库任务](../RDK/README_WAREHOUSE_TASK.md) 为准。旧版阶梯结束即 PATH_DONE 以及旧仓库往返流程不再适用。
 
 # 上电动作与 PATH 绕桩视觉联动（2026-09-19）
 

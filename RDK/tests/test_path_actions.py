@@ -10,6 +10,33 @@ from vision_servo_direct_test import run_disc_task
 from test_disc_task_loop import FakeCamera, FakeDetector, FakeTrigger, FakeBoard, snapshot, args, config
 
 class PathActions(unittest.TestCase):
+    def test_warehouse_groups_complete_serially(self):
+        tx, actions = [], []
+        core = BridgeCore(tx.append, lambda **kw: 1, run_group=actions.append)
+        for group in (109, 110, 111):
+            core.handle(f'GROUP {group}')
+            self.assertTrue(core.wait_for_idle(1))
+            self.assertEqual(tx[-2:], [f'GROUP_ACK {group}', f'GROUP_DONE {group}'])
+        self.assertEqual(actions, [109, 110, 111])
+
+    def test_group3_after_stair_waits_for_servo_completion(self):
+        tx, entered, release = [], threading.Event(), threading.Event()
+        def group(number):
+            self.assertEqual(number, 3)
+            entered.set()
+            release.wait(1)
+        core = BridgeCore(tx.append, lambda **kw: 1, run_group=group)
+        try:
+            core.handle('GROUP 3')
+            self.assertTrue(entered.wait(.5))
+            self.assertEqual(tx, ['GROUP_ACK 3'])
+            core.handle('GROUP 3')
+            self.assertEqual(tx, ['GROUP_ACK 3'])
+        finally:
+            release.set()
+            core.wait_for_idle(1)
+        self.assertEqual(tx, ['GROUP_ACK 3', 'GROUP_DONE 3'])
+
     def test_shared_vision_loop_obeys_stop_permission_before_g104(self):
         for permission in (False, True):
             board=FakeBoard(); camera=FakeCamera([snapshot(i) for i in range(4)])

@@ -5,6 +5,18 @@ float Angle_Wrap(float a)
 {
     return remainderf(a, 2 * PI);
 }
+void Motion_FixedDirection(float start_x, float start_y, float yaw_delta, float *x, float *y)
+{
+    *x = start_x * cosf(yaw_delta) + start_y * sinf(yaw_delta);
+    *y = -start_x * sinf(yaw_delta) + start_y * cosf(yaw_delta);
+}
+void Motion_ArcDirection(float start, float turn, float progress, float length, float *x, float *y)
+{
+    float u = length > 0 ? fmaxf(0, fminf(1, progress / length)) : 0;
+    float angle = start + turn * u;
+    *x = cosf(angle);
+    *y = sinf(angle);
+}
 void Mecanum_Inverse(Geometry g, float x, float y, float w, float r[4])
 {
     float k = 60 / (2 * PI * g.radius), a = g.arm * w;

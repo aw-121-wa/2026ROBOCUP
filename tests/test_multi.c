@@ -29,5 +29,14 @@ int main(void)
     assert(legacy[2] == 1 && legacy[3] == 0x75 && legacy[4] == 0x30);
     const int16_t invalid[4] = {3001, 0, 0, 0};
     assert(ZDT_BuildMultiSpeed(p, sizeof(p), ids, invalid, 0) == 0);
+    const int16_t fine[4] = {1, -3, 0, 1234};
+    assert(ZDT_BuildMultiSpeedDeci(p, sizeof(p), ids, fine, 0) == 37);
+    assert(p[6]==0 && p[7]==0 && p[8]==1); /* +0.1 RPM */
+    assert(p[14]==1 && p[15]==0 && p[16]==3); /* -0.3 RPM */
+    assert(p[31]==4 && p[32]==0xD2); /* 123.4 RPM */
+    ZDT_BuildLegacySpeedDeci(legacy, 2, -1, 0);
+    assert(legacy[2]==1 && legacy[3]==0 && legacy[4]==1 && legacy[6]==1);
+    const int16_t fine_bad[4] = {30001,0,0,0};
+    assert(ZDT_BuildMultiSpeedDeci(p,sizeof(p),ids,fine_bad,0)==0);
     return 0;
 }

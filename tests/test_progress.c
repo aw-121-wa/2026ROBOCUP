@@ -46,6 +46,14 @@ int main(void)
     assert(Planner_Start(&p, 5000, 1000, 1000, 1000));
     (void)Planner_UpdateProgress(&p, 0.005f, 4900, -700, -700, 0.01f);
     assert(!p.braking);
+    /* A blended segment reaches its endpoint at a nonzero requested speed. */
+    assert(Planner_StartBoundary(&p, 1800, 325, 550, 550, 0, 229));
+    float boundary = Planner_UpdateProgress(&p, 0.005f, 1800, 229, 229, 0.01f);
+    assert(!p.active && fabsf(boundary - 229) < 0.001f);
+    /* The following segment enters at that same speed instead of restarting near zero. */
+    assert(Planner_StartBoundary(&p, 2150, 496, 550, 550, 229, 0));
+    float entered = Planner_UpdateProgress(&p, 0.005f, 0, 229, 229, 0.01f);
+    assert(entered >= 229);
     puts("progress planner passed");
     assert(Planner_Start(&p, 5000, 1000, 1000, 1000));
     progress = 0;

@@ -3,6 +3,7 @@
 #include "host_uart.h"
 #include "path_ports.h"
 #include "path_yaw.h"
+#include "stair_heading.h"
 #include "forward_comp.h"
 #include "motion.h"
 #include "heading.h"
@@ -26,9 +27,9 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 36.4583f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
                                 .rpm_limit = 200.0f,
-                                .kp = 1.8f,
+                                .kp = 4.0f,
                                 .ki = 0.00f,
-                                .gyro_damping = 0.0f,
+                                .gyro_damping = 0.15f,
                                 .wz_limit = 1.9f,
                                 .left_gain = 1.0f,
                                 .right_gain = 1.0f,
@@ -43,16 +44,22 @@ static ChassisState state;
 volatile ChassisDebugCommand chassis_debug;
 static Planner planner;
 static RelativeYaw relative_yaw;
+static HeadingEstimator heading_estimator;
 static PathYaw path_yaw;
 static float dx, dy, heading, integral, bias_sum, bias_elapsed;
 static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
-static bool path_rotation, path_body, zero_output;
-static float path_target, body_x, body_y, body_w;
+static bool path_rotation, path_body, path_arc, zero_output;
+static bool path_blend;
+static float blend_x, blend_y, blend_yaw, blend_turn;
+static float path_target, body_x, body_y, body_w, arc_start, arc_turn;
+static uint8_t rotate_stable_count;
+static float rotate_tolerance_deg = 0.05f;
+static bool rotate_measured_zero;
 static uint32_t moving_tick;
 static uint32_t last_cycle, last_gyro, bias_count;
 #if CHASSIS_TELEMETRY_ENABLE
-static uint32_t telemetry_cycle;
+static uint32_t telemetry_cycle, telemetry_sequence;
 #endif
 static uint8_t tx[ZDT_MULTI_SPEED_SIZE] __attribute__((aligned(32)));
 static volatile bool tx_done, tx_busy, tx_error;
@@ -62,9 +69,9 @@ static volatile uint32_t tx_complete_cycle;
 static uint32_t odom_cycle;
 #if CHASSIS_TELEMETRY_ENABLE
 #if CHASSIS_TELEMETRY_FULL
-static uint8_t telemetry[156]; /* 27 + 8 task/link + 1 RFID count + 2 IR/settled + JustFloat tail. */
+static uint8_t telemetry[200]; /* 38 existing + 11 diagnostic floats + tail. */
 #else
-static uint8_t telemetry[136]; /* 22 + 8 task/link + 1 RFID count + 2 IR/settled + JustFloat tail. */
+static uint8_t telemetry[180]; /* 33 existing + 11 diagnostic floats + tail. */
 #endif
 #endif
 static HostParser host_parser;
@@ -81,6 +88,10 @@ static float clamp(float x, float m)
 }
 static void integrate_odom(uint32_t cycle)
 {
+    if (path_blend)
+    {
+        Motion_FixedDirection(blend_x, blend_y, path_yaw.continuous - blend_yaw, &dx, &dy);
+    }
     float dt = DWT_DeltaSec(cycle, odom_cycle);
     odom_cycle = cycle;
     if (dt > 0.05f || !isfinite(dt))
@@ -164,14 +175,14 @@ static void service_tx(void)
     {
         if (!pending_valid)
             return;
-        int16_t physical_rpm[4];
+        int16_t physical_deci_rpm[4];
         for (int i = 0; i < 4; ++i)
-            physical_rpm[i] = (int16_t)((int)state.rpm_pending[i] * chassis_config.motor_sign[i]);
+            physical_deci_rpm[i] = (int16_t)lroundf(state.rpm_pending[i] * 10.0f * chassis_config.motor_sign[i]);
         tx_mode = chassis_config.command_mode;
         if (tx_mode == ZDT_MULTI_COMMAND)
         {
             tx_length =
-                ZDT_BuildMultiSpeed(tx, sizeof(tx), chassis_config.motor_id, physical_rpm, 0);
+                ZDT_BuildMultiSpeedDeci(tx, sizeof(tx), chassis_config.motor_id, physical_deci_rpm, 0);
             if (tx_length == 0)
             {
                 state.fault |= 4;
@@ -182,7 +193,7 @@ static void service_tx(void)
         else if (tx_mode == ZDT_LEGACY_SYNC)
         {
             for (int i = 0; i < 4; ++i)
-                ZDT_BuildLegacySpeed(&tx[i * 8], chassis_config.motor_id[i], physical_rpm[i], 0);
+                ZDT_BuildLegacySpeedDeci(&tx[i * 8], chassis_config.motor_id[i], physical_deci_rpm[i], 0);
             ZDT_BuildSync(&tx[32]);
         }
         else
@@ -245,6 +256,7 @@ bool Chassis_Init(void)
     {
         return false;
     }
+    HeadingEstimator_Reset(&heading_estimator);
 
     /* 4. 初始化底盘时间戳 */
     uint32_t now = DWT_GetCycle();
@@ -267,7 +279,7 @@ bool Chassis_Init(void)
 bool Chassis_Arm(void)
 {
     if (!chassis_config.calibrated || !config_valid() || !state.bias_ready || !relative_yaw.ready ||
-        state.fault || JY60_GetState()->trust != JY60_TRUST_GOOD)
+        !heading_estimator.ready || state.fault || JY60_GetState()->trust != JY60_TRUST_GOOD)
         return false;
     state.armed = true;
     heading = state.yaw_rad;
@@ -276,9 +288,11 @@ bool Chassis_Arm(void)
 }
 void Chassis_Stop(void)
 {
+    path_blend = false;
     PathPorts_Cancel();
     state.armed = false;
-    path_rotation = path_body = false;
+    path_rotation = path_body = path_arc = false;
+    rotate_measured_zero = false;
     zero_output = true;
     planner.active = false;
     jog_remaining = 0;
@@ -289,12 +303,18 @@ void Chassis_Stop(void)
 }
 bool Chassis_Move(float x, float y, float v, float a, float d)
 {
+    return Chassis_MoveBoundary(x, y, v, a, d, 0, 0);
+}
+bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
+                          float start_speed, float end_speed)
+{
     if (!state.armed || Chassis_MotionBusy() || !isfinite(x) || !isfinite(y))
         return false;
     float length = hypotf(x, y);
-    if (!Planner_Start(&planner, length, v, a, d))
+    if (!Planner_StartBoundary(&planner, length, v, a, d, start_speed, end_speed))
         return false;
     jog_remaining = 0;
+    path_arc = false;
     zero_output = false;
     segment_progress = 0;
     dx = x / length;
@@ -302,10 +322,48 @@ bool Chassis_Move(float x, float y, float v, float a, float d)
     heading = state.yaw_rad;
     return true;
 }
+bool Chassis_MoveRotate(float x, float y, float degrees, float v, float a, float d)
+{
+    if (!isfinite(degrees) || fabsf(degrees) > 360 || fabsf(degrees) < 0.01f)
+        return false;
+    if (!Chassis_Move(x, y, v, a, d)) return false;
+    blend_x = dx;
+    blend_y = dy;
+    blend_yaw = path_yaw.continuous;
+    blend_turn = degrees * RAD;
+    rotate_stable_count = 0;
+    integral = 0;
+    path_blend = true;
+    return true;
+}
+bool Chassis_MoveArc(float radius, float start_degrees, float turn_degrees,
+                     float v, float a, float d, float start_speed, float end_speed)
+{
+    if (!state.armed || Chassis_MotionBusy() || !isfinite(radius) || !isfinite(start_degrees) ||
+        !isfinite(turn_degrees) || radius <= 0 || fabsf(turn_degrees) < 0.01f ||
+        fabsf(turn_degrees) > 180.0f)
+        return false;
+    float turn = turn_degrees * RAD;
+    float length = radius * fabsf(turn);
+    if (!Planner_StartBoundary(&planner, length, v, a, d, start_speed, end_speed))
+        return false;
+    jog_remaining = 0;
+    zero_output = false;
+    segment_progress = 0;
+    path_arc = true;
+    arc_start = start_degrees * RAD;
+    arc_turn = turn;
+    Motion_ArcDirection(arc_start, arc_turn, 0, length, &dx, &dy);
+    heading = state.yaw_rad;
+    return true;
+}
 void Chassis_Hold(void)
 {
+    path_blend = false;
     planner.active = false;
-    path_rotation = path_body = false;
+    path_rotation = path_body = path_arc = false;
+    rotate_measured_zero = false;
+    rotate_stable_count = 0;
     jog_remaining = 0;
     zero_output = true;
     heading = state.yaw_rad;
@@ -313,7 +371,7 @@ void Chassis_Hold(void)
 }
 bool Chassis_MotionBusy(void)
 {
-    return planner.active || path_rotation || path_body || jog_remaining > 0;
+    return planner.active || path_blend || path_rotation || path_body || jog_remaining > 0;
 }
 bool Chassis_IsSettled(void)
 {
@@ -329,15 +387,27 @@ bool Chassis_Rotate(float degrees)
 {
     if (!state.armed || Chassis_MotionBusy() || !isfinite(degrees) || fabsf(degrees) > 360)
         return false;
+    rotate_tolerance_deg = 0.05f;
+    rotate_measured_zero = false;
     path_target = path_yaw.continuous + degrees * RAD;
     path_rotation = true;
+    rotate_stable_count = 0;
     zero_output = false;
     integral = 0;
     return true;
 }
+bool Chassis_AlignZero(void)
+{
+    if (!Chassis_IsSettled() ||
+        !Chassis_Rotate(StairHeading_Error(Chassis_MeasuredYaw())))
+        return false;
+    rotate_tolerance_deg = STAIR_HEADING_STOP_TOLERANCE_DEG;
+    rotate_measured_zero = true;
+    return true;
+}
 bool Chassis_Body(float x, float y, float w)
 {
-    if (!state.armed || planner.active || path_rotation || !isfinite(x) || !isfinite(y) ||
+    if (!state.armed || planner.active || path_blend || path_rotation || !isfinite(x) || !isfinite(y) ||
         !isfinite(w))
         return false;
     if (!path_body)
@@ -348,6 +418,11 @@ bool Chassis_Body(float x, float y, float w)
     path_body = true;
     zero_output = false;
     return true;
+}
+float Chassis_MeasuredYaw(void)
+{
+    const JY60_State_t *imu = JY60_GetState();
+    return imu->has_angle && imu->trust != JY60_TRUST_LOST ? imu->yaw_deg : NAN;
 }
 float Chassis_ContinuousYaw(void)
 {
@@ -366,6 +441,15 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
         return;
     telemetry_cycle = now;
     const JY60_State_t *imu = JY60_GetState();
+    /* These snapshots never write the sensor or controller state. */
+    unsigned mode = (!state.armed || zero_output) ? 0U :
+                    path_rotation ? (rotate_measured_zero ? 3U : 2U) :
+                    path_body ? 4U : jog_remaining > 0 ? 5U : planner.active ? 1U : 0U;
+    float feedback = mode == 3 ? imu->yaw_deg :
+                     mode == 2 ? path_yaw.continuous / RAD : state.yaw_rad / RAD;
+    float target = mode == 3 ? 0 : mode == 2 ? path_target / RAD : heading / RAD;
+    float error = mode == 2 ? target - feedback :
+                  Angle_Wrap((target - feedback) * RAD) / RAD;
     float channels[] = {vx,
                         vy,
                         wz,
@@ -405,7 +489,18 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
                         (float)path_diagnostics.phase,
                         (float)path_diagnostics.rfid_count,
                         (float)path_diagnostics.ir_raw,
-                        (float)path_diagnostics.settled};
+                        (float)path_diagnostics.settled,
+                        (float)(HAL_GetTick() & 0x00ffffffU),
+                        (float)(telemetry_sequence++ & 0x00ffffffU),
+                        imu->yaw_deg,
+                        (float)(imu->angle_frame_count & 0x00ffffffU),
+                        (float)mode,
+                        target,
+                        feedback,
+                        error,
+                        (float)path_diagnostics.point,
+                        (float)(path_diagnostics.phase_elapsed_ms & 0x00ffffffU),
+                        (float)imu->angle_age_ms};
     _Static_assert(sizeof(channels) + 4 == sizeof(telemetry), "VOFA frame size mismatch");
     const size_t channel_bytes = sizeof(channels);
     memcpy(telemetry, channels, channel_bytes);
@@ -552,25 +647,34 @@ void Chassis_Update(void)
             state.bias_ready = true;
         }
     }
-    /* Experimental heading: accumulate accepted angle-frame deltas, no gz fusion.
-     * LOST clears the reference; only GOOD may establish a fresh zero. */
-    bool yaw_was_ready = relative_yaw.ready;
+    /* JY60 angle output is low-rate relative to the 200 Hz control loop.
+     * Keep its accepted angle as the long-term reference, but propagate yaw
+     * between angle frames with bias-corrected gz so the controller does not
+     * see a 50 ms staircase. LOST clears both references. */
+    bool yaw_was_ready = heading_estimator.ready;
     RelativeYaw_Update(&relative_yaw, imu->yaw_deg, imu->angle_frame_count,
                        imu->trust != JY60_TRUST_LOST, imu->trust == JY60_TRUST_GOOD);
-    state.yaw_rad = relative_yaw.yaw_rad;
-    PathYaw_Update(&path_yaw, state.yaw_rad, relative_yaw.ready);
-    if (!relative_yaw.ready)
+    float gyro_rad_s = (imu->gz_dps - state.gyro_bias_dps) * RAD;
+    bool yaw_ready =
+        relative_yaw.ready &&
+        HeadingEstimator_Update(&heading_estimator, relative_yaw.yaw_rad, imu->angle_frame_count,
+                                gyro_rad_s, dt, imu->trust != JY60_TRUST_LOST);
+    state.yaw_rad = yaw_ready ? heading_estimator.yaw_rad : 0;
+    PathYaw_Update(&path_yaw, state.yaw_rad, yaw_ready);
+    if (!yaw_ready)
     {
         if (state.armed)
             state.fault |= 2;
         Chassis_Stop();
     }
-    if (!relative_yaw.ready || !yaw_was_ready)
+    if (!yaw_ready || !yaw_was_ready)
     {
         heading = state.yaw_rad;
         integral = 0;
     }
     last_gyro = imu->gyro_frame_count;
+    if (planner.active && path_arc)
+        Motion_ArcDirection(arc_start, arc_turn, segment_progress, planner.distance, &dx, &dy);
     if (!tx_busy)
         integrate_odom(DWT_GetCycle());
     uint32_t sequence = chassis_debug.sequence;
@@ -606,6 +710,8 @@ void Chassis_Update(void)
     }
     service_host_commands(now);
     PathPorts_Tick();
+    if (path_blend)
+        Motion_FixedDirection(blend_x, blend_y, path_yaw.continuous - blend_yaw, &dx, &dy);
     state.applied_path_speed =
         ChassisOdom_PathSpeed(geometry(), state.rpm_applied, chassis_config.left_odom_scale,
                               chassis_config.right_odom_scale, dx, dy);
@@ -628,11 +734,26 @@ void Chassis_Update(void)
     float vx = speed * dx, vy = speed * dy, wz = 0;
     float lateral_direction = dy;
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
-    if (state.armed)
+    if (state.armed && !path_blend)
     {
-        wz = Heading_Update(state.yaw_error, (imu->gz_dps - state.gyro_bias_dps) * RAD, dt,
+        wz = Heading_Update(state.yaw_error, gyro_rad_s, dt,
                             chassis_config.kp, chassis_config.ki, chassis_config.gyro_damping,
                             chassis_config.wz_limit, &integral);
+    }
+    if (state.armed && path_blend)
+    {
+        float fraction = planner.active ? fmaxf(0, fminf(1, segment_progress / planner.distance)) : 1;
+        float error = blend_yaw + blend_turn * fraction - path_yaw.continuous;
+        float feedforward = planner.active ? blend_turn * speed / planner.distance : 0;
+        state.yaw_error = error;
+        wz = clamp(feedforward + Heading_Update(error, gyro_rad_s - feedforward, dt,
+                    chassis_config.kp, chassis_config.ki, chassis_config.gyro_damping,
+                    chassis_config.wz_limit, &integral), chassis_config.wz_limit);
+        if (!planner.active && fabsf(error) < 0.5f * RAD && fabsf(gyro_rad_s) < 2 * RAD)
+            rotate_stable_count++;
+        else
+            rotate_stable_count = 0;
+        if (rotate_stable_count >= 10) Chassis_Hold();
     }
     if (state.armed && jog_remaining > 0)
     {
@@ -646,12 +767,30 @@ void Chassis_Update(void)
     }
     if (state.armed && path_rotation)
     {
-        float error = path_target - path_yaw.continuous; /* continuous, also handles +180 */
+        /* Stair zeroing follows each accepted sensor angle, not the integrated estimate. */
+        float error = rotate_measured_zero
+                          ? StairHeading_Error(imu->yaw_deg) * RAD
+                          : path_target - path_yaw.continuous; /* continuous for normal turns */
         vx = vy = 0;
         float limit = 60.0f * (2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f) /
                       (chassis_config.half_track_mm + chassis_config.half_wheelbase_mm);
-        wz = clamp(error * 1.8f, fminf(limit, chassis_config.wz_limit));
-        if (fabsf(error) < RAD && fabsf(imu->gz_dps - state.gyro_bias_dps) < 3)
+        float abs_error = fabsf(error);
+        float rotate_limit;
+        if (abs_error > 15.0f * RAD)
+            rotate_limit = fminf(limit, chassis_config.wz_limit);
+        else if (abs_error > 3.0f * RAD)
+            rotate_limit = fminf(limit, chassis_config.wz_limit * 0.6f);
+        else
+            rotate_limit = fminf(limit, 0.25f * chassis_config.wz_limit);
+        wz = Heading_Update(error, gyro_rad_s, dt,
+                            rotate_measured_zero ? STAIR_HEADING_KP : chassis_config.kp, chassis_config.ki,
+                            chassis_config.gyro_damping, rotate_limit,
+                            &integral);
+        if (abs_error < rotate_tolerance_deg * RAD && fabsf(imu->gz_dps - state.gyro_bias_dps) < 2)
+            rotate_stable_count++;
+        else
+            rotate_stable_count = 0;
+        if (rotate_stable_count >= 10)
             Chassis_Hold();
     }
     if (state.armed && path_body)
@@ -671,7 +810,7 @@ void Chassis_Update(void)
     ForwardCompResult forward_comp =
         ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
                           chassis_config.right_gain, chassis_config.forward_lateral_comp);
-    vy = forward_comp.vy_final;
+    if (!path_blend) vy = forward_comp.vy_final;
     if (!config_valid())
     {
         Chassis_Stop();
@@ -696,7 +835,7 @@ void Chassis_Update(void)
     for (int i = 0; i < 4; i++)
     {
         state.rpm_requested[i] = out[i];
-        state.rpm_pending[i] = roundf(state.rpm_requested[i]);
+        state.rpm_pending[i] = roundf(state.rpm_requested[i] * 10.0f) * 0.1f;
     }
     pending_valid = true;
     service_tx();

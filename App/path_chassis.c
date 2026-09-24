@@ -1,9 +1,13 @@
+#include "path_config.h"
 #include "path_chassis.h"
+#include "stair_heading.h"
+#include "path_warehouse.h"
 /* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
                  uint32_t timeout)
 {
-    PathCommand c = {k, x, y, v, arg, timeout};
+    PathCommand c = {.kind = k, .x = x, .y = y, .speed = v,
+                     .argument = arg, .timeout_ms = timeout};
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -74,7 +78,7 @@ static bool align(PathMission *m, uint32_t now, const PathInput *in, uint32_t ti
 }
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
-    if (in->reply == PATH_FAILED ||
+    if ((PATH_VISION_ENABLE && in->reply == PATH_FAILED) ||
         (m->phase >= 4 && (uint32_t)(now - m->entered) >=
                           (m->phase == 7 ? 5000U : 60000U)))
     {
@@ -111,6 +115,14 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
     case 1:
         if (in->settled)
         {
+            if (!PATH_VISION_ENABLE)
+            {
+                m->orbit_yaw = in->yaw_deg;
+                m->orbit_ms = 0;
+                m->previous = now;
+                if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000)) m->phase = 2;
+                break;
+            }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
             {
                 m->phase = 4; /* RDK runs G103 + camera warmup, then READY. */
@@ -123,20 +135,27 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         m->previous = now;
         if (m->orbit_ms >= 15000)
             fail(m, PATH_TIMEOUT);
-        else if (in->ball_index > m->grabs)
+        else if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
         {
             hold(m);
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 352)
+        else if (m->orbit_yaw - in->yaw_deg >= 356)
         {
             hold(m);
+            m->entered = now;
             m->phase = 3;
         }
         break;
     case 3:
-        if (in->ball_index > m->grabs)
+        if (!PATH_VISION_ENABLE)
+        {
+            /* Let the post-orbit angle settle before capturing the retreat heading. */
+            if (in->settled && (uint32_t)(now - m->entered) >= 300U) next(m, now);
+            break;
+        }
+        if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
         {
             hold(m);
             m->phase = 5;
@@ -157,7 +176,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->orbit_yaw = in->yaw_deg;
             m->orbit_ms = 0;
             m->previous = now;
-            if (in->ball_index > m->grabs)
+            if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
             {
                 hold(m);
                 m->phase = 5;
@@ -178,13 +197,13 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->grabs = in->resume_index;
             m->previous = now;
-            if (in->ball_index > m->grabs)
+            if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
             {
                 hold(m);
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 352)
+            else if (m->orbit_yaw - in->yaw_deg >= 356)
                 m->phase = 3;
             else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
@@ -199,6 +218,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 }
 static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id)
 {
+    if (!PATH_VISION_ENABLE) return true;
     if (!m->waiting)
     {
         m->entered = now;
@@ -221,15 +241,28 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     case 0:
         if (align(m, now, in, 50000, -25)) /* Body -Y is right. */
         {
-            m->phase = 1;
+            m->phase = 5;
             m->point = m->grabs = 0; /* Stair count excludes disc and pillar balls. */
             m->waiting = false;
         }
         break;
+    case 5: /* Retreat once after line alignment, before G105. */
+        if (move(m, in, -55, 0, 40)) m->phase = 1;
+        break;
     case 1:
-        if (group(m, now, in, 105)) m->phase = 2;
+        if (group(m, now, in, 105))
+        {
+            m->phase = 4;
+            m->entered = now;
+            m->stable = false;
+        }
         break;
     case 2:
+        if (!PATH_VISION_ENABLE)
+        {
+            if (in->settled) m->phase = 3;
+            break;
+        }
         if (m->grabs >= 2)
             m->phase = 3; /* Still visit every remaining point. */
         else if (!m->waiting)
@@ -253,55 +286,67 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         if (m->point == 7)
         {
             hold(m);
-            if (m->result == PATH_RUNNING) m->result = PATH_DONE;
+            if (m->result == PATH_RUNNING) next(m, now);
         }
         else if (move(m, in, retreat[m->point], 0, 40))
         {
             ++m->point;
-            m->phase = 2;
+            m->phase = 4;
+            m->entered = now;
+            m->stable = false;
         }
+        break;
+    case 4: /* Every point: settle and verify heading before RDK recognition. */
+        if (!isfinite(in->imu_yaw_deg))
+        {
+            fail(m, PATH_ERROR);
+            break;
+        }
+        if ((uint32_t)(now - m->entered) >= STAIR_HEADING_TIMEOUT_MS)
+        {
+            /* Best effort: stop correcting, then recognize without restarting alignment. */
+            hold(m);
+            m->waiting = false;
+            m->stable = false;
+            m->phase = 2;
+            break;
+        }
+        if (!in->settled)
+        {
+            m->stable = false;
+            break;
+        }
+        m->waiting = false;
+        if (fabsf(StairHeading_Error(in->imu_yaw_deg)) > STAIR_HEADING_TOLERANCE_DEG)
+        {
+            m->stable = false;
+            m->waiting = emit(m, PC_ALIGN_ZERO, 0, 0, 0, 0,
+                              /* Mission owns the calibration deadline; watchdog must not fault first. */
+                              STAIR_HEADING_TIMEOUT_MS + 1000U);
+        }
+        else if (!m->stable)
+        {
+            m->stable = true;
+            m->stable_since = now;
+        }
+        else if ((uint32_t)(now - m->stable_since) >= STAIR_HEADING_STABLE_MS)
+            m->phase = 2;
         break;
     default:
         fail(m, PATH_ERROR);
         break;
     }
 }
-static void warehouse(PathMission *m, uint32_t now, const PathInput *in)
-{
-    static const float x[] = {0, 200, 200, 200, -200, -200};
-    static const float y[] = {-50, 0, 0, 0, 0, 0};
-    if (m->phase == 0)
-    {
-        if (rotate(m, in, 180))
-        {
-            m->phase = 1;
-            m->entered = now;
-        }
-    }
-    else if (m->phase == 1)
-    {
-        if (align(m, now, in, 5000, 25))
-        {
-            m->phase = 2;
-            m->point = 0;
-        }
-    }
-    else if (m->phase == 2 && m->point < 6)
-    {
-        if (move(m, in, x[m->point], y[m->point], 130) && ++m->point == 6)
-        {
-            hold(m);
-            m->result = PATH_DONE;
-        }
-    }
-    else
-        fail(m, PATH_ERROR);
-}
 void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
     switch (m->step)
     {
     case 4:
+        if (!PATH_VISION_ENABLE)
+        {
+            next(m, now);
+            break;
+        }
         if ((uint32_t)(now - m->entered) >= 30000U || in->reply == PATH_FAILED)
             fail(m, PATH_ERROR);
         else if (!m->waiting)
@@ -315,13 +360,12 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         pillar(m, now, in);
         break;
     case 7:
-    case 10:
         next(m, now); /* No arm reset in the chassis-only extension. */
         break;
     case 8:
         if (m->phase == 0)
         {
-            if (move(m, in, -330, 0, 130)) m->phase = 1;
+            if (move(m, in, -350, 0, 130)) m->phase = 1;
         }
         else if (m->phase == 1)
         {
@@ -336,11 +380,52 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     case 9:
         stair(m, now, in);
         break;
+    case 10:
+        if (m->phase == 0)
+        {
+            if (group(m, now, in, 3))
+            {
+                m->phase = 1;
+                m->entered = now;
+            }
+        }
+        else if ((uint32_t)(now - m->entered) >= 30000U)
+            fail(m, PATH_TIMEOUT);
+        else if (move(m, in, -100, 0, 40)) next(m, now);
+        break;
     case 11:
-        if (move(m, in, 0, -1650, 130)) next(m, now);
+        if ((uint32_t)(now - m->entered) >= 30000U)
+            fail(m, PATH_TIMEOUT);
+        else if (m->phase == 1)
+        {
+            if (move(m, in, -200, 0, 40)) next(m, now);
+        }
+        else if (!m->waiting)
+        {
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = 0, .y = 1500,
+                             .angle = 180, .speed = 60, .timeout_ms = 30000};
+            if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
+        }
+        else if (in->settled)
+        {
+            m->phase = 1;
+            m->waiting = false;
+            m->entered = now;
+        }
         break;
     case 12:
-        warehouse(m, now, in);
+        if (align(m, now, in, 50000, -25))
+        {
+            hold(m);
+            if (m->result == PATH_RUNNING)
+            {
+                m->point = 0;
+                next(m, now);
+            }
+        }
+        break;
+    case 13:
+        PathWarehouse_Tick(m, now, in);
         break;
     default:
         fail(m, PATH_ERROR);

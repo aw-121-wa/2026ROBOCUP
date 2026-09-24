@@ -39,12 +39,20 @@ void Chassis_RecordDeadlineMiss(void);
 bool Chassis_Arm(void);
 void Chassis_Stop(void);
 bool Chassis_Move(float x_mm, float y_mm, float vmax, float amax, float dmax);
+/* Translation is fixed in the starting body frame; yaw advances with path progress. */
+bool Chassis_MoveRotate(float x_mm, float y_mm, float degrees, float vmax, float amax, float dmax);
+bool Chassis_MoveBoundary(float x_mm, float y_mm, float vmax, float amax, float dmax,
+                          float start_speed, float end_speed);
+bool Chassis_MoveArc(float radius_mm, float start_angle_deg, float turn_degrees,
+                     float vmax, float amax, float dmax, float start_speed, float end_speed);
 /* Sole chassis task owner; PATH uses these without invoking another motor stack. */
 void Chassis_Hold(void);
 bool Chassis_Rotate(float degrees);
+bool Chassis_AlignZero(void);
 bool Chassis_Body(float forward_mm_s, float left_mm_s, float radians_s);
 bool Chassis_MotionBusy(void);
 bool Chassis_IsSettled(void);
 float Chassis_ContinuousYaw(void);
+float Chassis_MeasuredYaw(void);
 const ChassisState *Chassis_GetState(void);
 #endif

@@ -28,6 +28,13 @@ static int begin_disc(RdkLink *r, uint32_t started, uint32_t timeout) {
 }
 int main(void) {
     RdkLink r;
+    CHECK(connect(&r)==0);
+    for (unsigned g=109;g<=111;g++) {
+        char line[48];
+        CHECK(Rdk_Begin(&r,"GROUP",g,100,30000)); Rdk_Tick(&r,100);
+        snprintf(line,sizeof(line),"GROUP_ACK %u\r\nGROUP_DONE %u\r\n",g,g); feed(&r,line);
+        CHECK(!r.active && !r.locked && r.reply==PATH_OK);
+    }
     CHECK(connect(&r) == 0);
     CHECK(!Rdk_Begin(&r, "GROUP", 255, 1, 1000));
     CHECK(!Rdk_Begin(&r, "VISION", 0, 1, 1000));

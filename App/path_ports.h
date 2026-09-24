@@ -4,6 +4,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "ball_inventory.h"
+enum {
+    INVENTORY_NO_BLOCK = 1, INVENTORY_BAD_BLOCK = 2, INVENTORY_CONFLICT = 4,
+    INVENTORY_FULL = 8, INVENTORY_TURN_ERROR = 16
+};
 typedef struct
 {
     uint32_t result, step, phase, ids, accepted_ids, link_reply, turn_reply, fault, session,
@@ -16,12 +21,16 @@ typedef struct
     uint32_t disc_rfid_confirmed_index;
     uint32_t disc_waiting_rfid;
     uint32_t disc_action_allowed;
+    uint32_t point, phase_elapsed_ms; /* Read-only diagnostics. */
+    uint32_t inventory_fault, inventory_occupied, inventory_slot, inventory_uncertain;
+    uint32_t warehouse_code, warehouse_placed;
 } PathDiagnostics;
 extern volatile PathDiagnostics path_diagnostics;
 /* RAM first-seen list of up to 64 distinct full four-byte UIDs.
  * capacity and return value are UID counts, not byte counts. Retained after completion/error/reset
  * of the link; cleared on next accepted PATH/DISC or MCU reset. */
 size_t PathPorts_CopyIds(uint32_t *out, size_t capacity);
+void PathPorts_CopyInventory(BallInventory *out);
 void PathPorts_Init(void);
 bool PathPorts_Start(void);
 bool PathPorts_Ping(void);

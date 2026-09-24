@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
 #include "rdk_link.h"
@@ -10,8 +11,11 @@ static PathMission mission;
 static RdkLink rdk;
 static TurntableLink turn;
 static uint8_t turn_buffer[16];
+static enum { TURN_IDLE, TURN_STORE, TURN_UNLOAD } turn_purpose;
 static unsigned turn_issued;
 static bool turn_enabled;
+static uint32_t inventory_fault;
+static volatile uint32_t io_fault;
 static bool turn_transmit(void *ctx, const uint8_t *data, size_t size)
 {
     (void)ctx;
@@ -22,27 +26,72 @@ static bool turn_transmit(void *ctx, const uint8_t *data, size_t size)
 }
 static void cancel_turn(void)
 {
+    if (mission.inventory.occupied || turn_purpose != TURN_IDLE ||
+        (mission.result == PATH_RUNNING && rdk.active &&
+         (rdk.stage == 4 || rdk.stage == 10 || rdk.stage == 12)))
+        mission.inventory.uncertain = true;
     turn_enabled = false;
+    turn_issued = mission.id_count;
+    turn_purpose = TURN_IDLE;
     if (turn.pending && !turn.stopping) Turn_Stop(&turn, HAL_GetTick());
 }
 static void service_turn(uint32_t now)
 {
     if (!Chassis_GetState()->armed || Chassis_GetState()->fault || mission.result >= PATH_CANCELED)
         cancel_turn();
+    /* Original collection scheduling: one forward step per accepted UID. */
     if (turn_enabled && !turn.pending && turn.reply != PATH_FAILED && turn_issued < mission.id_count)
     {
-        if (Turn_Start(&turn, false, now)) ++turn_issued;
+        if (Turn_Start(&turn, false, now))
+        {
+            ++turn_issued;
+            turn_purpose = TURN_STORE;
+        }
     }
     Turn_Tick(&turn, now, PINCFG_TURNTABLE_UART->gState == HAL_UART_STATE_READY);
+    if (turn_purpose != TURN_IDLE && !turn.pending)
+    {
+        if (turn.reply == PATH_OK)
+            BallInventory_Step(&mission.inventory, turn.direction != 0);
+        else
+        {
+            inventory_fault |= INVENTORY_TURN_ERROR;
+            mission.inventory.uncertain = true;
+        }
+        turn_purpose = TURN_IDLE;
+    }
     if (turn.reply == PATH_FAILED) turn_enabled = false;
 }
+/* Passive bookkeeping: never changes RFID acceptance, permission or collection timing. */
+static void remember_ball(uint32_t uid, const uint8_t *block)
+{
+    BallInventory *b = &mission.inventory;
+    unsigned slot = mission.id_count - 1U;
+    if (slot >= BALL_SLOT_COUNT)
+    {
+        inventory_fault |= INVENTORY_FULL;
+        b->uncertain = true;
+        return;
+    }
+    uint8_t code = block ? BallInventory_Decode(block) : 0;
+    if (!code) inventory_fault |= block ? INVENTORY_BAD_BLOCK : INVENTORY_NO_BLOCK;
+    for (unsigned i=0;code && i<slot;i++)
+        if (b->code[i] == code)
+        {
+            inventory_fault |= INVENTORY_CONFLICT;
+            code = 0;
+        }
+    /* Collection order identifies the intended pocket even while prior turns are queued. */
+    b->uid[slot] = uid;
+    b->code[slot] = code;
+    b->occupied |= (uint16_t)(1U << slot);
+}
 volatile PathDiagnostics path_diagnostics;
-static bool ready, initialized, motion_pending, verified, test_ping, stationary;
+static bool ready, initialized, motion_pending, motion_continuous, verified, test_ping, stationary;
 /* 0 wait/retry PING, 1 handshake, 2 G0 pending, 3 ready, 4 stopped/failed. */
 static unsigned boot;
 static uint32_t boot_retry;
 static uint32_t motion_since, motion_timeout, last_rx;
-static volatile uint32_t io_fault;
 static volatile uint32_t rfid_fault;
 static uint8_t rx_byte, tx_buffer[80];
 static volatile uint8_t ring[128];
@@ -85,8 +134,13 @@ static bool rfid_feed(uint8_t byte)
             {
                 uint8_t previous_count = mission.id_count;
                 if (f[4] == 0 && (f[1] == 12 || f[1] == 28))
-                    Path_RecordId(&mission, ((uint32_t)f[7] << 24) |
-                              ((uint32_t)f[8] << 16) | ((uint32_t)f[9] << 8) | f[10]);
+                {
+                    uint32_t uid = ((uint32_t)f[7] << 24) |
+                                   ((uint32_t)f[8] << 16) | ((uint32_t)f[9] << 8) | f[10];
+                    Path_RecordId(&mission, uid);
+                    if (mission.id_count > previous_count)
+                        remember_ball(uid, f[1] == 28 ? f + 11 : NULL);
+                }
                 unsigned consumed = f[1];
                 rfid_length -= consumed;
                 memmove(f, f + consumed, rfid_length);
@@ -108,6 +162,14 @@ static bool rfid_feed(uint8_t byte)
         memmove(f, f + 1, rfid_length);
     }
     return false;
+}
+void PathPorts_CopyInventory(BallInventory *out)
+{
+    if (!out) return;
+    uint32_t mask = __get_PRIMASK();
+    __disable_irq();
+    *out = mission.inventory;
+    __set_PRIMASK(mask);
 }
 size_t PathPorts_CopyIds(uint32_t *out, size_t capacity)
 {
@@ -175,15 +237,35 @@ static bool send(void *ctx, const PathCommand *c)
     float scale = 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
     switch (c->kind)
     {
-    case PC_MOVE:
-        if (!Chassis_Move(c->x, c->y, c->speed * scale, 550, 550))
+    case PC_MOVE_ROTATE:
+        if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, 550, 550))
             return false;
         motion_pending = true;
+        motion_continuous = false;
         motion_since = now;
         motion_timeout = c->timeout_ms;
         return true;
+    case PC_MOVE:
+        if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale, 550, 550,
+                                  c->start_speed * scale, c->end_speed * scale))
+            return false;
+        motion_pending = true;
+        motion_continuous = c->continuous;
+        motion_since = now;
+        motion_timeout = c->timeout_ms;
+        return true;
+    case PC_ARC:
+        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, 550, 550,
+                             c->start_speed * scale, c->end_speed * scale))
+            return false;
+        motion_pending = true;
+        motion_continuous = c->continuous;
+        motion_since = now;
+        motion_timeout = c->timeout_ms;
+        return true;
+    case PC_ALIGN_ZERO:
     case PC_ROTATE:
-        if (!Chassis_Rotate(c->x))
+        if (!(c->kind == PC_ALIGN_ZERO ? Chassis_AlignZero() : Chassis_Rotate(c->x)))
             return false;
         motion_pending = true;
         motion_since = now;
@@ -204,11 +286,19 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_HOLD:
         Chassis_Hold();
         motion_pending = false;
+        motion_continuous = false;
         return true;
     case PC_HELLO:
         return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
+    case PC_TURN:
+        if (mission.step != 13 || !Chassis_IsSettled() || rdk.active || turn.pending ||
+            turn_purpose != TURN_IDLE || turn_issued < mission.id_count || mission.inventory.uncertain ||
+            c->argument > 1 || !Turn_Start(&turn, c->argument != 0, now)) return false;
+        turn_purpose = TURN_UNLOAD;
+        return true;
     case PC_GROUP:
-        return Chassis_IsSettled() && Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
+        return (mission.step != 13 || (!turn.pending && turn_purpose == TURN_IDLE &&
+                turn_issued == mission.id_count)) && Chassis_IsSettled() && Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
     case PC_STAIR:
         if (!Chassis_IsSettled() || mission.id_count >= 64 ||
             !Rdk_Begin(&rdk, "STAIR", c->argument, now, c->timeout_ms)) return false;
@@ -248,6 +338,7 @@ static bool send(void *ctx, const PathCommand *c)
         record_pending_ids();
         Chassis_Hold();
         motion_pending = false;
+        if (!PATH_VISION_ENABLE) return true;
         verified = false;
         return Rdk_Begin(&rdk, "STOP", 0, now, 1);
     default:
@@ -260,6 +351,12 @@ void PathPorts_Init(void)
     Rdk_Init(&rdk, 0, transmit, 0);
     Path_Init(&mission, send, 0);
     initialized = true;
+    if (!PATH_VISION_ENABLE)
+    {
+        boot = 3;
+        ready = verified = true;
+        return;
+    }
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
     if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
         rfid_fault |= 1;
@@ -268,11 +365,13 @@ void PathPorts_Init(void)
 }
 bool PathPorts_Busy(void)
 {
+    if (!PATH_VISION_ENABLE) return initialized && mission.result == PATH_RUNNING;
     return initialized && (boot != 3 || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
                            (turn_enabled && turn_issued < mission.id_count));
 }
 bool PathPorts_Ping(void)
 {
+    if (!PATH_VISION_ENABLE) return false;
     if (!ready || io_fault || rdk.active || rdk.locked || mission.result == PATH_RUNNING || !Chassis_IsSettled())
         return false;
     verified = false;
@@ -282,6 +381,7 @@ bool PathPorts_Ping(void)
 }
 bool PathPorts_Reset(void)
 {
+    if (!PATH_VISION_ENABLE) return false;
     if (PINCFG_RDK_UART->gState != HAL_UART_STATE_READY || Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
         rdk.active || turn.pending)
         return false;
@@ -301,6 +401,7 @@ bool PathPorts_Reset(void)
     __set_PRIMASK(mask);
     Rdk_Init(&rdk, 0, transmit, 0);
     /* Link recovery does not erase the RFID result; next accepted task does. */
+    BallInventory saved_inventory = mission.inventory;
     uint32_t saved_ids[64];
     uint8_t saved_count = mission.id_count;
     bool saved_overflow = mission.id_overflow;
@@ -308,13 +409,15 @@ bool PathPorts_Reset(void)
     memcpy(saved_ids, mission.id_list, sizeof(saved_ids));
     Path_Init(&mission, send, 0);
     memcpy(mission.id_list, saved_ids, sizeof(saved_ids));
+    mission.inventory = saved_inventory;
     mission.id_count = saved_count;
     mission.id_overflow = saved_overflow;
     mission.ids = saved_mask;
     Turn_Init(&turn, turn_transmit, 0);
+    turn_purpose = TURN_IDLE;
     turn_enabled = false;
     turn_issued = mission.id_count;
-    verified = test_ping = stationary = motion_pending = false;
+    verified = test_ping = stationary = motion_pending = motion_continuous = false;
     boot = 0;
     boot_retry = HAL_GetTick();
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
@@ -335,8 +438,10 @@ static bool start(bool disc_only)
     test_ping = false;
     if (!Path_Start(&mission, HAL_GetTick(), &in)) return false;
     Turn_Init(&turn, turn_transmit, 0);
-    turn_issued = 0;
+    turn_purpose = TURN_IDLE;
     turn_enabled = true;
+    turn_issued = 0;
+    inventory_fault = 0;
     return true;
 }
 bool PathPorts_Start(void)
@@ -345,12 +450,18 @@ bool PathPorts_Start(void)
 }
 bool PathPorts_Disc(void)
 {
+    if (!PATH_VISION_ENABLE) return false;
     return start(true);
 }
 void PathPorts_Cancel(void)
 {
     if (!initialized)
         return;
+    if (!PATH_VISION_ENABLE)
+    {
+        Path_Cancel(&mission);
+        return;
+    }
     cancel_turn();
     if (boot != 3)
     {
@@ -368,6 +479,7 @@ void PathPorts_Cancel(void)
 }
 void PathPorts_RxComplete(UART_HandleTypeDef *u)
 {
+    if (!PATH_VISION_ENABLE) return;
     if (u == PINCFG_RFID_UART)
     {
         if (rfid_capture)
@@ -400,6 +512,7 @@ void PathPorts_RxComplete(UART_HandleTypeDef *u)
 }
 void PathPorts_Error(UART_HandleTypeDef *u)
 {
+    if (!PATH_VISION_ENABLE) return;
     if (u == PINCFG_RDK_UART)
         io_fault |= 16;
     else if (u == PINCFG_RFID_UART)
@@ -472,8 +585,9 @@ void PathPorts_Tick(void)
         verified = true;
         test_ping = false;
     }
-    if (rdk.locked)
+    if (PATH_VISION_ENABLE && rdk.locked)
         verified = false;
+    bool motion_done = false;
     if (motion_pending)
     {
         if ((uint32_t)(now - motion_since) >= motion_timeout)
@@ -481,11 +595,16 @@ void PathPorts_Tick(void)
             io_fault |= 32;
             Chassis_Hold();
             motion_pending = false;
+            motion_continuous = false;
         }
         else if (!Chassis_MotionBusy())
         {
-            Chassis_Hold();
+            if (!motion_continuous)
+                Chassis_Hold();
+            else
+                motion_done = true;
             motion_pending = false;
+            motion_continuous = false;
         }
     }
     uint8_t gray = 0;
@@ -499,15 +618,18 @@ void PathPorts_Tick(void)
     uint32_t ir_raw = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_SET;
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = io_fault || Chassis_GetState()->fault ||
-                             (rdk.locked && !(rdk.error == 1 && disc_deadline)),
+                             (PATH_VISION_ENABLE && rdk.locked && !(rdk.error == 1 && disc_deadline)),
                     .settled = Chassis_IsSettled(),
+                    .motion_done = motion_done,
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
+                    .imu_yaw_deg = Chassis_MeasuredYaw(),
                     .ir = ir_raw == 0,
                     .vision_ready = rdk.pillar_ready,
                     .ball_index = rdk.ball_index,
                     .resume_index = rdk.resume_index,
-                    .reply = rdk.reply};
+                    .reply = rdk.reply,
+                    .turn_reply = turn.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;
     Path_Tick(&mission, now, &in);
@@ -535,14 +657,23 @@ void PathPorts_Tick(void)
     {
         Chassis_Hold();
         motion_pending = false;
-        verified = false;
-        if (!rdk.locked)
+        if (PATH_VISION_ENABLE) verified = false;
+        if (PATH_VISION_ENABLE && !rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
     service_turn(now);
     path_diagnostics = (PathDiagnostics){.result = mission.result,
+                                         .inventory_fault = inventory_fault,
+                                         .inventory_occupied = mission.inventory.occupied,
+                                         .inventory_slot = mission.inventory.current,
+                                         .inventory_uncertain = mission.inventory.uncertain,
+                                         .warehouse_placed = mission.inventory.placed,
+                                         .warehouse_code = mission.step == 13 && mission.point < 9 ?
+                                              ((mission.point % 3 + 1U) << 4) | (mission.point / 3 + 1U) : 0,
                                          .step = mission.step,
                                          .phase = mission.phase,
+                                         .point = mission.step == 9 ? mission.point + 1U : 0U,
+                                         .phase_elapsed_ms = now - mission.entered,
                                          .accepted_ids = verified, /* Preserve ZHY CH29. */
                                          .ids = mission.ids,
                                          .rfid_count = mission.id_count,
