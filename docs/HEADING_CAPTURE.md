@@ -8,15 +8,15 @@ Default full telemetry now has 49 floats (200 bytes including tail). CH0--CH37 a
 | CH39 | Telemetry sequence modulo 16777216 |
 | CH40 | Latest health-accepted JY60 yaw, degrees |
 | CH41 | Accepted angle frame counter modulo 16777216 |
-| CH42 | Mode: 0 idle/output held, 1 planned translation/arc, 2 relative rotation, 3 measured-JY60 zero correction, 4 body velocity, 5 jog |
+| CH42 | Mode: 0 idle/output held, 1 planned translation/arc, 2 relative rotation, 3 measured-JY60 zero correction, 4 body velocity, 5 jog, 6 translation with rotation |
 | CH43 | Heading target, degrees |
 | CH44 | Feedback in matching target coordinates, degrees |
-| CH45 | Target-minus-feedback error, degrees; mode 2 preserves continuous turns, other modes wrap to +/-180 |
+| CH45 | Target-minus-feedback error, degrees; modes 2/6 preserve continuous turns, other modes wrap to +/-180 |
 | CH46 | Stair point 1--8; 0 outside stairs |
 | CH47 | Time since mission entered timestamp, milliseconds modulo 16777216; timestamp is also refreshed by some command starts |
 | CH48 | Age of latest accepted angle frame, milliseconds |
 
-Modes 1/4/5 use the software relative heading frame, mode 2 uses continuous software heading, mode 3 uses sensor yaw directly. During a body command with nonzero angular velocity or a jog, the command overrides the heading controller: CH45 is not the active yaw-rate command; use CH2. CH43--45 are snapshots of the current controller state, not external measurements of physical orientation.
+Modes 1/4/5 use the software relative heading frame, modes 2/6 use continuous software heading, mode 3 uses sensor yaw directly. Mode 6 reports the active translation-with-rotation target, including the smooth continuous profile. During a body command with nonzero angular velocity or a jog, the command overrides the heading controller: CH45 is not the active yaw-rate command; use CH2. CH43--45 are snapshots of the current controller state, not external measurements of physical orientation.
 
 Build: `cmake --build build/Release-ChassisOnly -j 4`. This does not flash the board.
 

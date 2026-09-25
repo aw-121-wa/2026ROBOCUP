@@ -21,12 +21,20 @@ int main(void)
     float r[4], v[3];
     Mecanum_Inverse(g, 314.159265f, 0, 0, r);
     for (int i = 0; i < 4; i++)
-        near(r[i], 60);
+        near(r[i], -60);
     Mecanum_Inverse(g, 0, 314.159265f, 0, r);
-    near(r[0], -60);
-    near(r[1], 60);
-    near(r[2], 60);
-    near(r[3], -60);
+    near(r[0], 60);
+    near(r[1], -60);
+    near(r[2], -60);
+    near(r[3], 60);
+    /* Both directions round-trip, including mixed translation and rotation. */
+    for (int sx=-1; sx<=1; sx+=2) for (int sy=-1; sy<=1; sy+=2) {
+        Mecanum_Inverse(g, sx*123.0f, sy*87.0f, 0.4f, r);
+        Mecanum_Forward(g, r, v);
+        near(v[0], sx*123.0f); near(v[1], sy*87.0f); near(v[2], 0.4f);
+    }
+    Mecanum_Inverse(g, 0, 0, 1.04719755f, r);
+    near(r[0], -60); near(r[1], 60); near(r[2], -60); near(r[3], 60);
     float turn[4] = {-60, 60, -60, 60};
     Mecanum_Forward(g, turn, v);
     near(v[0], 0);

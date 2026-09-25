@@ -4,11 +4,13 @@
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n",__LINE__,#x); return 1; } } while(0)
 static PathMission m;
 static PathCommand last;
-static unsigned moves, groups, turns, group_ids[9], ball_codes[9];
+static unsigned moves, groups, turns, calibrations, homes, group_ids[9], ball_codes[9];
 static bool bad;
 static bool send(void *ctx,const PathCommand *c) {
     (void)ctx; last=*c;
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=(moves==1 ? -100 : -200) || c->y!=0) bad=true; }
+    if(c->kind==PC_RETURN_HOME) homes++;
+    if(c->kind==PC_LINE_CALIBRATE) calibrations++;
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=(moves==1 ? 100 : 200) || c->y!=0) bad=true; }
     if(c->kind==PC_TURN) { turns++; if(c->argument>1) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }
@@ -20,7 +22,7 @@ static bool send(void *ctx,const PathCommand *c) {
 }
 static void init(void) {
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=13;
-    moves=groups=turns=0; bad=false; last=(PathCommand){0};
+    moves=groups=turns=calibrations=homes=0; bad=false; last=(PathCommand){0};
 }
 static int run(unsigned mask) {
     init();
@@ -30,7 +32,7 @@ static int run(unsigned mask) {
         CHECK(BallInventory_Record(&m.inventory,i+1,order[i])==BALL_ADDED);
         BallInventory_Step(&m.inventory,false); expected++;
     }
-    PathInput in={.armed=true,.settled=true,.reply=PATH_OK,.turn_reply=PATH_WAIT};
+    PathInput in={.armed=true,.settled=true,.gray=15,.reply=PATH_OK,.turn_reply=PATH_WAIT};
     unsigned finished_turns=0, turn_wait=0;
     for(unsigned t=0;t<30000 && m.result==PATH_RUNNING;t+=5) {
         if(turns>finished_turns) {
@@ -41,7 +43,7 @@ static int run(unsigned mask) {
         }
         Path_Tick(&m,t,&in);
     }
-    CHECK(m.result==PATH_DONE && moves==3 && !bad);
+    CHECK(m.result==PATH_DONE && moves==3 && calibrations==3 && homes==1 && !bad);
     CHECK(groups==expected && m.inventory.placed==expected && !m.inventory.occupied);
     unsigned n=0;
     for(unsigned col=1;col<=3;col++) for(unsigned row=1;row<=3;row++) {
@@ -52,8 +54,18 @@ static int run(unsigned mask) {
     }
     return 0;
 }
+static int alignment(void) {
+    PathInput in={.armed=true,.settled=true,.gray=7};
+    init(); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
+    CHECK(m.phase==4 && groups==0);
+    Path_Tick(&m,10,&in); CHECK(last.kind==PC_LINE_SEARCH && calibrations==0);
+    in.gray=15; Path_Tick(&m,20,&in); Path_Tick(&m,25,&in);
+    Path_Tick(&m,124,&in); CHECK(m.phase==4);
+    Path_Tick(&m,125,&in); CHECK(m.phase==1 && calibrations==1);
+    return 0;
+}
 static int errors(void) {
-    PathInput in={.armed=true,.settled=true,.reply=PATH_WAIT,.turn_reply=PATH_WAIT};
+    PathInput in={.armed=true,.settled=true,.gray=15,.reply=PATH_WAIT,.turn_reply=PATH_WAIT};
     init(); CHECK(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
     BallInventory_Step(&m.inventory,false); m.phase=1;
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_TURN && groups==0);
@@ -75,6 +87,6 @@ static int errors(void) {
 }
 int main(void) {
     CHECK(run(0x1ff)==0); CHECK(run(0)==0); CHECK(run(1)==0); CHECK(run(0x112)==0);
-    CHECK(errors()==0);
+    CHECK(errors()==0); CHECK(alignment()==0);
     puts("warehouse sorted rows, missing cells, three columns and failure gates passed"); return 0;
 }

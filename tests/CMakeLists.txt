@@ -130,3 +130,14 @@ endforeach()
 foreach(target test_warehouse test_stair_heading test_stair test_action_sequence test_path_ports test_path_mission test_path_no_vision)
     target_sources(${target} PRIVATE ../App/path_warehouse.c)
 endforeach()
+
+add_executable(test_chassis_stability test_chassis_stability.c
+    ../Algorithm/motion.c ../Algorithm/planner.c ../Algorithm/heading.c
+    ../App/chassis_odom.c ../App/host_command.c ../DRIVER/src/zdt_x42s.c)
+target_include_directories(test_chassis_stability PRIVATE chassis_stubs path_ports_stubs ../App ../Algorithm ../DRIVER/inc)
+target_compile_definitions(test_chassis_stability PRIVATE CHASSIS_TELEMETRY_ENABLE=0)
+target_compile_options(test_chassis_stability PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_chassis_stability PRIVATE m)
+foreach(case heading blend orbit slew stop fault manual align immediate line)
+    add_test(NAME chassis_stability_${case} COMMAND test_chassis_stability ${case})
+endforeach()

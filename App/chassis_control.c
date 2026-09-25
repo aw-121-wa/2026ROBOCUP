@@ -50,12 +50,26 @@ static float dx, dy, heading, integral, bias_sum, bias_elapsed;
 static float segment_progress;
 static float jog_x, jog_y, jog_w, jog_remaining;
 static bool path_rotation, path_body, path_arc, zero_output;
-static bool path_blend;
+static bool path_blend, blend_continuous, path_heading_chain;
+/* Final-heading translation frame, retained across moving handoffs. */
+static float chain_yaw, chain_x, chain_y;
 static float blend_x, blend_y, blend_yaw, blend_turn;
 static float path_target, body_x, body_y, body_w, arc_start, arc_turn;
 static uint8_t rotate_stable_count;
 static float rotate_tolerance_deg = 0.05f;
 static bool rotate_measured_zero;
+static float line_yaw_reference;
+static float route_heading;
+static bool path_heading_enabled, normal_stopping, line_search;
+static float body_output[3]; /* Last wheel-limited body command, not measured velocity. */
+#define BODY_ACCEL_MM_S2 550.0f
+#define BODY_BRAKE_MM_S2 800.0f
+#define YAW_ACCEL_RAD_S2 3.0f
+#define YAW_BRAKE_RAD_S2 6.0f
+static bool path_heading_active(void)
+{
+    return path_heading_enabled && PathPorts_Busy();
+}
 static uint32_t moving_tick;
 static uint32_t last_cycle, last_gyro, bias_count;
 #if CHASSIS_TELEMETRY_ENABLE
@@ -86,12 +100,23 @@ static float clamp(float x, float m)
 {
     return fmaxf(-m, fminf(m, x));
 }
-static void integrate_odom(uint32_t cycle)
+static void update_path_direction(void)
 {
     if (path_blend)
-    {
         Motion_FixedDirection(blend_x, blend_y, path_yaw.continuous - blend_yaw, &dx, &dy);
+    else if (path_heading_chain)
+    {
+        float x = chain_x, y = chain_y;
+        if (path_arc)
+            Motion_ArcDirection(arc_start, arc_turn, segment_progress, planner.distance, &x, &y);
+        Motion_FixedDirection(x, y, path_yaw.continuous - chain_yaw, &dx, &dy);
     }
+    else if (planner.active && path_arc)
+        Motion_ArcDirection(arc_start, arc_turn, segment_progress, planner.distance, &dx, &dy);
+}
+static void integrate_odom(uint32_t cycle)
+{
+    update_path_direction();
     float dt = DWT_DeltaSec(cycle, odom_cycle);
     odom_cycle = cycle;
     if (dt > 0.05f || !isfinite(dt))
@@ -286,12 +311,36 @@ bool Chassis_Arm(void)
     integral = 0;
     return true;
 }
+static float home_x, home_y;
+void Chassis_BeginPath(void)
+{
+    home_x = state.x_mm; home_y = state.y_mm;
+    route_heading = heading = state.yaw_rad;
+    path_heading_enabled = true;
+    line_yaw_reference = Chassis_MeasuredYaw();
+    integral = 0;
+}
+bool Chassis_ReturnHome(void)
+{
+    if (!path_heading_enabled || !state.armed || !Chassis_IsSettled()) return false;
+    float x = home_x - state.x_mm, y = home_y - state.y_mm;
+    if (!isfinite(x) || !isfinite(y) || !isfinite(state.yaw_rad)) return false;
+    if (hypotf(x,y) < 5.0f) return true;
+    float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);
+    route_heading = heading = state.yaw_rad;
+    integral = 0;
+    return Chassis_Move(x*c+y*s, -x*s+y*c, 150, 300, 300);
+}
 void Chassis_Stop(void)
 {
-    path_blend = false;
+    path_heading_enabled = false;
+    normal_stopping = false;
+    memset(body_output, 0, sizeof(body_output));
+    path_blend = blend_continuous = path_heading_chain = false;
     PathPorts_Cancel();
     state.armed = false;
     path_rotation = path_body = path_arc = false;
+    line_search = false;
     rotate_measured_zero = false;
     zero_output = true;
     planner.active = false;
@@ -317,20 +366,31 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
     path_arc = false;
     zero_output = false;
     segment_progress = 0;
-    dx = x / length;
-    dy = y / length;
-    heading = state.yaw_rad;
+    dx = chain_x = x / length;
+    dy = chain_y = y / length;
+    if (path_heading_active()) heading = route_heading;
+    else if (!path_heading_chain) heading = state.yaw_rad;
+    update_path_direction();
     return true;
 }
 bool Chassis_MoveRotate(float x, float y, float degrees, float v, float a, float d)
 {
+    return Chassis_MoveRotateBoundary(x, y, degrees, v, a, d, 0, 0);
+}
+bool Chassis_MoveRotateBoundary(float x, float y, float degrees, float v, float a, float d,
+                                 float start_speed, float end_speed)
+{
     if (!isfinite(degrees) || fabsf(degrees) > 360 || fabsf(degrees) < 0.01f)
         return false;
-    if (!Chassis_Move(x, y, v, a, d)) return false;
-    blend_x = dx;
-    blend_y = dy;
-    blend_yaw = path_yaw.continuous;
+    if (!Chassis_MoveBoundary(x, y, v, a, d, start_speed, end_speed)) return false;
+    path_heading_chain = false;
+    blend_continuous = end_speed > 0;
+    dx = blend_x = x / planner.distance;
+    dy = blend_y = y / planner.distance;
+    heading = path_heading_active() ? route_heading : state.yaw_rad;
+    blend_yaw = path_yaw.continuous + Angle_Wrap(heading - state.yaw_rad);
     blend_turn = degrees * RAD;
+    if (path_heading_active()) route_heading = Angle_Wrap(heading + blend_turn);
     rotate_stable_count = 0;
     integral = 0;
     path_blend = true;
@@ -353,25 +413,37 @@ bool Chassis_MoveArc(float radius, float start_degrees, float turn_degrees,
     path_arc = true;
     arc_start = start_degrees * RAD;
     arc_turn = turn;
-    Motion_ArcDirection(arc_start, arc_turn, 0, length, &dx, &dy);
-    heading = state.yaw_rad;
+    if (path_heading_active()) heading = route_heading;
+    else if (!path_heading_chain) heading = state.yaw_rad;
+    update_path_direction();
     return true;
 }
 void Chassis_Hold(void)
 {
-    path_blend = false;
+    path_blend = blend_continuous = path_heading_chain = false;
     planner.active = false;
     path_rotation = path_body = path_arc = false;
+    line_search = false;
     rotate_measured_zero = false;
     rotate_stable_count = 0;
     jog_remaining = 0;
     zero_output = true;
-    heading = state.yaw_rad;
+    normal_stopping = body_output[0] != 0 || body_output[1] != 0 || body_output[2] != 0;
+    heading = path_heading_active() ? route_heading : state.yaw_rad;
     integral = 0;
+}
+void Chassis_HoldImmediate(void)
+{
+    Chassis_Hold();
+    normal_stopping = false;
+    memset(body_output, 0, sizeof(body_output));
+    memset(state.rpm_requested, 0, sizeof(state.rpm_requested));
+    memset(state.rpm_pending, 0, sizeof(state.rpm_pending));
+    pending_valid = true;
 }
 bool Chassis_MotionBusy(void)
 {
-    return planner.active || path_blend || path_rotation || path_body || jog_remaining > 0;
+    return normal_stopping || planner.active || path_blend || path_rotation || path_body || jog_remaining > 0;
 }
 bool Chassis_IsSettled(void)
 {
@@ -389,7 +461,9 @@ bool Chassis_Rotate(float degrees)
         return false;
     rotate_tolerance_deg = 0.05f;
     rotate_measured_zero = false;
-    path_target = path_yaw.continuous + degrees * RAD;
+    float start_heading = path_heading_active() ? route_heading : state.yaw_rad;
+    path_target = path_yaw.continuous + Angle_Wrap(start_heading - state.yaw_rad) + degrees * RAD;
+    if (path_heading_active()) route_heading = Angle_Wrap(path_target);
     path_rotation = true;
     rotate_stable_count = 0;
     zero_output = false;
@@ -399,19 +473,23 @@ bool Chassis_Rotate(float degrees)
 bool Chassis_AlignZero(void)
 {
     if (!Chassis_IsSettled() ||
-        !Chassis_Rotate(StairHeading_Error(Chassis_MeasuredYaw())))
+        !Chassis_Rotate(StairHeading_Error(Chassis_LineYaw())))
         return false;
+    /* This command is already an error from actual yaw, not a relative route turn. */
+    path_target = path_yaw.continuous + StairHeading_Error(Chassis_LineYaw()) * RAD;
+    if (path_heading_active()) route_heading = Angle_Wrap(path_target);
     rotate_tolerance_deg = STAIR_HEADING_STOP_TOLERANCE_DEG;
     rotate_measured_zero = true;
     return true;
 }
 bool Chassis_Body(float x, float y, float w)
 {
-    if (!state.armed || planner.active || path_blend || path_rotation || !isfinite(x) || !isfinite(y) ||
+    if (!state.armed || normal_stopping || planner.active || path_blend || path_rotation || !isfinite(x) || !isfinite(y) ||
         !isfinite(w))
         return false;
     if (!path_body)
-        heading = state.yaw_rad;
+        heading = path_heading_active() ? route_heading : state.yaw_rad;
+    line_search = false;
     body_x = x;
     body_y = y;
     body_w = w;
@@ -419,10 +497,39 @@ bool Chassis_Body(float x, float y, float w)
     zero_output = false;
     return true;
 }
+bool Chassis_LineSearch(float lateral, float w)
+{
+    if (!Chassis_Body(0, lateral, w)) return false;
+    line_search = true; /* Gray probes own yaw during physical alignment. */
+    return true;
+}
+bool Chassis_CalibrateLine(void)
+{
+    float yaw = Chassis_MeasuredYaw();
+    if (!Chassis_IsSettled() || !isfinite(yaw)) return false;
+    route_heading = heading = state.yaw_rad;
+    line_yaw_reference = yaw;
+    integral = 0;
+    return true;
+}
 float Chassis_MeasuredYaw(void)
 {
     const JY60_State_t *imu = JY60_GetState();
     return imu->has_angle && imu->trust != JY60_TRUST_LOST ? imu->yaw_deg : NAN;
+}
+float Chassis_LineYaw(void)
+{
+    return remainderf(Chassis_MeasuredYaw()-line_yaw_reference,360.0f);
+}
+bool Chassis_SetLineReference(void)
+{
+    float yaw=Chassis_MeasuredYaw();
+    if (!Chassis_IsSettled() || !isfinite(yaw)) return false;
+    /* Detection alone is not a physical heading calibration. Store the intended
+     * route heading in the raw IMU frame so stair checks still see residual error. */
+    line_yaw_reference = path_heading_active()
+                             ? yaw + Angle_Wrap(route_heading - state.yaw_rad) / RAD : yaw;
+    return true;
 }
 float Chassis_ContinuousYaw(void)
 {
@@ -443,12 +550,21 @@ static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, 
     const JY60_State_t *imu = JY60_GetState();
     /* These snapshots never write the sensor or controller state. */
     unsigned mode = (!state.armed || zero_output) ? 0U :
-                    path_rotation ? (rotate_measured_zero ? 3U : 2U) :
+                    path_blend ? 6U : path_rotation ? (rotate_measured_zero ? 3U : 2U) :
                     path_body ? 4U : jog_remaining > 0 ? 5U : planner.active ? 1U : 0U;
-    float feedback = mode == 3 ? imu->yaw_deg :
-                     mode == 2 ? path_yaw.continuous / RAD : state.yaw_rad / RAD;
+    float feedback = mode == 3 ? Chassis_LineYaw() :
+                     (mode == 2 || mode == 6) ? path_yaw.continuous / RAD : state.yaw_rad / RAD;
     float target = mode == 3 ? 0 : mode == 2 ? path_target / RAD : heading / RAD;
-    float error = mode == 2 ? target - feedback :
+    if (mode == 6)
+    {
+        float fraction = planner.active ? fmaxf(0, fminf(1, segment_progress / planner.distance)) : 1;
+        float turn = blend_turn * fraction, unused_rate;
+        if (blend_continuous)
+            Motion_SmoothTurn(fraction * planner.distance, planner.distance, blend_turn,
+                              0, &turn, &unused_rate);
+        target = (blend_yaw + turn) / RAD;
+    }
+    float error = (mode == 2 || mode == 6) ? target - feedback :
                   Angle_Wrap((target - feedback) * RAD) / RAD;
     float channels[] = {vx,
                         vy,
@@ -673,8 +789,7 @@ void Chassis_Update(void)
         integral = 0;
     }
     last_gyro = imu->gyro_frame_count;
-    if (planner.active && path_arc)
-        Motion_ArcDirection(arc_start, arc_turn, segment_progress, planner.distance, &dx, &dy);
+    update_path_direction();
     if (!tx_busy)
         integrate_odom(DWT_GetCycle());
     uint32_t sequence = chassis_debug.sequence;
@@ -710,8 +825,7 @@ void Chassis_Update(void)
     }
     service_host_commands(now);
     PathPorts_Tick();
-    if (path_blend)
-        Motion_FixedDirection(blend_x, blend_y, path_yaw.continuous - blend_yaw, &dx, &dy);
+    update_path_direction();
     state.applied_path_speed =
         ChassisOdom_PathSpeed(geometry(), state.rpm_applied, chassis_config.left_odom_scale,
                               chassis_config.right_odom_scale, dx, dy);
@@ -731,6 +845,7 @@ void Chassis_Update(void)
                                                        state.applied_path_speed,
                                                        state.committed_path_speed, response_delay)
                               : 0;
+    bool blending_this_cycle = path_blend;
     float vx = speed * dx, vy = speed * dy, wz = 0;
     float lateral_direction = dy;
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
@@ -743,17 +858,34 @@ void Chassis_Update(void)
     if (state.armed && path_blend)
     {
         float fraction = planner.active ? fmaxf(0, fminf(1, segment_progress / planner.distance)) : 1;
-        float error = blend_yaw + blend_turn * fraction - path_yaw.continuous;
+        float turn = blend_turn * fraction;
         float feedforward = planner.active ? blend_turn * speed / planner.distance : 0;
+        if (blend_continuous)
+            Motion_SmoothTurn(fraction * planner.distance, planner.distance, blend_turn,
+                              speed, &turn, &feedforward);
+        float error = blend_yaw + turn - path_yaw.continuous;
         state.yaw_error = error;
         wz = clamp(feedforward + Heading_Update(error, gyro_rad_s - feedforward, dt,
                     chassis_config.kp, chassis_config.ki, chassis_config.gyro_damping,
                     chassis_config.wz_limit, &integral), chassis_config.wz_limit);
-        if (!planner.active && fabsf(error) < 0.5f * RAD && fabsf(gyro_rad_s) < 2 * RAD)
-            rotate_stable_count++;
-        else
-            rotate_stable_count = 0;
-        if (rotate_stable_count >= 10) Chassis_Hold();
+        if (blend_continuous && !planner.active)
+        {
+            /* Keep this cycle's end speed; next tick emits the arc without Hold.
+             * Carry commanded heading so residual yaw error is corrected in motion. */
+            chain_yaw = blend_yaw + blend_turn;
+            Motion_FixedDirection(blend_x, blend_y, blend_turn, &chain_x, &chain_y);
+            heading = Angle_Wrap(chain_yaw);
+            path_heading_chain = true;
+            path_blend = blend_continuous = false;
+        }
+        else if (!blend_continuous)
+        {
+            if (!planner.active && fabsf(error) < 0.5f * RAD && fabsf(gyro_rad_s) < 2 * RAD)
+                rotate_stable_count++;
+            else
+                rotate_stable_count = 0;
+            if (rotate_stable_count >= 10) Chassis_Hold();
+        }
     }
     if (state.armed && jog_remaining > 0)
     {
@@ -769,7 +901,7 @@ void Chassis_Update(void)
     {
         /* Stair zeroing follows each accepted sensor angle, not the integrated estimate. */
         float error = rotate_measured_zero
-                          ? StairHeading_Error(imu->yaw_deg) * RAD
+                          ? StairHeading_Error(imu->yaw_deg-line_yaw_reference) * RAD
                           : path_target - path_yaw.continuous; /* continuous for normal turns */
         vx = vy = 0;
         float limit = 60.0f * (2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f) /
@@ -798,10 +930,10 @@ void Chassis_Update(void)
         vx = body_x;
         vy = body_y;
         lateral_direction = body_y;
-        if (body_w != 0)
+        if (body_w != 0 || line_search)
         {
             wz = body_w;
-            heading = state.yaw_rad;
+            heading = path_heading_active() ? route_heading : state.yaw_rad;
             integral = 0;
         }
     }
@@ -810,13 +942,32 @@ void Chassis_Update(void)
     ForwardCompResult forward_comp =
         ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
                           chassis_config.right_gain, chassis_config.forward_lateral_comp);
-    if (!path_blend) vy = forward_comp.vy_final;
+    if (!blending_this_cycle) vy = forward_comp.vy_final;
     if (!config_valid())
     {
         Chassis_Stop();
         service_tx();
         send_telemetry(0, 0, 0, 0, 0, now);
         return;
+    }
+    if (!state.armed || (zero_output && !normal_stopping))
+    {
+        memset(body_output, 0, sizeof(body_output));
+        vx = vy = wz = 0; /* STOP/fault bypass all smoothing. */
+    }
+    else if (path_body || normal_stopping)
+    {
+        float target[3] = {vx, vy, wz};
+        Motion_SlewVelocity(body_output, target, dt,
+                            normal_stopping ? BODY_BRAKE_MM_S2 : BODY_ACCEL_MM_S2,
+                            normal_stopping ? YAW_BRAKE_RAD_S2 : YAW_ACCEL_RAD_S2);
+        vx = body_output[0]; vy = body_output[1]; wz = body_output[2];
+        if (normal_stopping && vx == 0 && vy == 0 && wz == 0) normal_stopping = false;
+    }
+    else
+    {
+        /* Preserve the planner's distance braking envelope; smooth yaw only. */
+        wz = body_output[2] + clamp(wz - body_output[2], YAW_ACCEL_RAD_S2 * dt);
     }
     float t[4], r[4], out[4];
     Mecanum_Inverse(geometry(), vx, vy, 0, t);
@@ -832,6 +983,7 @@ void Chassis_Update(void)
     }
     Mecanum_Inverse(geometry(), 0, 0, wz, r);
     Wheel_Limit(t, r, chassis_config.rpm_limit, out);
+    Mecanum_Forward(geometry(), out, body_output);
     for (int i = 0; i < 4; i++)
     {
         state.rpm_requested[i] = out[i];

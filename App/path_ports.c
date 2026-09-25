@@ -238,8 +238,22 @@ static bool send(void *ctx, const PathCommand *c)
     switch (c->kind)
     {
     case PC_MOVE_ROTATE:
-        if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, 550, 550))
+        if (c->continuous)
+        {
+            if (c->end_speed <= 0 ||
+                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale, 550, 550,
+                                            c->start_speed * scale, c->end_speed * scale))
+                return false;
+        }
+        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, 550, 550))
             return false;
+        motion_pending = true;
+        motion_continuous = c->continuous;
+        motion_since = now;
+        motion_timeout = c->timeout_ms;
+        return true;
+    case PC_RETURN_HOME:
+        if (!Chassis_ReturnHome()) return false;
         motion_pending = true;
         motion_continuous = false;
         motion_since = now;
@@ -263,6 +277,17 @@ static bool send(void *ctx, const PathCommand *c)
         motion_since = now;
         motion_timeout = c->timeout_ms;
         return true;
+    case PC_LINE_CALIBRATE:
+        return Chassis_CalibrateLine();
+    case PC_LINE_SEARCH:
+        if (!Chassis_LineSearch(c->y * scale, c->speed * scale /
+                               (chassis_config.half_track_mm + chassis_config.half_wheelbase_mm)))
+            return false;
+        if (!motion_pending) { motion_since = now; motion_timeout = c->timeout_ms; }
+        motion_pending = true;
+        return true;
+    case PC_LINE_REFERENCE:
+        return Chassis_SetLineReference();
     case PC_ALIGN_ZERO:
     case PC_ROTATE:
         if (!(c->kind == PC_ALIGN_ZERO ? Chassis_AlignZero() : Chassis_Rotate(c->x)))
@@ -336,7 +361,7 @@ static bool send(void *ctx, const PathCommand *c)
         cancel_turn();
         close_rfid_gate();
         record_pending_ids();
-        Chassis_Hold();
+        Chassis_HoldImmediate();
         motion_pending = false;
         if (!PATH_VISION_ENABLE) return true;
         verified = false;
@@ -437,6 +462,7 @@ static bool start(bool disc_only)
     stationary = disc_only;
     test_ping = false;
     if (!Path_Start(&mission, HAL_GetTick(), &in)) return false;
+    Chassis_BeginPath();
     Turn_Init(&turn, turn_transmit, 0);
     turn_purpose = TURN_IDLE;
     turn_enabled = true;
@@ -593,7 +619,7 @@ void PathPorts_Tick(void)
         if ((uint32_t)(now - motion_since) >= motion_timeout)
         {
             io_fault |= 32;
-            Chassis_Hold();
+            Chassis_HoldImmediate();
             motion_pending = false;
             motion_continuous = false;
         }
@@ -608,6 +634,8 @@ void PathPorts_Tick(void)
         }
     }
     uint8_t gray = 0;
+    if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3) == GPIO_PIN_RESET) gray |= 8;
+    if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_RESET) gray |= 1;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_0) == GPIO_PIN_RESET)
         gray |= 4;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_1) == GPIO_PIN_RESET)
@@ -623,7 +651,7 @@ void PathPorts_Tick(void)
                     .motion_done = motion_done,
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
-                    .imu_yaw_deg = Chassis_MeasuredYaw(),
+                    .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,
                     .vision_ready = rdk.pillar_ready,
                     .ball_index = rdk.ball_index,
@@ -655,7 +683,7 @@ void PathPorts_Tick(void)
         close_rfid_gate();
     if (previous == PATH_RUNNING && mission.result >= PATH_CANCELED)
     {
-        Chassis_Hold();
+        Chassis_HoldImmediate();
         motion_pending = false;
         if (PATH_VISION_ENABLE) verified = false;
         if (PATH_VISION_ENABLE && !rdk.locked)

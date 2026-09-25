@@ -11,6 +11,7 @@ typedef enum { HAL_OK, HAL_ERROR } HAL_StatusTypeDef;
 #define GPIO_PIN_1 2U
 #define GPIO_PIN_3 8U
 #define GPIO_PIN_8 256U
+#define GPIO_PIN_13 8192U
 #define GPIO_PIN_10 1024U
 #define GPIOB ((void *)2)
 #define GPIOD ((void *)1)

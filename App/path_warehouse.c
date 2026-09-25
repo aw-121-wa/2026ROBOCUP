@@ -1,4 +1,5 @@
 #include "path_warehouse.h"
+#include "path_chassis.h"
 static void fail(PathMission *m, PathResult result)
 {
     if (m->inventory.occupied || m->phase == 2) m->inventory.uncertain = true;
@@ -22,11 +23,22 @@ static void advance(PathMission *m, uint32_t now)
     if (m->point==9)
     {
         if (m->inventory.occupied) fail(m,PATH_ERROR);
-        else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->result=PATH_DONE;
+        else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->phase=5;
     }
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
+    if (m->point==9 && m->phase==5 && !m->inventory.occupied && !m->inventory.uncertain) {
+        if (!m->waiting) {
+            if (!in->settled) return;
+            m->entered=now;
+            m->waiting=emit(m,(PathCommand){.kind=PC_RETURN_HOME,.timeout_ms=90000});
+        } else if ((uint32_t)(now-m->entered)>=90000) fail(m,PATH_TIMEOUT);
+        else if (in->settled) {
+            if (emit(m,(PathCommand){.kind=PC_HOLD})) m->result=PATH_DONE;
+        }
+        return;
+    }
     if (m->inventory.uncertain || m->point>=9)
     {
         fail(m,PATH_ERROR);
@@ -39,15 +51,25 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting)
         {
             m->entered=now;
-            m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=m->point==0 ? -100 : -200,
+            m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=m->point==0 ? 100 : 200,
                                           .speed=40,.timeout_ms=30000});
         }
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
         else if (in->settled)
         {
             m->waiting=false;
+            m->phase=4;
+            m->line_active=false;
+            m->stable=false;
+            m->entered=now;
+        }
+        break;
+    case 4: /* Every chassis move must finish with four-probe alignment. */
+        if (PathLine_AlignFour(m,now,in)) {
             m->phase=1;
             m->entered=now;
+        } else if (m->result!=PATH_RUNNING && m->inventory.occupied) {
+            m->inventory.uncertain=true;
         }
         break;
     case 1:

@@ -36,7 +36,11 @@ typedef enum
     PC_STAIR,
     PC_ARC,
     PC_ALIGN_ZERO,
-    PC_MOVE_ROTATE
+    PC_MOVE_ROTATE,
+    PC_LINE_REFERENCE,
+    PC_LINE_SEARCH,
+    PC_LINE_CALIBRATE,
+    PC_RETURN_HOME
 } PathCommandKind;
 typedef struct
 {
@@ -51,7 +55,7 @@ typedef struct
     bool armed, fault, settled, motion_done;
     float yaw_deg;
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
-    uint8_t gray; /* active-low converted bits MID2 IN2 IN1 MID1: target 0b0110 */
+    uint8_t gray; /* active-low: bit3 PD3, bit2 PD0, bit1 PD1, bit0 PB13; stair target 1111 */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
@@ -70,6 +74,14 @@ typedef struct
     BallInventory inventory;
     bool id_overflow;
     float orbit_yaw;
+    float line_scan_yaw;
+    uint32_t line_since, line_shift_since;
+    unsigned line_scan_stage, line_shift_count;
+    unsigned line_best_count;
+    unsigned line_recovery, line_retries;
+    uint32_t line_loss_since;
+    bool line_losing;
+    bool line_active, line_stopping;
     bool waiting, stable, expired;
     PathSend send;
     void *context;

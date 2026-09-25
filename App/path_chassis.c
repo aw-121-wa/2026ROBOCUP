@@ -43,38 +43,28 @@ static bool move(PathMission *m, const PathInput *in, float x, float y, float rp
     m->waiting = false;
     return true;
 }
-static bool rotate(PathMission *m, const PathInput *in, float deg)
+/* Detect the two inner probes, brake lateral search, then continue.
+ * Outer probes remain available in telemetry but do not block the route. */
+bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
+                    uint32_t timeout, float lateral)
 {
-    if (!m->waiting)
-    {
-        m->waiting = emit(m, PC_ROTATE, deg, 0, 0, 0, 15000);
-        return false;
+    if ((uint32_t)(now-m->entered)>=timeout) {
+        fail(m,PATH_TIMEOUT); return false;
     }
-    if (!in->settled)
-        return false;
-    m->waiting = false;
-    return true;
-}
-static bool align(PathMission *m, uint32_t now, const PathInput *in, uint32_t timeout, float lateral)
-{
-    if ((uint32_t)(now - m->entered) >= timeout)
-    {
-        fail(m, PATH_TIMEOUT);
-        return false;
-    }
-    if ((in->gray & 6U) == 6U)
-    {
-        if (!m->stable)
-        {
-            m->stable = true;
-            m->stable_since = now;
-            hold(m);
+    if (!m->stable) {
+        if ((in->gray & 6U)!=6U) {
+            (void)emit(m,PC_BODY,0,lateral,0,0,timeout);
+            return false;
         }
-        return (uint32_t)(now - m->stable_since) >= 50 && in->settled;
+        hold(m);
+        m->stable=true; /* Latch detection; braking may carry probes past the line. */
+        return false;
     }
-    m->stable = false;
-    (void)emit(m, PC_BODY, 0, lateral, 0, 0, timeout);
-    return false;
+    if (!in->settled) return false;
+    /* Preserve the current heading for later stair checks; do not turn to calibrate. */
+    if (!emit(m,PC_LINE_REFERENCE,0,0,0,0,0)) return false;
+    m->stable=false;
+    return true;
 }
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
@@ -120,7 +110,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->orbit_yaw = in->yaw_deg;
                 m->orbit_ms = 0;
                 m->previous = now;
-                if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000)) m->phase = 2;
+                if (emit(m, PC_BODY, -64.4f, 0, -49, 0, 15000)) m->phase = 2;
                 break;
             }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
@@ -141,7 +131,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 356)
+        else if (m->orbit_yaw - in->yaw_deg >= 355)
         {
             hold(m);
             m->entered = now;
@@ -182,7 +172,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000)) m->phase = 2;
+            else if (emit(m, PC_BODY, -64.4f, 0, -49, 0, 15000)) m->phase = 2;
         }
         break;
     case 5:
@@ -203,9 +193,9 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 356)
+            else if (m->orbit_yaw - in->yaw_deg >= 355)
                 m->phase = 3;
-            else if (emit(m, PC_BODY, -58.9f, 0, -49, 0, 15000 - m->orbit_ms)) m->phase = 2;
+            else if (emit(m, PC_BODY, -64.4f, 0, -49, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
         break;
     case 7:
@@ -233,13 +223,116 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
     }
     return false;
 }
+/* Four-probe gate: bounded yaw sweep at each nearby lateral position.
+ * Bidirectional search avoids assuming which side a missing digital probe is on. */
+bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
+{
+    if (!isfinite(in->yaw_deg) || !isfinite(in->imu_yaw_deg)) {
+        fail(m, PATH_ERROR); return false;
+    }
+    unsigned count = 0;
+    for (unsigned bits = in->gray & 15U; bits; bits >>= 1) count += bits & 1U;
+    if (!m->line_active) {
+        m->line_active = true;
+        m->line_since = now;
+        m->line_best_count = count;
+        m->line_recovery = m->line_retries = 0;
+        m->line_losing = false;
+        m->line_scan_yaw = in->yaw_deg;
+        m->line_scan_stage = m->line_shift_count = 0;
+        m->line_stopping = m->stable = false;
+    }
+    if (fabsf(in->yaw_deg - m->line_scan_yaw) > 10.0f) {
+        fail(m, PATH_ERROR); return false;
+    }
+    if ((uint32_t)(now - m->line_since) >= 30000U) {
+        fail(m, PATH_TIMEOUT); return false;
+    }
+    /* Stair-only map-left recovery: current chassis right, y < 0.
+     * Keep the original timeout/yaw bounds across retries. */
+    if (m->line_recovery) {
+        if (!in->settled) return false;
+        if (m->line_recovery == 1) {
+            if (emit(m, PC_MOVE, 0, -10, 8, 0, 5000)) m->line_recovery = 2;
+            return false;
+        }
+        m->line_recovery = 0;
+        m->line_best_count = count;
+        m->line_losing = m->line_stopping = m->stable = false;
+        m->line_scan_stage = m->line_shift_count = 0;
+        m->line_shift_since = 0;
+    }
+    /* Do not keep sweeping when coverage is demonstrably getting worse.
+     * Ignore brief sensor chatter; never calibrate a degraded pose. */
+    if (count < m->line_best_count) {
+        if (!m->line_losing) {
+            m->line_losing = true;
+            m->line_loss_since = now;
+        }
+        if ((uint32_t)(now - m->line_loss_since) >= 100U) {
+            if (m->step == 9 && m->line_retries < 2) {
+                hold(m);
+                ++m->line_retries;
+                m->line_recovery = 1;
+                m->stable = false;
+                return false;
+            }
+            fail(m, PATH_ERROR); return false;
+        }
+    } else {
+        m->line_losing = false;
+        m->line_best_count = count;
+    }
+    if (in->gray == 15) {
+        if (!m->line_stopping) {
+            hold(m); m->line_stopping = true; m->stable = false;
+            return false;
+        }
+        if (!in->settled) { m->stable = false; return false; }
+        if (!m->stable) { m->stable = true; m->stable_since = now; }
+        if ((uint32_t)(now - m->stable_since) < 100U) return false;
+        if (!emit(m, PC_LINE_CALIBRATE, 0, 0, 0, 0, 0)) return false;
+        m->line_active = m->line_stopping = m->stable = false;
+        return true;
+    }
+    m->stable = false;
+    if (m->line_stopping) {
+        if (!in->settled) return false;
+        m->line_stopping = false;
+    }
+    if (m->line_scan_stage < 3) {
+        static const float offsets[] = {-6, 6, 0};
+        float side = (m->line_retries & 1U) ? -1.0f : 1.0f;
+        float error = m->line_scan_yaw + side * offsets[m->line_scan_stage] - in->yaw_deg;
+        if (fabsf(error) <= 0.5f) {
+            hold(m); m->line_stopping = true;
+            ++m->line_scan_stage;
+            m->line_shift_since = 0;
+        } else {
+            (void)emit(m, PC_LINE_SEARCH, 0, 0, error > 0 ? 4 : -4, 0, 31000);
+        }
+    } else {
+        if (!m->line_shift_since) m->line_shift_since = now;
+        /* +7.5, -7.5, +15, -15 mm approximately, capped by total timeout. */
+        uint32_t duration = 250U * (m->line_shift_count + 1U);
+        if (duration > 1000U) duration = 1000U;
+        if ((uint32_t)(now - m->line_shift_since) >= duration) {
+            hold(m); m->line_stopping = true;
+            ++m->line_shift_count; m->line_scan_stage = 0;
+        } else {
+            (void)emit(m, PC_LINE_SEARCH, 0, (m->line_shift_count & 1U) ? -8 : 8,
+                       0, 0, 31000);
+        }
+    }
+    return false;
+}
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    static const float retreat[] = {-90, -117, -90, -90, -90, -117, -90};
+    static const float retreat[] = {90, 117, 90, 90, 90, 117, 90};
     switch (m->phase)
     {
     case 0:
-        if (align(m, now, in, 50000, -25)) /* Body -Y is right. */
+        if (PathLine_Align(m, now, in, 50000, 25)) /* Reverse only the post-orbit stair line approach. */
         {
             m->phase = 5;
             m->point = m->grabs = 0; /* Stair count excludes disc and pillar balls. */
@@ -247,7 +340,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 5: /* Retreat once after line alignment, before G105. */
-        if (move(m, in, -55, 0, 40)) m->phase = 1;
+        if (move(m, in, 55, 0, 40)) m->phase = 1;
         break;
     case 1:
         if (group(m, now, in, 105))
@@ -258,6 +351,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 2:
+        if (!m->waiting && in->gray != 15) {
+            m->line_active = false; m->phase = 4;
+            break;
+        }
         if (!PATH_VISION_ENABLE)
         {
             if (in->settled) m->phase = 3;
@@ -296,41 +393,11 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             m->stable = false;
         }
         break;
-    case 4: /* Every point: settle and verify heading before RDK recognition. */
-        if (!isfinite(in->imu_yaw_deg))
-        {
-            fail(m, PATH_ERROR);
-            break;
-        }
-        if ((uint32_t)(now - m->entered) >= STAIR_HEADING_TIMEOUT_MS)
-        {
-            /* Best effort: stop correcting, then recognize without restarting alignment. */
-            hold(m);
+    case 4: /* Every stopped stair point must physically cover all four probes. */
+        if (PathLine_AlignFour(m, now, in)) {
             m->waiting = false;
-            m->stable = false;
             m->phase = 2;
-            break;
         }
-        if (!in->settled)
-        {
-            m->stable = false;
-            break;
-        }
-        m->waiting = false;
-        if (fabsf(StairHeading_Error(in->imu_yaw_deg)) > STAIR_HEADING_TOLERANCE_DEG)
-        {
-            m->stable = false;
-            m->waiting = emit(m, PC_ALIGN_ZERO, 0, 0, 0, 0,
-                              /* Mission owns the calibration deadline; watchdog must not fault first. */
-                              STAIR_HEADING_TIMEOUT_MS + 1000U);
-        }
-        else if (!m->stable)
-        {
-            m->stable = true;
-            m->stable_since = now;
-        }
-        else if ((uint32_t)(now - m->stable_since) >= STAIR_HEADING_STABLE_MS)
-            m->phase = 2;
         break;
     default:
         fail(m, PATH_ERROR);
@@ -354,7 +421,15 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (in->reply == PATH_OK) next(m, now);
         break;
     case 5:
-        if (move(m, in, 1750, 0, 130)) next(m, now);
+        if ((uint32_t)(now - m->entered) >= 30000U)
+            fail(m, PATH_TIMEOUT);
+        else if (!m->waiting)
+        {
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1797, .y = 0,
+                             .angle = 180, .speed = 130, .timeout_ms = 30000};
+            if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
+        }
+        else if (in->settled) next(m, now);
         break;
     case 6:
         pillar(m, now, in);
@@ -369,11 +444,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (m->phase == 1)
         {
-            if (group(m, now, in, 2)) m->phase = 2;
-        }
-        else if (m->phase == 2)
-        {
-            if (rotate(m, in, 180)) next(m, now);
+            if (group(m, now, in, 2)) next(m, now);
         }
         else fail(m, PATH_ERROR);
         break;
@@ -391,18 +462,18 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if ((uint32_t)(now - m->entered) >= 30000U)
             fail(m, PATH_TIMEOUT);
-        else if (move(m, in, -100, 0, 40)) next(m, now);
+        else if (move(m, in, 100, 0, 40)) next(m, now);
         break;
     case 11:
         if ((uint32_t)(now - m->entered) >= 30000U)
             fail(m, PATH_TIMEOUT);
         else if (m->phase == 1)
         {
-            if (move(m, in, -200, 0, 40)) next(m, now);
+            if (move(m, in, 200, 0, 40)) next(m, now);
         }
         else if (!m->waiting)
         {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = 0, .y = 1500,
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = 0, .y = -1500,
                              .angle = 180, .speed = 60, .timeout_ms = 30000};
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
@@ -414,14 +485,20 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 12:
-        if (align(m, now, in, 50000, -25))
+        if (m->phase == 0)
         {
-            hold(m);
-            if (m->result == PATH_RUNNING)
+            if (PathLine_Align(m, now, in, 50000, 25))
             {
-                m->point = 0;
-                next(m, now);
+                m->phase = 1;
+                m->line_active = false;
+                m->stable = false;
+                m->entered = now;
             }
+        }
+        else if (PathLine_AlignFour(m, now, in))
+        {
+            m->point = 0;
+            next(m, now);
         }
         break;
     case 13:

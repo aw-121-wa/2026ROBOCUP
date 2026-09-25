@@ -30,7 +30,8 @@ static bool emit_move(PathMission *m, float x, float y, float speed,
 static bool emit_arc(PathMission *m)
 {
     /* 800 mm circular fillet: tangent to the incoming +20 deg line and outgoing 0 deg line.
-     * Tangent offset is R*tan(10 deg)=141.0616 mm, so the final global endpoint is unchanged. */
+     * Tangent offset is R*tan(10 deg)=141.0616 mm, so the final global endpoint is unchanged.
+     * Body heading stays fixed: arc starts at +20 deg and keeps the diagonal boundary speed. */
     PathCommand c = {.kind = PC_ARC, .x = START_BLEND_RADIUS_MM, .y = 20.0f, .angle = -20.0f,
                      .speed = 85.0f, .start_speed = START_BLEND_SPEED_RPM,
                      .end_speed = START_BLEND_SPEED_RPM, .continuous = true,
@@ -85,7 +86,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         PathChassis_Tick(m, now, in);
         return;
     }
-    uint32_t limit = m->step == 3 ? (m->phase == 0 ? 5000U :
+    uint32_t limit = m->step == 3 ? (m->phase == 0 ? PATH_DISC_LINE_TIMEOUT_MS :
                                     m->phase == 1 ? DISC_TASK_TIMEOUT_MS : 30000U) : 30000U;
     if ((uint32_t)(now - m->entered) >= limit)
     {
@@ -108,15 +109,19 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting)
         {
             if (m->step == 0 && m->part == 0)
-                m->waiting = emit_move(m, START_DIAG_X_MM, START_DIAG_Y_MM, 85.0f, 0,
-                                       START_BLEND_SPEED_RPM, true);
+                m->waiting = emit_move(m, START_DIAG_X_MM, START_DIAG_Y_MM, 85.0f,
+                                       0, START_BLEND_SPEED_RPM, true);
             else if (m->step == 0)
                 m->waiting = emit_arc(m);
             else if (m->step == 1)
                 m->waiting = emit_move(m, START_FORWARD_MM, 0, 130.0f,
                                        START_BLEND_SPEED_RPM, 0, false);
             else
-                m->waiting = emit(m, PC_ROTATE, 180.0f, 0, 0, 15000);
+            {
+                m->step = 3; /* No startup body rotation. */
+                m->phase = 2;
+                m->entered = now;
+            }
         }
         else if (m->step == 0 && in->motion_done)
         {
@@ -136,7 +141,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (m->step != 0 && in->settled)
         {
-            m->step++;
+            m->step = 3; /* Skip the former standalone 180-degree turn. */
             m->waiting = false;
             m->entered = now;
             if (m->step == 3) m->phase = 2; /* G100 before disc alignment/start. */
@@ -167,31 +172,11 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
     }
     if (m->phase == 0)
     {
-        if ((in->gray & 6U) == 6U)
+        if (PathLine_Align(m, now, in, PATH_DISC_LINE_TIMEOUT_MS, 25))
         {
-            if (!m->stable)
-            {
-                m->stable = true;
-                m->stable_since = now;
-                (void)emit(m, PC_HOLD, 0, 0, 0, 0);
-            }
-            if ((uint32_t)(now - m->stable_since) >= 50 && in->settled)
-            {
-                if (!PATH_VISION_ENABLE)
-                {
-                    m->result = PATH_DONE;
-                    return;
-                }
-                m->phase = 1;
-                m->entered = now;
-                if (!emit(m, PC_DISC, 0, 0, 0, DISC_TASK_TIMEOUT_MS))
-                    fail(m, PATH_ERROR);
-            }
-        }
-        else
-        {
-            m->stable = false;
-            (void)emit(m, PC_BODY, 0, -25, 0, 0);
+            if (!PATH_VISION_ENABLE) { m->result=PATH_DONE; return; }
+            m->phase=1; m->entered=now;
+            if (!emit(m,PC_DISC,0,0,0,DISC_TASK_TIMEOUT_MS)) fail(m,PATH_ERROR);
         }
     }
     else

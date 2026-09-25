@@ -16,8 +16,10 @@ static unsigned wire_sequence;
 static unsigned holds, turn_positions;
 static bool moving, rfid_init_failure;
 static bool gray_line = true;
+static bool outer_line;
 static float yaw, measured_yaw;
-static unsigned zero_aligns;
+static unsigned line_calibrations, zero_aligns, blend_moves, arc_moves;
+static float blend_end, arc_begin;
 
 uint32_t HAL_GetTick(void) { return now; }
 uint32_t PathSession_Create(void) { return 123; }
@@ -38,7 +40,8 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
-    return ((gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
+    return (((outer_line || path_diagnostics.step == 9 || path_diagnostics.step == 12 || path_diagnostics.step == 13) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
+            (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
             (port == GPIOD && pin == GPIO_PIN_10)) ? GPIO_PIN_RESET : GPIO_PIN_SET;
 }
 const ChassisState *Chassis_GetState(void) { return &state; }
@@ -46,6 +49,8 @@ bool Chassis_MotionBusy(void) { return moving; }
 bool Chassis_IsSettled(void) { return !moving; }
 float Chassis_ContinuousYaw(void) { return yaw; }
 float Chassis_MeasuredYaw(void) { return measured_yaw; }
+float Chassis_LineYaw(void) { return measured_yaw; }
+bool Chassis_SetLineReference(void) { return !moving; }
 void Chassis_Hold(void) { moving = false; ++holds; }
 bool Chassis_Move(float x, float y, float v, float a, float d) {
     (void)x; (void)y; (void)v; (void)a; (void)d;
@@ -54,16 +59,22 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    (void)start_speed; (void)end_speed;
+    (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }
 bool Chassis_MoveArc(float radius, float start_angle, float turn, float v, float a, float d,
                      float start_speed, float end_speed) {
-    (void)radius; (void)start_angle; (void)turn; (void)start_speed; (void)end_speed;
+    (void)radius; (void)start_angle; (void)turn; (void)end_speed;
+    ++arc_moves; arc_begin=start_speed;
     return Chassis_Move(1, 0, v, a, d);
 }
 bool Chassis_MoveRotate(float x, float y, float degrees, float v, float a, float d) {
     (void)degrees; return Chassis_Move(x, y, v, a, d);
+}
+bool Chassis_MoveRotateBoundary(float x, float y, float degrees, float v, float a, float d,
+                                 float start_speed, float end_speed) {
+    (void)start_speed; ++blend_moves; blend_end=end_speed;
+    return Chassis_MoveRotate(x, y, degrees, v, a, d);
 }
 bool Chassis_Rotate(float deg) { return Chassis_Move(deg, 0, 1, 1, 1); }
 bool Chassis_AlignZero(void) { measured_yaw=0; zero_aligns++; return Chassis_Rotate(0); }
@@ -154,10 +165,18 @@ static int complete_gate(uint8_t index, uint32_t uid) {
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "no_vision")) {
-        PathPorts_Init(); tick();
+        PathPorts_Init(); outer_line=true; tick(); CHECK(path_diagnostics.gray==15);
+        outer_line=false; tick(); CHECK(path_diagnostics.gray==6);
         CHECK(!PathPorts_Busy() && wire[0]==0 && rx4==NULL && rx7==NULL);
         CHECK(!PathPorts_Start()); /* ARM is still mandatory. */
         state.armed=true; CHECK(PathPorts_Start());
+        tick();
+        CHECK(blend_moves==0 && moving && blend_end>0);
+        unsigned before=holds;
+        moving=false; tick(); /* Translation done while wheels carry nonzero speed. */
+        CHECK(arc_moves==1 && moving && holds==before && arc_begin==blend_end);
+        moving=false; tick();
+        CHECK(path_diagnostics.step==1 && moving && holds==before);
         unsigned previous_phase=99;
         for(unsigned i=0;i<3000 && PathPorts_Busy();i++) {
             moving=false;
@@ -169,7 +188,7 @@ int main(int argc, char **argv) {
             CHECK(wire[0]==0 && !path_diagnostics.fault);
         }
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(zero_aligns==8 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==12 && zero_aligns==0 && path_diagnostics.rfid_count==0);
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());
@@ -301,7 +320,7 @@ int main(int argc, char **argv) {
         measured_yaw=5;
         reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();
         for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 1\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving && zero_aligns==1);
+        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving && line_calibrations==1 && zero_aligns==0);
         reply("STAIR_ACK 1\r\nSTAIR_NONE 1\r\n"); tick();
         for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 2\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"STAIR_CHECK 2\r\n"));
@@ -423,3 +442,10 @@ int main(int argc, char **argv) {
     }
     puts("ZHY adapter test passed"); return 0;
 }
+
+void Chassis_BeginPath(void) { }
+bool Chassis_ReturnHome(void) { moving=true; return true; }
+void Chassis_HoldImmediate(void) { Chassis_Hold(); }
+
+bool Chassis_LineSearch(float y,float w) { return Chassis_Body(0,y,w); }
+bool Chassis_CalibrateLine(void) { if(moving)return false; line_calibrations++; measured_yaw=0; return true; }

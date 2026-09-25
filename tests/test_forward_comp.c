@@ -34,7 +34,7 @@ static void test_zero_gain_preserves_numeric_and_wire_output(void)
     float rpm[4];
     Mecanum_Inverse((Geometry){35.0f, 259.0f}, 100.0f, result.vy_final, 0.0f, rpm);
     for (int i = 0; i < 4; ++i)
-        assert_close(rpm[i], 27.2837048f);
+        assert_close(rpm[i], -27.2837048f);
 
     const uint8_t ids[4] = {2, 1, 3, 4};
     const int8_t signs[4] = {1, -1, 1, -1};
@@ -44,10 +44,10 @@ static void test_zero_gain_preserves_numeric_and_wire_output(void)
     uint8_t frame[ZDT_MULTI_SPEED_SIZE];
     const uint8_t expected[ZDT_MULTI_SPEED_SIZE] = {
         0, 0xAA, 0, 0x25,
-        2, 0xF6, 0, 0x01, 0x0E, 0, 0, 0x6B,
-        1, 0xF6, 1, 0x01, 0x0E, 0, 0, 0x6B,
-        3, 0xF6, 0, 0x01, 0x0E, 0, 0, 0x6B,
-        4, 0xF6, 1, 0x01, 0x0E, 0, 0, 0x6B,
+        2, 0xF6, 1, 0x01, 0x0E, 0, 0, 0x6B,
+        1, 0xF6, 0, 0x01, 0x0E, 0, 0, 0x6B,
+        3, 0xF6, 1, 0x01, 0x0E, 0, 0, 0x6B,
+        4, 0xF6, 0, 0x01, 0x0E, 0, 0, 0x6B,
         0x6B};
     assert(ZDT_BuildMultiSpeed(frame, sizeof(frame), ids, physical_rpm, 0) == sizeof(frame));
     assert(memcmp(frame, expected, sizeof(frame)) == 0);
