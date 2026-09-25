@@ -40,7 +40,7 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
-    return (((outer_line || path_diagnostics.step == 9 || path_diagnostics.step == 12 || path_diagnostics.step == 13) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
+    return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
             (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
             (port == GPIOD && pin == GPIO_PIN_10)) ? GPIO_PIN_RESET : GPIO_PIN_SET;
 }
@@ -449,3 +449,10 @@ void Chassis_HoldImmediate(void) { Chassis_Hold(); }
 
 bool Chassis_LineSearch(float y,float w) { return Chassis_Body(0,y,w); }
 bool Chassis_CalibrateLine(void) { if(moving)return false; line_calibrations++; measured_yaw=0; return true; }
+
+bool Chassis_AlignMapAxis(void) { moving=true; return true; }
+bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
+
+bool Chassis_SetMapHeading(float degrees) { (void)degrees; return !moving; }
+
+bool Chassis_AlignHome(void) { moving=true; return true; }

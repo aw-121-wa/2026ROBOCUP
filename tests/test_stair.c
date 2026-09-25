@@ -17,7 +17,7 @@ static bool send(void *ctx, const PathCommand *c) {
 static int route(unsigned mask, unsigned expected_checks, unsigned balls) {
     PathMission m; Path_Init(&m, send, 0);
     m.result = PATH_RUNNING; m.step = 8;
-    PathInput in = {.armed=true, .settled=true, .gray=15};
+    PathInput in = {.armed=true, .settled=true, .gray=6};
     ng=checks=moves=rotations=0;
     last=(PathCommand){0};
     for (unsigned t=0; t<20000 && m.result==PATH_RUNNING; t+=100) {
@@ -58,20 +58,21 @@ static int exit_route(void) {
     Path_Tick(&m,2001,&in); CHECK(last.kind==PC_MOVE && last.x==200 && last.y==0);
     in.settled=false; Path_Tick(&m,2002,&in); CHECK(m.step==11);
     in.settled=true; Path_Tick(&m,2003,&in); CHECK(m.step==12);
-    Path_Tick(&m,2005,&in); CHECK(last.kind==PC_BODY && last.y==25 && last.timeout_ms==50000);
-    in.gray=15; in.settled=false; Path_Tick(&m,2010,&in); CHECK(last.kind==PC_HOLD);
+    Path_Tick(&m,2005,&in); CHECK(last.kind==PC_BODY && last.y==30 && last.timeout_ms==50000);
+    in.gray=6; in.settled=false; Path_Tick(&m,2010,&in); CHECK(last.kind==PC_HOLD);
     Path_Tick(&m,2070,&in); CHECK(m.result==PATH_RUNNING);
     in.settled=true; in.gray=0; Path_Tick(&m,2075,&in);
     CHECK(m.result==PATH_RUNNING && m.step==12 && m.phase==1);
     in.gray=14; Path_Tick(&m,2080,&in);
     CHECK(last.kind==PC_LINE_SEARCH && m.step==12);
-    in.gray=15; Path_Tick(&m,2085,&in); CHECK(last.kind==PC_HOLD);
+    in.gray=6; Path_Tick(&m,2085,&in); CHECK(last.kind==PC_HOLD);
     Path_Tick(&m,2090,&in); Path_Tick(&m,2189,&in); CHECK(m.step==12);
     Path_Tick(&m,2190,&in);
     CHECK(last.kind==PC_LINE_CALIBRATE && m.step==13);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; m.phase=1; in.gray=14;
     Path_Tick(&m,0,&in); Path_Tick(&m,30000,&in);
-    CHECK(m.result==PATH_TIMEOUT && last.kind==PC_CANCEL);
+    Path_Tick(&m,30005,&in);
+    CHECK(m.result==PATH_RUNNING && last.kind==PC_MAP_HEADING && last.x==0 && m.step==13);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; in.gray=0;
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
     Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT && last.kind==PC_CANCEL);
@@ -89,7 +90,7 @@ int main(void) {
     PathMission m; Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=9;
     PathInput in={.armed=true,.settled=true};
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.timeout_ms==50000);
-    CHECK(last.x==0 && last.y==25 && last.speed==0);
+    CHECK(last.x==0 && last.y==30 && last.speed==0);
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
     Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT);
     RdkLink r; Rdk_Init(&r,0,tx,0); r.stage=2;
@@ -106,3 +107,4 @@ int main(void) {
     feed(&r,"STAIR_ACK 5\r\nSTAIR_DONE 5\r\n"); CHECK(r.locked);
     return 0;
 }
+

@@ -225,65 +225,55 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 }
 /* Four-probe gate: bounded yaw sweep at each nearby lateral position.
  * Bidirectional search avoids assuming which side a missing digital probe is on. */
+static bool line_aligned(uint8_t gray)
+{
+    return gray == 6U || gray == 15U || gray == 9U;
+}
+static bool line_skip(PathMission *m, const PathInput *in)
+{
+    if (m->line_recovery != 6) {
+        hold(m); m->line_recovery = 6;
+        return false;
+    }
+    if (!in->settled) return false;
+    if (!emit(m, PC_MAP_HEADING, m->step == 9 ? 180 : 0, 0, 0, 0, 0)) return false;
+    m->line_skipped = true;
+    if (m->step == 9) m->stair_heading_locked = true;
+    else m->warehouse_heading_locked = true;
+    m->line_active = m->line_stopping = m->stable = false;
+    return true;
+}
 bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
 {
     if (!isfinite(in->yaw_deg) || !isfinite(in->imu_yaw_deg)) {
         fail(m, PATH_ERROR); return false;
     }
-    unsigned count = 0;
-    for (unsigned bits = in->gray & 15U; bits; bits >>= 1) count += bits & 1U;
+    if (m->step == 9 ? m->stair_heading_locked : m->warehouse_heading_locked) {
+        m->line_skipped = true;
+        return in->settled;
+    }
+    unsigned count = 0, full_count = 0;
+    for (unsigned bits = (in->gray ^ 9U) & 15U; bits; bits >>= 1) count += bits & 1U;
+    for (unsigned bits = in->gray & 15U; bits; bits >>= 1) full_count += bits & 1U;
+    if (4U - count > count) count = 4U - count; /* Also accept complementary 1001. */
+    if (full_count > count) count = full_count; /* Match the nearer accepted pattern. */
     if (!m->line_active) {
         m->line_active = true;
+        m->line_skipped = false;
         m->line_since = now;
         m->line_best_count = count;
-        m->line_recovery = m->line_retries = 0;
+        m->line_recovery = m->line_retries = m->line_reversals = 0;
+        /* Choose an initial probe from front/rear mismatch, then use feedback. */
+        m->line_scan_side = ((in->gray & 8U) || !(in->gray & 2U)) ? -1.0f : 1.0f;
         m->line_losing = false;
         m->line_scan_yaw = in->yaw_deg;
         m->line_scan_stage = m->line_shift_count = 0;
         m->line_stopping = m->stable = false;
     }
-    if (fabsf(in->yaw_deg - m->line_scan_yaw) > 10.0f) {
-        fail(m, PATH_ERROR); return false;
-    }
-    if ((uint32_t)(now - m->line_since) >= 30000U) {
-        fail(m, PATH_TIMEOUT); return false;
-    }
-    /* Stair-only map-left recovery: current chassis right, y < 0.
-     * Keep the original timeout/yaw bounds across retries. */
-    if (m->line_recovery) {
-        if (!in->settled) return false;
-        if (m->line_recovery == 1) {
-            if (emit(m, PC_MOVE, 0, -10, 8, 0, 5000)) m->line_recovery = 2;
-            return false;
-        }
-        m->line_recovery = 0;
-        m->line_best_count = count;
-        m->line_losing = m->line_stopping = m->stable = false;
-        m->line_scan_stage = m->line_shift_count = 0;
-        m->line_shift_since = 0;
-    }
-    /* Do not keep sweeping when coverage is demonstrably getting worse.
-     * Ignore brief sensor chatter; never calibrate a degraded pose. */
-    if (count < m->line_best_count) {
-        if (!m->line_losing) {
-            m->line_losing = true;
-            m->line_loss_since = now;
-        }
-        if ((uint32_t)(now - m->line_loss_since) >= 100U) {
-            if (m->step == 9 && m->line_retries < 2) {
-                hold(m);
-                ++m->line_retries;
-                m->line_recovery = 1;
-                m->stable = false;
-                return false;
-            }
-            fail(m, PATH_ERROR); return false;
-        }
-    } else {
-        m->line_losing = false;
-        m->line_best_count = count;
-    }
-    if (in->gray == 15) {
+    if (m->line_recovery == 6 || (uint32_t)(now - m->line_since) >= 2000U ||
+        (!m->line_recovery && fabsf(in->yaw_deg - m->line_scan_yaw) > 10.0f))
+        return line_skip(m, in);
+    if (line_aligned(in->gray)) {
         if (!m->line_stopping) {
             hold(m); m->line_stopping = true; m->stable = false;
             return false;
@@ -300,30 +290,12 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         if (!in->settled) return false;
         m->line_stopping = false;
     }
-    if (m->line_scan_stage < 3) {
-        static const float offsets[] = {-6, 6, 0};
-        float side = (m->line_retries & 1U) ? -1.0f : 1.0f;
-        float error = m->line_scan_yaw + side * offsets[m->line_scan_stage] - in->yaw_deg;
-        if (fabsf(error) <= 0.5f) {
-            hold(m); m->line_stopping = true;
-            ++m->line_scan_stage;
-            m->line_shift_since = 0;
-        } else {
-            (void)emit(m, PC_LINE_SEARCH, 0, 0, error > 0 ? 4 : -4, 0, 31000);
-        }
-    } else {
-        if (!m->line_shift_since) m->line_shift_since = now;
-        /* +7.5, -7.5, +15, -15 mm approximately, capped by total timeout. */
-        uint32_t duration = 250U * (m->line_shift_count + 1U);
-        if (duration > 1000U) duration = 1000U;
-        if ((uint32_t)(now - m->line_shift_since) >= duration) {
-            hold(m); m->line_stopping = true;
-            ++m->line_shift_count; m->line_scan_stage = 0;
-        } else {
-            (void)emit(m, PC_LINE_SEARCH, 0, (m->line_shift_count & 1U) ? -8 : 8,
-                       0, 0, 31000);
-        }
-    }
+    /* Front/rear imbalance chooses the turn; no alternating sweep or lateral hunt.
+     * Equal evidence cannot determine a turn from these digital probes. */
+    unsigned front = ((in->gray >> 3) & 1U) + ((in->gray >> 1) & 1U);
+    unsigned rear = ((in->gray >> 2) & 1U) + (in->gray & 1U);
+    if (front == rear) return line_skip(m, in);
+    (void)emit(m, PC_LINE_SEARCH, 0, 0, front < rear ? 4 : -4, 0, 31000);
     return false;
 }
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
@@ -332,7 +304,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->phase)
     {
     case 0:
-        if (PathLine_Align(m, now, in, 50000, 25)) /* Reverse only the post-orbit stair line approach. */
+        if (PathLine_Align(m, now, in, 50000, 30)) /* Reverse only the post-orbit stair line approach. */
         {
             m->phase = 5;
             m->point = m->grabs = 0; /* Stair count excludes disc and pillar balls. */
@@ -351,7 +323,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 2:
-        if (!m->waiting && in->gray != 15) {
+        if (!m->waiting && !m->line_skipped && !line_aligned(in->gray)) {
             m->line_active = false; m->phase = 4;
             break;
         }
@@ -487,7 +459,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     case 12:
         if (m->phase == 0)
         {
-            if (PathLine_Align(m, now, in, 50000, 25))
+            if (PathLine_Align(m, now, in, 50000, 30))
             {
                 m->phase = 1;
                 m->line_active = false;

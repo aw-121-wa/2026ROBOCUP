@@ -40,7 +40,11 @@ typedef enum
     PC_LINE_REFERENCE,
     PC_LINE_SEARCH,
     PC_LINE_CALIBRATE,
-    PC_RETURN_HOME
+    PC_RETURN_HOME,
+    PC_MAP_AXIS,
+    PC_MAP_LATERAL,
+    PC_MAP_HEADING,
+    PC_HOME_ALIGN
 } PathCommandKind;
 typedef struct
 {
@@ -55,7 +59,7 @@ typedef struct
     bool armed, fault, settled, motion_done;
     float yaw_deg;
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
-    uint8_t gray; /* active-low: bit3 PD3, bit2 PD0, bit1 PD1, bit0 PB13; stair target 1111 */
+    uint8_t gray; /* active-low: bit3 PD3, bit2 PD0, bit1 PD1, bit0 PB13; stair/warehouse target 0110 */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
@@ -78,10 +82,12 @@ typedef struct
     uint32_t line_since, line_shift_since;
     unsigned line_scan_stage, line_shift_count;
     unsigned line_best_count;
-    unsigned line_recovery, line_retries;
+    unsigned line_recovery, line_retries, line_reversals;
+    float line_scan_side;
     uint32_t line_loss_since;
     bool line_losing;
-    bool line_active, line_stopping;
+    bool line_active, line_stopping, line_skipped;
+    bool stair_heading_locked, warehouse_heading_locked;
     bool waiting, stable, expired;
     PathSend send;
     void *context;

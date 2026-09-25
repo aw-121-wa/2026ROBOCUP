@@ -252,6 +252,11 @@ static bool send(void *ctx, const PathCommand *c)
         motion_since = now;
         motion_timeout = c->timeout_ms;
         return true;
+    case PC_HOME_ALIGN:
+        if (!Chassis_AlignHome()) return false;
+        motion_pending=true; motion_continuous=false;
+        motion_since=now; motion_timeout=c->timeout_ms;
+        return true;
     case PC_RETURN_HOME:
         if (!Chassis_ReturnHome()) return false;
         motion_pending = true;
@@ -288,6 +293,17 @@ static bool send(void *ctx, const PathCommand *c)
         return true;
     case PC_LINE_REFERENCE:
         return Chassis_SetLineReference();
+    case PC_MAP_HEADING:
+        return Chassis_SetMapHeading(c->x);
+    case PC_MAP_AXIS:
+    case PC_MAP_LATERAL:
+        if (!(c->kind == PC_MAP_AXIS ? Chassis_AlignMapAxis() : Chassis_MapLateral(c->y)))
+            return false;
+        motion_pending = true;
+        motion_continuous = false;
+        motion_since = now;
+        motion_timeout = c->timeout_ms;
+        return true;
     case PC_ALIGN_ZERO:
     case PC_ROTATE:
         if (!(c->kind == PC_ALIGN_ZERO ? Chassis_AlignZero() : Chassis_Rotate(c->x)))

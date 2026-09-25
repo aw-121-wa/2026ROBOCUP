@@ -9,7 +9,7 @@ static bool send(void *ctx, const PathCommand *c) {
     Port *p = ctx; if (p->n == 512) return false; p->commands[p->n++] = *c; return true;
 }
 static PathInput ready(void) {
-    return (PathInput){.armed=true, .settled=true, .gray=15, .ir=true,
+    return (PathInput){.armed=true, .settled=true, .gray=6, .ir=true,
         .reply=PATH_OK, .turn_reply=PATH_OK};
 }
 static unsigned count(const Port *p, PathCommandKind k) {

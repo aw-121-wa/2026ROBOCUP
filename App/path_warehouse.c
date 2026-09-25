@@ -23,11 +23,20 @@ static void advance(PathMission *m, uint32_t now)
     if (m->point==9)
     {
         if (m->inventory.occupied) fail(m,PATH_ERROR);
-        else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->phase=5;
+        else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->phase=6;
     }
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
+    if (m->point==9 && m->phase==6 && !m->inventory.occupied && !m->inventory.uncertain) {
+        if (!m->waiting) {
+            if (!in->settled) return;
+            m->entered=now;
+            m->waiting=emit(m,(PathCommand){.kind=PC_HOME_ALIGN,.timeout_ms=15000});
+        } else if ((uint32_t)(now-m->entered)>=15000) fail(m,PATH_TIMEOUT);
+        else if (in->settled) { m->waiting=false; m->phase=5; m->entered=now; }
+        return;
+    }
     if (m->point==9 && m->phase==5 && !m->inventory.occupied && !m->inventory.uncertain) {
         if (!m->waiting) {
             if (!in->settled) return;

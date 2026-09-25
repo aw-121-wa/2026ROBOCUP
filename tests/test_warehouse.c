@@ -32,7 +32,7 @@ static int run(unsigned mask) {
         CHECK(BallInventory_Record(&m.inventory,i+1,order[i])==BALL_ADDED);
         BallInventory_Step(&m.inventory,false); expected++;
     }
-    PathInput in={.armed=true,.settled=true,.gray=15,.reply=PATH_OK,.turn_reply=PATH_WAIT};
+    PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_OK,.turn_reply=PATH_WAIT};
     unsigned finished_turns=0, turn_wait=0;
     for(unsigned t=0;t<30000 && m.result==PATH_RUNNING;t+=5) {
         if(turns>finished_turns) {
@@ -59,13 +59,13 @@ static int alignment(void) {
     init(); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
     CHECK(m.phase==4 && groups==0);
     Path_Tick(&m,10,&in); CHECK(last.kind==PC_LINE_SEARCH && calibrations==0);
-    in.gray=15; Path_Tick(&m,20,&in); Path_Tick(&m,25,&in);
+    in.gray=6; Path_Tick(&m,20,&in); Path_Tick(&m,25,&in);
     Path_Tick(&m,124,&in); CHECK(m.phase==4);
     Path_Tick(&m,125,&in); CHECK(m.phase==1 && calibrations==1);
     return 0;
 }
 static int errors(void) {
-    PathInput in={.armed=true,.settled=true,.gray=15,.reply=PATH_WAIT,.turn_reply=PATH_WAIT};
+    PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_WAIT,.turn_reply=PATH_WAIT};
     init(); CHECK(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
     BallInventory_Step(&m.inventory,false); m.phase=1;
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_TURN && groups==0);

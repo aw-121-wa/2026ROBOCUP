@@ -1,3 +1,11 @@
+# 当前规则（地图夹线恢复）
+
+阶梯和仓库目标为0110：PD1/PD0在线，PD3/PB13离线。停稳并连续满足100 ms后更新航向。
+
+搜索持续变差100 ms先反向试探，反向尝试耗尽后执行恢复：停稳、对齐起步地图基准最近的0或180度、地图左移30 mm、向地图右侧最多搜索100 mm。检测0110立即制动，停稳重检后校准。地图基准独立于白线校准；恢复最多两次，总30秒超时及普通搜索10度偏角保护保留。恢复对齐阶段允许转至地图轴线。
+
+以下为历史记录，以以上规则和当前代码为准。
+
 # Four-probe line alignment
 
 Physical front-to-rear probes: PD3, PD1, PD0, PB13. Active-low mask: PD3=8, PD1=2, PD0=4, PB13=1. User confirmed all four probes can simultaneously detect the white line.

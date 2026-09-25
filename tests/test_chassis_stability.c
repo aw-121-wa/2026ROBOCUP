@@ -80,21 +80,38 @@ int main(int argc,char **argv) {
         Chassis_Stop();tick();
         assert(!state.armed);
         for(int i=0;i<4;i++)assert(state.rpm_requested[i]==0 && state.rpm_pending[i]==0);
+    } else if(!strcmp(argv[1],"map")) {
+        Chassis_Hold();wait_stop();
+        state.yaw_rad=0;Chassis_BeginPath();
+        state.yaw_rad=170*RAD;path_yaw.continuous=170*RAD;
+        assert(Chassis_AlignMapAxis());
+        assert(fabsf(path_target-180*RAD)<1e-5f);
+        Chassis_Hold();wait_stop();state.yaw_rad=10*RAD;path_yaw.continuous=10*RAD;
+        assert(Chassis_AlignMapAxis());
+        assert(fabsf(path_target-180*RAD)<1e-5f); /* Near zero still targets map 180. */
+        Chassis_Hold();wait_stop();state.yaw_rad=180*RAD;
+        assert(Chassis_MapLateral(30));
+        assert(fabsf(dx)<1e-5f && fabsf(dy+1)<1e-5f);
+        Chassis_Hold();wait_stop();state.yaw_rad=0;
+        assert(Chassis_MapLateral(30));
+        assert(fabsf(dx)<1e-5f && fabsf(dy-1)<1e-5f);
     } else if(!strcmp(argv[1],"home")) {
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;Chassis_BeginPath();
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=0;
         assert(Chassis_ReturnHome());
-        assert(fabsf(planner.distance-hypotf(1000,500))<0.01f);
-        assert(fabsf(dx+1000/hypotf(1000,500))<1e-5f);
-        assert(fabsf(dy+500/hypotf(1000,500))<1e-5f);
+        float k=(hypotf(1000,500)+100)/hypotf(1000,500);
+        float ex=1000*k-10, ey=500*k+140, length=hypotf(ex,ey);
+        assert(fabsf(planner.distance-length)<0.01f);
+        assert(fabsf(dx+ex/length)<1e-5f);
+        assert(fabsf(dy+ey/length)<1e-5f);
         Chassis_Hold();wait_stop();
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=90*RAD;
-        assert(Chassis_ReturnHome());
-        assert(fabsf(dx+500/hypotf(1000,500))<1e-5f);
-        assert(fabsf(dy-1000/hypotf(1000,500))<1e-5f);
+        assert(!Chassis_ReturnHome());
+        assert(Chassis_AlignHome());
+        assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
-        state.x_mm=100;state.y_mm=200;
+        state.x_mm=100;state.y_mm=200;state.yaw_rad=map_yaw;
         assert(Chassis_ReturnHome() && !Chassis_MotionBusy());
         Chassis_Stop();assert(!Chassis_ReturnHome());
     } else if(!strcmp(argv[1],"line")) {
