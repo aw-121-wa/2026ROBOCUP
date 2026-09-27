@@ -38,6 +38,21 @@ int main(void) {
     Path_Tick(&m,2010,&in);assert(m.phase==2 && searches==old);
     m.step=13;m.point=0;m.phase=4;Path_Tick(&m,2020,&in);
     Path_Tick(&m,2025,&in);assert(m.warehouse_heading_locked && last.x==0);
+    for(unsigned split=2;split<=4;split+=2) {
+        init(&m,&in);m.step=13;in.gray=split|9U;
+        Path_Tick(&m,0,&in);assert(last.kind==PC_HOLD);
+        in.settled=false;Path_Tick(&m,5,&in);assert(last.kind==PC_HOLD);
+        in.settled=true;Path_Tick(&m,10,&in);
+        assert(last.kind==PC_MAP_SEARCH && last.y==-40 && searches==0);
+        in.gray=0;Path_Tick(&m,20,&in);assert(last.kind==PC_MAP_SEARCH);
+        in.gray=6;in.settled=false;Path_Tick(&m,30,&in);assert(last.kind==PC_HOLD);
+        in.settled=true;Path_Tick(&m,40,&in);Path_Tick(&m,45,&in);Path_Tick(&m,145,&in);
+        assert(references==1 && !m.warehouse_heading_locked);
+    }
+    init(&m,&in);m.step=13;in.gray=13;
+    Path_Tick(&m,0,&in);Path_Tick(&m,10,&in);
+    Path_Tick(&m,2000,&in);Path_Tick(&m,2005,&in);
+    assert(m.warehouse_heading_locked && last.kind==PC_MAP_HEADING && last.x==0);
     init(&m,&in);in.yaw_deg=NAN;Path_Tick(&m,0,&in);assert(m.result==PATH_ERROR);
     init(&m,&in);reject=true;Path_Tick(&m,0,&in);Path_Tick(&m,5,&in);Path_Tick(&m,105,&in);
     assert(m.result==PATH_ERROR);

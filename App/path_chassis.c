@@ -273,6 +273,35 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
     if (m->line_recovery == 6 || (uint32_t)(now - m->line_since) >= 2000U ||
         (!m->line_recovery && fabsf(in->yaw_deg - m->line_scan_yaw) > 10.0f))
         return line_skip(m, in);
+    /* Split inner pair: latch a map-right search, then restart calibration. */
+    unsigned inner = in->gray & 6U;
+    if (m->step != 9 && !m->line_shift_count && !m->line_recovery &&
+        (inner == 2U || inner == 4U)) {
+        hold(m);
+        m->line_recovery = 1;
+        m->line_shift_count = 1;
+        m->stable = m->line_stopping = false;
+        return false;
+    }
+    if (m->line_recovery == 1) {
+        if (!in->settled) return false;
+        m->line_recovery = 2;
+    }
+    if (m->line_recovery == 2) {
+        if (inner == 6U) {
+            hold(m);
+            m->line_recovery = 3;
+        } else {
+            (void)emit(m, PC_MAP_SEARCH, 0, -40, 0, 0, 3000);
+        }
+        return false;
+    }
+    if (m->line_recovery == 3) {
+        if (!in->settled) return false;
+        m->line_recovery = 0;
+        m->line_since = now;
+        m->line_scan_yaw = in->yaw_deg;
+    }
     if (line_aligned(in->gray)) {
         if (!m->line_stopping) {
             hold(m); m->line_stopping = true; m->stable = false;

@@ -44,7 +44,8 @@ typedef enum
     PC_MAP_AXIS,
     PC_MAP_LATERAL,
     PC_MAP_HEADING,
-    PC_HOME_ALIGN
+    PC_HOME_ALIGN,
+    PC_MAP_SEARCH
 } PathCommandKind;
 typedef struct
 {

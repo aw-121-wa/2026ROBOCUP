@@ -508,6 +508,12 @@ bool Chassis_AlignHome(void)
     rotate_tolerance_deg = 0.5f;
     return true;
 }
+bool Chassis_MapSearch(float mm_s)
+{
+    if (!path_heading_enabled) return false;
+    float angle = map_yaw - state.yaw_rad;
+    return Chassis_Body(-sinf(angle)*mm_s, cosf(angle)*mm_s, 0);
+}
 bool Chassis_MapLateral(float mm)
 {
     if (!path_heading_enabled || !Chassis_IsSettled()) return false;

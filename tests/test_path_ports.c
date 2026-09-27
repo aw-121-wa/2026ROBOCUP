@@ -451,6 +451,7 @@ bool Chassis_LineSearch(float y,float w) { return Chassis_Body(0,y,w); }
 bool Chassis_CalibrateLine(void) { if(moving)return false; line_calibrations++; measured_yaw=0; return true; }
 
 bool Chassis_AlignMapAxis(void) { moving=true; return true; }
+bool Chassis_MapSearch(float mm_s) { (void)mm_s; moving=true; return true; }
 bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
 bool Chassis_SetMapHeading(float degrees) { (void)degrees; return !moving; }

@@ -293,6 +293,11 @@ static bool send(void *ctx, const PathCommand *c)
         return true;
     case PC_LINE_REFERENCE:
         return Chassis_SetLineReference();
+    case PC_MAP_SEARCH:
+        if (!Chassis_MapSearch(c->y)) return false;
+        if (!motion_pending) { motion_since = now; motion_timeout = c->timeout_ms; }
+        motion_pending = true;
+        return true;
     case PC_MAP_HEADING:
         return Chassis_SetMapHeading(c->x);
     case PC_MAP_AXIS:

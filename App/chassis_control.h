@@ -57,6 +57,7 @@ bool Chassis_AlignHome(void);
 bool Chassis_AlignMapAxis(void);
 bool Chassis_SetMapHeading(float degrees);
 bool Chassis_MapLateral(float mm);
+bool Chassis_MapSearch(float mm_s);
 /* Normal stop ramps to zero; fault/cancel paths bypass the ramp. */
 void Chassis_Hold(void);
 void Chassis_HoldImmediate(void);
