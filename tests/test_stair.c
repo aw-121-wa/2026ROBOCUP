@@ -25,7 +25,7 @@ static int route(unsigned mask, unsigned expected_checks, unsigned balls) {
         Path_Tick(&m,t,&in);
     }
     CHECK(m.result == PATH_DONE);
-    CHECK(ng==3 && groups[0]==2 && groups[1]==105 && groups[2]==3);
+    CHECK(ng==4 && groups[0]==2 && groups[1]==105 && groups[2]==4 && groups[3]==3);
     CHECK(m.step==13);
     CHECK(checks == expected_checks);
     CHECK(m.grabs == balls);

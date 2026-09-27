@@ -246,7 +246,7 @@ class BridgeCore:
         if command == "PING":
             self._send_line("PONG")
             return
-        match = re.fullmatch(r'GROUP (0|1|2|3|100|105|109|110|111)', command)
+        match = re.fullmatch(r'GROUP (0|1|2|3|4|100|105|109|110|111)', command)
         if match:
             with self._lock:
                 if self._worker is not None: return

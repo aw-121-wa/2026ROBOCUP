@@ -59,7 +59,7 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
         r->stage = 1;
     }
     else if (!strcmp(v, "GROUP") && (r->stage == 2 || r->stage == 5) &&
-             (a == 0 || a == 1 || a == 2 || a == 3 || a == 100 || a == 105 ||
+             (a == 0 || a == 1 || a == 2 || a == 3 || a == 4 || a == 100 || a == 105 ||
               a == 109 || a == 110 || a == 111))
     {
         snprintf(r->request, sizeof(r->request), "GROUP %lu\r\n", (unsigned long)a);
