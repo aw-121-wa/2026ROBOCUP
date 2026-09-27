@@ -9,7 +9,8 @@ static bool bad;
 static bool send(void *ctx,const PathCommand *c) {
     (void)ctx; last=*c;
     if(c->kind==PC_RETURN_HOME) homes++;
-    if(c->kind==PC_LINE_CALIBRATE) calibrations++;
+    if(c->kind==PC_LINE_CALIBRATE) bad=true;
+    if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
     if(c->kind==PC_MOVE) { moves++; if(c->x!=(moves==1 ? 100 : 200) || c->y!=0) bad=true; }
     if(c->kind==PC_TURN) { turns++; if(c->argument>1) bad=true; }
     if(c->kind==PC_GROUP) {

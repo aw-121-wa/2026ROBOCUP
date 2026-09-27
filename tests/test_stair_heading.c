@@ -26,6 +26,15 @@ int main(void) {
         Path_Tick(&m,5,&in);Path_Tick(&m,105,&in);
         assert(references==1 && m.phase==2);
     }
+    for(unsigned step=12;step<=13;step++) {
+        for(unsigned i=0;i<3;i++) {
+            init(&m,&in);m.step=step;m.phase=step==12?1:4;
+            in.gray=valid[i];in.yaw_deg=3.5f;in.imu_yaw_deg=3.5f;
+            Path_Tick(&m,0,&in);Path_Tick(&m,5,&in);Path_Tick(&m,105,&in);
+            assert(references==0 && last.kind==PC_MAP_HEADING && last.x==0);
+            assert(!m.warehouse_heading_locked);
+        }
+    }
     init(&m,&in);in.gray=7;Path_Tick(&m,0,&in);
     assert(last.kind==PC_LINE_SEARCH && last.speed>0);
     in.gray=14;Path_Tick(&m,10,&in);
@@ -47,7 +56,8 @@ int main(void) {
         in.gray=0;Path_Tick(&m,20,&in);assert(last.kind==PC_MAP_SEARCH);
         in.gray=6;in.settled=false;Path_Tick(&m,30,&in);assert(last.kind==PC_HOLD);
         in.settled=true;Path_Tick(&m,40,&in);Path_Tick(&m,45,&in);Path_Tick(&m,145,&in);
-        assert(references==1 && !m.warehouse_heading_locked);
+        assert(references==0 && !m.warehouse_heading_locked);
+        assert(last.kind==PC_MAP_HEADING && last.x==0);
     }
     init(&m,&in);m.step=13;in.gray=13;
     Path_Tick(&m,0,&in);Path_Tick(&m,10,&in);

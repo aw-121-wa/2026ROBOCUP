@@ -18,7 +18,7 @@ static bool moving, rfid_init_failure;
 static bool gray_line = true;
 static bool outer_line;
 static float yaw, measured_yaw;
-static unsigned line_calibrations, zero_aligns, blend_moves, arc_moves;
+static unsigned map_headings, line_calibrations, zero_aligns, blend_moves, arc_moves;
 static float blend_end, arc_begin;
 
 uint32_t HAL_GetTick(void) { return now; }
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
             CHECK(wire[0]==0 && !path_diagnostics.fault);
         }
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==12 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==8 && map_headings==4 && zero_aligns==0 && path_diagnostics.rfid_count==0);
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());
@@ -460,6 +460,6 @@ bool Chassis_AlignMapAxis(void) { moving=true; return true; }
 bool Chassis_MapSearch(float mm_s) { (void)mm_s; moving=true; return true; }
 bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
-bool Chassis_SetMapHeading(float degrees) { (void)degrees; return !moving; }
+bool Chassis_SetMapHeading(float degrees) { if(moving || degrees!=0)return false; map_headings++; return true; }
 
 bool Chassis_AlignHome(void) { moving=true; return true; }

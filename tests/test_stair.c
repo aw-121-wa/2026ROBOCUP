@@ -68,7 +68,7 @@ static int exit_route(void) {
     in.gray=6; Path_Tick(&m,2085,&in); CHECK(last.kind==PC_HOLD);
     Path_Tick(&m,2090,&in); Path_Tick(&m,2189,&in); CHECK(m.step==12);
     Path_Tick(&m,2190,&in);
-    CHECK(last.kind==PC_LINE_CALIBRATE && m.step==13);
+    CHECK(last.kind==PC_MAP_HEADING && last.x==0 && m.step==13);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; m.phase=1; in.gray=14;
     Path_Tick(&m,0,&in); Path_Tick(&m,30000,&in);
     Path_Tick(&m,30005,&in);

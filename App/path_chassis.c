@@ -310,7 +310,9 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         if (!in->settled) { m->stable = false; return false; }
         if (!m->stable) { m->stable = true; m->stable_since = now; }
         if ((uint32_t)(now - m->stable_since) < 100U) return false;
-        if (!emit(m, PC_LINE_CALIBRATE, 0, 0, 0, 0, 0)) return false;
+        // Warehouse probes confirm position, not absolute heading.
+        if (!emit(m, m->step == 9 ? PC_LINE_CALIBRATE : PC_MAP_HEADING,
+                  0, 0, 0, 0, 0)) return false;
         m->line_active = m->line_stopping = m->stable = false;
         return true;
     }
