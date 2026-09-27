@@ -119,7 +119,7 @@ static int chassis_only(void) {
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) Path_Tick(&m,t,&in);
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==2);
-    CHECK(count(&p,PC_GROUP)==2 && count(&p,PC_STAIR)==2 && count(&p,PC_TURN)==0);
+    CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR)==2 && count(&p,PC_TURN)==0);
     const float expected[]={55,90,117,90,90,90,117,90,100,200,100,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {

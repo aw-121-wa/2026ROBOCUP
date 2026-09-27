@@ -330,6 +330,12 @@ int main(int argc, char **argv) {
         id(101); tick(); finish_store();
         CHECK(!strcmp(wire,"STAIR_RFID_OK 2\r\n") && !moving);
         reply("STAIR_DONE 2\r\n"); tick();
+        for(unsigned i=0;i<20 && strcmp(wire,"GROUP 4\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"GROUP 4\r\n") && !moving);
+        reply("GROUP_ACK 4\r\n");
+        for(unsigned i=0;i<10;i++) tick();
+        CHECK(!moving && !strcmp(wire,"GROUP 4\r\n"));
+        reply("GROUP_DONE 4\r\n"); tick();
         for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 3\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"STAIR_CHECK 3\r\n"));
         reply("STAIR_ACK 3\r\nSTAIR_ACTION_DONE 3\r\n"); tick();

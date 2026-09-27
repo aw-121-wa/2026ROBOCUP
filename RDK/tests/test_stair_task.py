@@ -91,6 +91,23 @@ class StairRecognitionTests(unittest.TestCase):
         self.assertTrue(cancelled.is_set())
         self.assertFalse(gate.dispatch_if_allowed(lambda: self.fail('dispatched after cancel')))
 
+    def test_stair_uses_independent_roi_without_shared_config(self):
+        import tempfile
+        from dataclasses import replace
+        from rdk_vision.config import load_config, save_config
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'rdk_vision').mkdir()
+            config = load_config(ROOT / 'rdk_vision/config.yaml')
+            config = replace(config, roi=replace(config.roi, height=260))
+            save_config(config, root / 'rdk_vision/stair_runtime.yaml')
+            with patch('stair_task.LatestFrameCamera'), \
+                 patch('stair_task.HiwonderActionBoard'), \
+                 patch('stair_task.recognize_point', return_value=False) as recognize:
+                run_stair_point(root, 1, rfid_gate=DiscRfidGate(1),
+                                on_action_complete=lambda _: None)
+                self.assertEqual(recognize.call_args.args[1].config.roi.height, 260)
+
     def test_point_groups_and_stair_profile(self):
         with patch('stair_task.LatestFrameCamera') as camera, \
              patch('stair_task.HiwonderActionBoard') as board, \
@@ -114,14 +131,14 @@ class StairBridgeTests(unittest.TestCase):
         lines, groups = [], []
         core = BridgeCore(lines.append, lambda **kw: 0,
             run_stair=lambda point, **kw: False, run_group=groups.append)
-        for group in (2, 105):
+        for group in (2, 4, 105):
             core.handle(f'GROUP {group}')
             self.assertTrue(core.wait_for_idle(1))
             self.assertIn(f'GROUP_DONE {group}', lines)
         core.handle('STAIR_CHECK 4')
         self.assertTrue(core.wait_for_idle(1))
         self.assertEqual(lines[-2:], ['STAIR_ACK 4', 'STAIR_NONE 4'])
-        self.assertEqual(groups, [2, 105])
+        self.assertEqual(groups, [2, 4, 105])
 
     def test_only_matching_rfid_releases_point(self):
         lines = []

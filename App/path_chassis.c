@@ -381,12 +381,35 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 3:
+        if (m->point == 1)
+        {
+            m->phase = 6;
+            m->entered = now;
+            break;
+        }
+        /* Other points keep the existing retreat sequence. */
         if (m->point == 7)
         {
             hold(m);
             if (m->result == PATH_RUNNING) next(m, now);
         }
         else if (move(m, in, retreat[m->point], 0, 40))
+        {
+            ++m->point;
+            m->phase = 4;
+            m->entered = now;
+            m->stable = false;
+        }
+        break;
+    case 6: /* Low section complete: G4 must finish before the 117 mm retreat. */
+        if (group(m, now, in, 4))
+        {
+            m->phase = 7;
+            m->entered = now;
+        }
+        break;
+    case 7:
+        if (move(m, in, retreat[m->point], 0, 40))
         {
             ++m->point;
             m->phase = 4;

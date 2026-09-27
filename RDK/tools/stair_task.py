@@ -3,7 +3,7 @@ import time
 
 from rdk_vision.ball_detector import BallDetector
 from rdk_vision.camera import LatestFrameCamera
-from rdk_vision.task_config import load_task_config
+from rdk_vision.config import load_config
 from hiwonder_action import HiwonderActionBoard
 
 
@@ -59,7 +59,9 @@ def run_stair_point(project_root, point, *, rfid_gate, on_action_complete):
     if not 1 <= point <= 8:
         raise ValueError('STAIR point must be 1..8')
     group = 106 if point <= 2 else 107 if point <= 6 else 108
-    config = load_task_config(project_root / 'rdk_vision/config.yaml', 'stair')
+    config_path = project_root / 'rdk_vision/stair_runtime.yaml'
+    config = load_config(config_path)
+    print(f'STAIR CONFIG: {config_path} ROI={config.roi} BALL={config.ball}', flush=True)
     camera = LatestFrameCamera(config.camera)
     try:
         camera.start()
