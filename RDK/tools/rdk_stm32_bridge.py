@@ -28,6 +28,7 @@ from pillar_ball_trigger import PillarBallTrigger
 from stair_task import run_stair_point
 from vision_servo_direct_test import build_parser as build_disc_parser, run_disc_task
 from rdk_vision.config import load_config
+from shared_task_camera import SharedTaskCamera
 
 DEFAULT_DISC_TIMEOUT_S = 60.0
 
@@ -35,12 +36,14 @@ def run_action_group(group: int) -> None:
     with HiwonderActionBoard('/dev/ttyS1', 9600) as board:
         board.run_group(group, timeout_s=30.0)
 
-def run_pillar_in_process(project_root: Path, **kwargs) -> int:
+def run_pillar_in_process(project_root: Path, *, camera_session=None, **kwargs) -> int:
     args = build_disc_arguments(project_root)
     args.prep_group = 103
     args.trigger_group = 104
     args.max_actions = 59  # Remaining entries in the STM32 64-UID result buffer.
     config = load_config(project_root / 'rdk_vision' / 'pillar_runtime.yaml')
+    if camera_session is not None:
+        kwargs['camera'] = camera_session.borrow(config.camera)
     # Shared detector/ROI/HSV; pillar stops on any normally valid fresh ball.
     return run_disc_task(args, config=config, trigger=PillarBallTrigger(), **kwargs)
 
@@ -119,6 +122,7 @@ class BridgeCore:
         run_group=run_action_group,
         run_pillar=None,
         run_stair=None,
+        close_camera=lambda: None,
     ):
         self._send_line = send_line
         self._run_disc = run_disc
@@ -131,6 +135,7 @@ class BridgeCore:
         self._run_group = run_group
         self._run_pillar = run_pillar
         self._run_stair = run_stair
+        self._close_camera = close_camera
         self._stair_point = 0
         self._mode = None
         self._cancel = threading.Event()
@@ -141,11 +146,15 @@ class BridgeCore:
 
     def _group_main(self, group):
         try:
+            if group in (0, 3):
+                self._close_camera()
             self._run_group(group)
             success = not self._cancel.is_set()
         except Exception as exc:
             print(f'GROUP failed: {exc!r}', flush=True)
             success = False
+        if not success:
+            self._close_camera()
         with self._lock:
             self._worker = None
             self._mode = None
@@ -177,6 +186,8 @@ class BridgeCore:
         except Exception as exc:
             print(f'PILLAR failed: {exc!r}', flush=True)
             success = False
+        if not success:
+            self._close_camera()
         gate.cancel()
         with self._lock:
             self._worker = self._gate = self._deadline = self._mode = None
@@ -196,6 +207,8 @@ class BridgeCore:
                     status = 'NONE'
         except Exception as exc:
             print(f'STAIR point={point} failed: {exc!r}', flush=True)
+        if status == 'ERROR':
+            self._close_camera()
         gate.cancel()
         with self._lock:
             self._worker = self._gate = self._deadline = self._mode = None
@@ -216,6 +229,7 @@ class BridgeCore:
 
     def _worker_main(self, gate: DiscRfidGate) -> None:
         try:
+            self._close_camera()
             try:
                 rc = int(
                     self._run_disc(
@@ -371,6 +385,8 @@ class BridgeCore:
 
     def tick(self) -> None:
         with self._lock:
+            if self._worker is None and self._cancel.is_set():
+                self._close_camera()
             gate = self._gate
             deadline = self._deadline
             if gate is not None and deadline is not None and self._clock() >= deadline:
@@ -387,6 +403,7 @@ class BridgeCore:
             worker = self._worker
         if worker is not None and worker is not threading.current_thread():
             worker.join()
+        self._close_camera()
 
     def wait_for_idle(self, timeout_s: float) -> bool:
         with self._lock:
@@ -415,6 +432,12 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
     while True:
         ser = None
         core = None
+        camera_session = SharedTaskCamera()
+        def run_shared_stair(point, **kwargs):
+            level = 'low' if point <= 2 else 'high' if point <= 6 else 'mid'
+            config = load_config(project_root / 'rdk_vision' / f'stair_{level}.yaml')
+            return run_stair_point(project_root, point,
+                                   camera=camera_session.borrow(config.camera), **kwargs)
         try:
             print(f"Opening STM32 link {port} @ {baudrate}...", flush=True)
             ser = open_serial(port, baudrate, timeout=0.1)
@@ -425,8 +448,9 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
             core = BridgeCore(
                 send_line=send_line,
                 run_disc=lambda **kwargs: run_disc_in_process(project_root, **kwargs),
-                run_pillar=lambda **kwargs: run_pillar_in_process(project_root, **kwargs),
-                run_stair=lambda point, **kwargs: run_stair_point(project_root, point, **kwargs),
+                run_pillar=lambda **kwargs: run_pillar_in_process(project_root, camera_session=camera_session, **kwargs),
+                run_stair=run_shared_stair,
+                close_camera=camera_session.close,
             )
             rx = bytearray()
             while True:
@@ -450,6 +474,7 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
         finally:
             if core is not None:
                 core.shutdown()
+            camera_session.close()
             if ser is not None:
                 try:
                     ser.close()

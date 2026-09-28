@@ -55,7 +55,7 @@ def recognize_point(camera, detector, gate, grab, on_action_complete, *,
         sleep(.005)
 
 
-def run_stair_point(project_root, point, *, rfid_gate, on_action_complete):
+def run_stair_point(project_root, point, *, rfid_gate, on_action_complete, camera=None):
     if not 1 <= point <= 8:
         raise ValueError('STAIR point must be 1..8')
 
@@ -76,7 +76,7 @@ def run_stair_point(project_root, point, *, rfid_gate, on_action_complete):
         f'file={config_path} ROI={config.roi} BALL={config.ball}',
         flush=True,
     )
-    camera = LatestFrameCamera(config.camera)
+    camera = camera if camera is not None else LatestFrameCamera(config.camera)
     try:
         camera.start()
         if not camera.wait_until_ready(config.camera.startup_timeout_ms):
