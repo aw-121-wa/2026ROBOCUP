@@ -333,9 +333,9 @@ bool Chassis_ReturnHome(void)
     /* Extend map Y only; retain the previously validated diagonal extension. */
     float map_y = -sinf(map_yaw) * x + cosf(map_yaw) * y;
     float map_x = cosf(map_yaw)*x + sinf(map_yaw)*y;
-    float trim_x = -copysignf(fminf(10.0f, fabsf(map_x)), map_x);
+    float trim_x = -copysignf(fminf(15.0f, fabsf(map_x)), map_x);
     x += cosf(map_yaw)*trim_x; y += sinf(map_yaw)*trim_x;
-    float extra_y = map_y > 0 ? 140.0f : map_y < 0 ? -140.0f : 0.0f;
+    float extra_y = map_y > 0 ? 30.0f : map_y < 0 ? -30.0f : 0.0f;
     x -= sinf(map_yaw) * extra_y;
     y += cosf(map_yaw) * extra_y;
     float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);
@@ -489,25 +489,19 @@ bool Chassis_SetMapHeading(float degrees)
     integral = 0;
     return true; /* No stationary rotation; subsequent moves close the yaw loop. */
 }
-bool Chassis_AlignMapAxis(void)
+static bool align_map_heading(float degrees, float tolerance)
 {
     if (!path_heading_enabled || !Chassis_IsSettled()) return false;
-    float error = Angle_Wrap(map_yaw + 180.0f * RAD - state.yaw_rad);
+    float target = Angle_Wrap(map_yaw + degrees * RAD);
+    float error = Angle_Wrap(target - state.yaw_rad);
     if (!isfinite(error) || !Chassis_Rotate(0)) return false;
     path_target = path_yaw.continuous + error;
-    route_heading = heading = Angle_Wrap(state.yaw_rad + error);
+    route_heading = heading = target;
+    rotate_tolerance_deg = tolerance;
     return true;
 }
-bool Chassis_AlignHome(void)
-{
-    if (!path_heading_enabled || !Chassis_IsSettled()) return false;
-    float error = Angle_Wrap(map_yaw-state.yaw_rad);
-    if (!isfinite(error) || !Chassis_Rotate(0)) return false;
-    path_target = path_yaw.continuous + error;
-    route_heading = heading = map_yaw;
-    rotate_tolerance_deg = 0.5f;
-    return true;
-}
+bool Chassis_AlignMapAxis(void) { return align_map_heading(180, 0.05f); }
+bool Chassis_AlignHome(void) { return align_map_heading(0, 0.5f); }
 bool Chassis_MapSearch(float mm_s)
 {
     if (!path_heading_enabled) return false;
@@ -580,6 +574,10 @@ bool Chassis_SetLineReference(void)
     line_yaw_reference = path_heading_active()
                              ? yaw + Angle_Wrap(route_heading - state.yaw_rad) / RAD : yaw;
     return true;
+}
+float Chassis_MapYaw(void)
+{
+    return Angle_Wrap(state.yaw_rad - map_yaw) / RAD;
 }
 float Chassis_ContinuousYaw(void)
 {

@@ -56,11 +56,18 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
     uint8_t code=(uint8_t)(((m->point%3+1)<<4) | (m->point/3+1));
     switch(m->phase)
     {
-    case 0: /* First approach: 100 mm; subsequent column changes: 200 mm. */
+    case 0: /* Start at the detected line; only subsequent columns require a move. */
+        if (m->point==0 && !m->waiting) {
+            if (!in->settled) break;
+            m->phase=4;
+            m->line_active=m->stable=false;
+            m->entered=now;
+            break;
+        }
         if (!m->waiting)
         {
             m->entered=now;
-            m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=m->point==0 ? 100 : 200,
+            m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=200,
                                           .speed=40,.timeout_ms=30000});
         }
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
@@ -83,6 +90,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case 1:
     {
+        if (!PathHeading_Ready(m,now,in)) break;
         if (!in->settled) { fail(m,PATH_ERROR); break; }
         int slot=BallInventory_Find(&m->inventory,code);
         if (slot<0) advance(m,now); /* Missing ball: no arm action, still visit all columns. */
@@ -107,6 +115,12 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (in->turn_reply==PATH_OK) m->phase=1;
         break;
     case 3:
+        if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
+        if (!m->waiting && !m->line_skipped && !PathLine_Aligned(in->gray)) {
+            m->line_active=false;
+            m->phase=4;
+            break;
+        }
         if (!in->settled) { fail(m,PATH_ERROR); break; }
         if (!m->waiting)
         {
@@ -118,8 +132,11 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (in->reply==PATH_OK)
         {
             if (!BallInventory_Unload(&m->inventory,code)) fail(m,PATH_ERROR);
-            else advance(m,now);
+            else { m->waiting=false; m->phase=7; }
         }
+        break;
+    case 7: /* Arm completion acknowledged; now it is safe to correct yaw. */
+        if (PathHeading_Ready(m,now,in)) advance(m,now);
         break;
     default:
         fail(m,PATH_ERROR);

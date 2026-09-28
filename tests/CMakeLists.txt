@@ -138,6 +138,6 @@ target_include_directories(test_chassis_stability PRIVATE chassis_stubs path_por
 target_compile_definitions(test_chassis_stability PRIVATE CHASSIS_TELEMETRY_ENABLE=0)
 target_compile_options(test_chassis_stability PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_chassis_stability PRIVATE m)
-foreach(case heading blend orbit slew stop fault manual align immediate line)
+foreach(case heading blend orbit slew stop fault manual align immediate line map home map_search)
     add_test(NAME chassis_stability_${case} COMMAND test_chassis_stability ${case})
 endforeach()

@@ -17,7 +17,7 @@ static unsigned holds, turn_positions;
 static bool moving, rfid_init_failure;
 static bool gray_line = true;
 static bool outer_line;
-static float yaw, measured_yaw;
+static float yaw, measured_yaw, map_yaw_test;
 static unsigned map_headings, line_calibrations, zero_aligns, blend_moves, arc_moves;
 static float blend_end, arc_begin;
 
@@ -47,6 +47,7 @@ unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
 const ChassisState *Chassis_GetState(void) { return &state; }
 bool Chassis_MotionBusy(void) { return moving; }
 bool Chassis_IsSettled(void) { return !moving; }
+float Chassis_MapYaw(void) { return map_yaw_test; }
 float Chassis_ContinuousYaw(void) { return yaw; }
 float Chassis_MeasuredYaw(void) { return measured_yaw; }
 float Chassis_LineYaw(void) { return measured_yaw; }
@@ -188,7 +189,7 @@ int main(int argc, char **argv) {
             CHECK(wire[0]==0 && !path_diagnostics.fault);
         }
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==8 && map_headings==4 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==0 && map_headings==12 && zero_aligns==0 && path_diagnostics.rfid_count==0);
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());
@@ -320,7 +321,7 @@ int main(int argc, char **argv) {
         measured_yaw=5;
         reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();
         for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 1\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving && line_calibrations==1 && zero_aligns==0);
+        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving && line_calibrations==0 && map_headings==1 && zero_aligns==0);
         reply("STAIR_ACK 1\r\nSTAIR_NONE 1\r\n"); tick();
         for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 2\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"STAIR_CHECK 2\r\n"));
@@ -456,10 +457,10 @@ void Chassis_HoldImmediate(void) { Chassis_Hold(); }
 bool Chassis_LineSearch(float y,float w) { return Chassis_Body(0,y,w); }
 bool Chassis_CalibrateLine(void) { if(moving)return false; line_calibrations++; measured_yaw=0; return true; }
 
-bool Chassis_AlignMapAxis(void) { moving=true; return true; }
+bool Chassis_AlignMapAxis(void) { map_yaw_test=180; moving=true; return true; }
 bool Chassis_MapSearch(float mm_s) { (void)mm_s; moving=true; return true; }
 bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
-bool Chassis_SetMapHeading(float degrees) { if(moving || degrees!=0)return false; map_headings++; return true; }
+bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=180))return false; map_headings++; map_yaw_test=degrees; return true; }
 
-bool Chassis_AlignHome(void) { moving=true; return true; }
+bool Chassis_AlignHome(void) { map_yaw_test=0; moving=true; return true; }

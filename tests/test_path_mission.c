@@ -117,20 +117,20 @@ static int chassis_only(void) {
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==25);
     in.ir=true; in.yaw_deg=0;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) Path_Tick(&m,t,&in);
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?180:0; Path_Tick(&m,t,&in); }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==2);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR)==2 && count(&p,PC_TURN)==0);
-    const float expected[]={55,90,117,90,90,90,117,90,100,200,100,200,200};
+    const float expected[]={25,90,117,90,90,90,117,90,100,180,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
-        CHECK(n<13 && p.commands[i].x==expected[n] && p.commands[i].y==0); n++;
+        CHECK(n<12 && p.commands[i].x==expected[n] && p.commands[i].y==0); n++;
     }
-    CHECK(n==13);
+    CHECK(n==12);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) Path_Tick(&m,t,&in);
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?180:0; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
-    CHECK(count(&p,PC_MOVE)==3 && count(&p,PC_ROTATE)==0);
+    CHECK(count(&p,PC_MOVE)==2 && count(&p,PC_ROTATE)==0);
     return 0;
 }
 static int chassis_errors(void) {

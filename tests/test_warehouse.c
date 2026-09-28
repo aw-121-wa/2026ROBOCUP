@@ -11,7 +11,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_RETURN_HOME) homes++;
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=(moves==1 ? 100 : 200) || c->y!=0) bad=true; }
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0) bad=true; }
     if(c->kind==PC_TURN) { turns++; if(c->argument>1) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }
@@ -44,7 +44,7 @@ static int run(unsigned mask) {
         }
         Path_Tick(&m,t,&in);
     }
-    CHECK(m.result==PATH_DONE && moves==3 && calibrations==3 && homes==1 && !bad);
+    CHECK(m.result==PATH_DONE && moves==2 && calibrations==3 && homes==1 && !bad);
     CHECK(groups==expected && m.inventory.placed==expected && !m.inventory.occupied);
     unsigned n=0;
     for(unsigned col=1;col<=3;col++) for(unsigned row=1;row<=3;row++) {
@@ -59,7 +59,7 @@ static int alignment(void) {
     PathInput in={.armed=true,.settled=true,.gray=7};
     init(); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
     CHECK(m.phase==4 && groups==0);
-    Path_Tick(&m,10,&in); CHECK(last.kind==PC_LINE_SEARCH && calibrations==0);
+    Path_Tick(&m,10,&in); CHECK(last.kind==PC_MAP_SEARCH && calibrations==1);
     in.gray=6; Path_Tick(&m,20,&in); Path_Tick(&m,25,&in);
     Path_Tick(&m,124,&in); CHECK(m.phase==4);
     Path_Tick(&m,125,&in); CHECK(m.phase==1 && calibrations==1);
@@ -77,13 +77,13 @@ static int errors(void) {
     Path_Tick(&m,100,&in); CHECK(m.inventory.occupied==1);
     in.reply=PATH_FAILED; Path_Tick(&m,105,&in); CHECK(m.result==PATH_ERROR && m.inventory.occupied==1);
     init(); m.inventory.uncertain=true; Path_Tick(&m,0,&in); CHECK(m.result==PATH_ERROR && moves==0);
-    init(); Path_Tick(&m,0,&in); in.settled=false;
+    init(); m.point=3; Path_Tick(&m,0,&in); in.settled=false;
     Path_Tick(&m,30000,&in); CHECK(m.result==PATH_TIMEOUT && groups==0);
     init(); Path_Cancel(&m); CHECK(m.result==PATH_CANCELED && groups==0);
     init(); m.inventory.occupied=1; m.inventory.uid[0]=123; /* Unknown destination: never guess a row. */
     in.settled=true;
     for(unsigned t=0;t<1000 && m.result==PATH_RUNNING;t+=5) Path_Tick(&m,t,&in);
-    CHECK(m.result==PATH_ERROR && moves==3 && groups==0 && m.inventory.occupied==1);
+    CHECK(m.result==PATH_ERROR && moves==2 && groups==0 && m.inventory.occupied==1);
     return 0;
 }
 int main(void) {

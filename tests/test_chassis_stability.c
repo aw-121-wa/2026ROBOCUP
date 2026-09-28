@@ -80,6 +80,13 @@ int main(int argc,char **argv) {
         Chassis_Stop();tick();
         assert(!state.armed);
         for(int i=0;i<4;i++)assert(state.rpm_requested[i]==0 && state.rpm_pending[i]==0);
+    } else if(!strcmp(argv[1],"map_search")) {
+        assert(Chassis_SetMapHeading(0));
+        fake_imu.yaw_deg=5;tick();
+        assert(Chassis_MapSearch(-40));tick();
+        assert(!line_search && fabsf(body_w)<1e-6f);
+        assert(state.yaw_error<0 && body_output[2]<0);
+        assert(fabsf(Chassis_MapYaw()-5)<0.1f);
     } else if(!strcmp(argv[1],"map")) {
         Chassis_Hold();wait_stop();
         state.yaw_rad=0;Chassis_BeginPath();
@@ -101,7 +108,7 @@ int main(int argc,char **argv) {
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=0;
         assert(Chassis_ReturnHome());
         float k=(hypotf(1000,500)+100)/hypotf(1000,500);
-        float ex=1000*k-10, ey=500*k+140, length=hypotf(ex,ey);
+        float ex=1000*k-15, ey=500*k+30, length=hypotf(ex,ey);
         assert(fabsf(planner.distance-length)<0.01f);
         assert(fabsf(dx+ex/length)<1e-5f);
         assert(fabsf(dy+ey/length)<1e-5f);

@@ -672,6 +672,7 @@ void PathPorts_Tick(void)
                     .motion_done = motion_done,
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
+                    .map_yaw_deg = Chassis_MapYaw(),
                     .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,
                     .vision_ready = rdk.pillar_ready,

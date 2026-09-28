@@ -223,19 +223,41 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
     }
     return false;
 }
-/* Four-probe gate: bounded yaw sweep at each nearby lateral position.
- * Bidirectional search avoids assuming which side a missing digital probe is on. */
-static bool line_aligned(uint8_t gray)
+/* Absolute heading is checked only at safe boundaries, never during an arm task. */
+bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
+{
+    float tolerance = m->step == 8 ? 0.1f : 0.5f;
+    float target = m->step <= 9 ? 180.0f : 0.0f;
+    float error = remainderf(target - in->map_yaw_deg, 360.0f);
+    if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
+    if (m->heading_align_active) {
+        if ((uint32_t)(now-m->heading_align_since) >= 30000U) {
+            fail(m, PATH_TIMEOUT); return false;
+        }
+        if (!in->settled) return false;
+        if (fabsf(error) >= tolerance) { fail(m, PATH_ERROR); return false; }
+        m->heading_align_active = false;
+        return true;
+    }
+    if (!in->settled) return false;
+    if (fabsf(error) < tolerance) return true;
+    if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, 0, 0, 0, 0, 30000))
+        return false;
+    m->heading_align_active = true;
+    m->heading_align_since = now;
+    return false;
+}
+bool PathLine_Aligned(uint8_t gray)
 {
     return gray == 6U || gray == 15U || gray == 9U;
 }
-static bool line_skip(PathMission *m, const PathInput *in)
+static bool line_skip(PathMission *m, uint32_t now, const PathInput *in)
 {
     if (m->line_recovery != 6) {
         hold(m); m->line_recovery = 6;
         return false;
     }
-    if (!in->settled) return false;
+    if (!PathHeading_Ready(m, now, in)) return false;
     if (!emit(m, PC_MAP_HEADING, m->step == 9 ? 180 : 0, 0, 0, 0, 0)) return false;
     m->line_skipped = true;
     if (m->step == 9) m->stair_heading_locked = true;
@@ -245,74 +267,31 @@ static bool line_skip(PathMission *m, const PathInput *in)
 }
 bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
 {
-    if (!isfinite(in->yaw_deg) || !isfinite(in->imu_yaw_deg)) {
-        fail(m, PATH_ERROR); return false;
-    }
+    if (!isfinite(in->map_yaw_deg)) { fail(m, PATH_ERROR); return false; }
     if (m->step == 9 ? m->stair_heading_locked : m->warehouse_heading_locked) {
         m->line_skipped = true;
-        return in->settled;
+        return PathHeading_Ready(m, now, in);
     }
-    unsigned count = 0, full_count = 0;
-    for (unsigned bits = (in->gray ^ 9U) & 15U; bits; bits >>= 1) count += bits & 1U;
-    for (unsigned bits = in->gray & 15U; bits; bits >>= 1) full_count += bits & 1U;
-    if (4U - count > count) count = 4U - count; /* Also accept complementary 1001. */
-    if (full_count > count) count = full_count; /* Match the nearer accepted pattern. */
     if (!m->line_active) {
-        m->line_active = true;
-        m->line_skipped = false;
-        m->line_since = now;
-        m->line_best_count = count;
-        m->line_recovery = m->line_retries = m->line_reversals = 0;
-        /* Choose an initial probe from front/rear mismatch, then use feedback. */
-        m->line_scan_side = ((in->gray & 8U) || !(in->gray & 2U)) ? -1.0f : 1.0f;
-        m->line_losing = false;
-        m->line_scan_yaw = in->yaw_deg;
-        m->line_scan_stage = m->line_shift_count = 0;
+        if (!in->settled) return false;
+        if (!emit(m, PC_MAP_HEADING, m->step == 9 ? 180 : 0, 0, 0, 0, 0)) return false;
+        m->line_active = true; m->line_skipped = false;
+        m->line_since = now; m->line_recovery = 0;
         m->line_stopping = m->stable = false;
     }
-    if (m->line_recovery == 6 || (uint32_t)(now - m->line_since) >= 2000U ||
-        (!m->line_recovery && fabsf(in->yaw_deg - m->line_scan_yaw) > 10.0f))
-        return line_skip(m, in);
-    /* Split inner pair: latch a map-right search, then restart calibration. */
-    unsigned inner = in->gray & 6U;
-    if (m->step != 9 && !m->line_shift_count && !m->line_recovery &&
-        (inner == 2U || inner == 4U)) {
-        hold(m);
-        m->line_recovery = 1;
-        m->line_shift_count = 1;
-        m->stable = m->line_stopping = false;
-        return false;
-    }
-    if (m->line_recovery == 1) {
-        if (!in->settled) return false;
-        m->line_recovery = 2;
-    }
-    if (m->line_recovery == 2) {
-        if (inner == 6U) {
-            hold(m);
-            m->line_recovery = 3;
-        } else {
-            (void)emit(m, PC_MAP_SEARCH, 0, -40, 0, 0, 3000);
-        }
-        return false;
-    }
-    if (m->line_recovery == 3) {
-        if (!in->settled) return false;
-        m->line_recovery = 0;
-        m->line_since = now;
-        m->line_scan_yaw = in->yaw_deg;
-    }
-    if (line_aligned(in->gray)) {
+    if (m->heading_align_active && !PathHeading_Ready(m, now, in)) return false;
+    if (m->line_recovery == 6 || (uint32_t)(now-m->line_since) >= 2000U)
+        return line_skip(m, now, in);
+    if (PathLine_Aligned(in->gray) || m->heading_align_active) {
         if (!m->line_stopping) {
             hold(m); m->line_stopping = true; m->stable = false;
             return false;
         }
-        if (!in->settled) { m->stable = false; return false; }
+        if (!PathHeading_Ready(m, now, in)) { m->stable = false; return false; }
+        /* A rotation may change gray; re-evaluate before admitting vision. */
+        if (!PathLine_Aligned(in->gray)) return false;
         if (!m->stable) { m->stable = true; m->stable_since = now; }
-        if ((uint32_t)(now - m->stable_since) < 100U) return false;
-        // Warehouse probes confirm position, not absolute heading.
-        if (!emit(m, m->step == 9 ? PC_LINE_CALIBRATE : PC_MAP_HEADING,
-                  0, 0, 0, 0, 0)) return false;
+        if ((uint32_t)(now-m->stable_since) < 100U) return false;
         m->line_active = m->line_stopping = m->stable = false;
         return true;
     }
@@ -321,12 +300,9 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         if (!in->settled) return false;
         m->line_stopping = false;
     }
-    /* Front/rear imbalance chooses the turn; no alternating sweep or lateral hunt.
-     * Equal evidence cannot determine a turn from these digital probes. */
-    unsigned front = ((in->gray >> 3) & 1U) + ((in->gray >> 1) & 1U);
-    unsigned rear = ((in->gray >> 2) & 1U) + (in->gray & 1U);
-    if (front == rear) return line_skip(m, in);
-    (void)emit(m, PC_LINE_SEARCH, 0, 0, front < rear ? 4 : -4, 0, 31000);
+    /* Digital gray is position evidence, never a yaw command.
+     * Use the established map-right reacquisition direction, bounded to 2 s. */
+    (void)emit(m, PC_MAP_SEARCH, 0, -40, 0, 0, 3000);
     return false;
 }
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
@@ -343,9 +319,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 5: /* Retreat once after line alignment, before G105. */
-        if (move(m, in, 55, 0, 40)) m->phase = 1;
+        if (move(m, in, 25, 0, 40)) m->phase = 1;
         break;
     case 1:
+        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
         if (group(m, now, in, 105))
         {
             m->phase = 4;
@@ -354,7 +331,8 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 2:
-        if (!m->waiting && !m->line_skipped && !line_aligned(in->gray)) {
+        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
+        if (!m->waiting && !m->line_skipped && !PathLine_Aligned(in->gray)) {
             m->line_active = false; m->phase = 4;
             break;
         }
@@ -383,6 +361,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 3:
+        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
         if (m->point == 1)
         {
             m->phase = 6;
@@ -404,6 +383,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 6: /* Low section complete: G4 must finish before the 117 mm retreat. */
+        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
         if (group(m, now, in, 4))
         {
             m->phase = 7;
@@ -411,6 +391,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 7:
+        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
         if (move(m, in, retreat[m->point], 0, 40))
         {
             ++m->point;
@@ -461,7 +442,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         pillar(m, now, in);
         break;
     case 7:
-        next(m, now); /* No arm reset in the chassis-only extension. */
+        next(m, now);
         break;
     case 8:
         if (m->phase == 0)
@@ -470,6 +451,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (m->phase == 1)
         {
+            if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
             if (group(m, now, in, 2)) next(m, now);
         }
         else fail(m, PATH_ERROR);
@@ -495,7 +477,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_TIMEOUT);
         else if (m->phase == 1)
         {
-            if (move(m, in, 200, 0, 40)) next(m, now);
+            if (move(m, in, 180, 0, 40)) next(m, now);
         }
         else if (!m->waiting)
         {

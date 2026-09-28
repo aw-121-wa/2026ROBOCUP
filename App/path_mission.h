@@ -59,6 +59,7 @@ typedef struct
 {
     bool armed, fault, settled, motion_done;
     float yaw_deg;
+    float map_yaw_deg; /* Measured yaw relative to the fixed PATH start direction. */
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
     uint8_t gray; /* active-low: bit3 PD3, bit2 PD0, bit1 PD1, bit0 PB13; stair/warehouse target 0110 */
     bool ir;
@@ -90,6 +91,8 @@ typedef struct
     bool line_active, line_stopping, line_skipped;
     bool stair_heading_locked, warehouse_heading_locked;
     bool waiting, stable, expired;
+    bool heading_align_active;
+    uint32_t heading_align_since;
     PathSend send;
     void *context;
 } PathMission;

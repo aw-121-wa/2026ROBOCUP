@@ -22,6 +22,7 @@ static int route(unsigned mask, unsigned expected_checks, unsigned balls) {
     last=(PathCommand){0};
     for (unsigned t=0; t<20000 && m.result==PATH_RUNNING; t+=100) {
         in.reply = last.kind == PC_STAIR && !(mask & (1U << (last.argument-1))) ? PATH_NONE : PATH_OK;
+        in.map_yaw_deg=m.step<=9 ? 180 : 0;
         Path_Tick(&m,t,&in);
     }
     CHECK(m.result == PATH_DONE);
@@ -30,9 +31,9 @@ static int route(unsigned mask, unsigned expected_checks, unsigned balls) {
     CHECK(checks == expected_checks);
     CHECK(m.grabs == balls);
     CHECK(rotations==0);
-    CHECK(moves==14);
-    const float expected[]={-350,55,90,117,90,90,90,117,90,100,200,100,200,200};
-    for(unsigned i=0;i<14;i++) CHECK(distances[i]==expected[i]);
+    CHECK(moves==13);
+    const float expected[]={-350,25,90,117,90,90,90,117,90,100,180,200,200};
+    for(unsigned i=0;i<13;i++) CHECK(distances[i]==expected[i]);
     return 0;
 }
 static char wire[80];
@@ -55,7 +56,7 @@ static int exit_route(void) {
     CHECK(last.speed==60 && last.timeout_ms==30000);
     in.settled=false; Path_Tick(&m,1000,&in); CHECK(m.step==11);
     in.settled=true; Path_Tick(&m,2000,&in); CHECK(m.step==11 && m.phase==1);
-    Path_Tick(&m,2001,&in); CHECK(last.kind==PC_MOVE && last.x==200 && last.y==0);
+    Path_Tick(&m,2001,&in); CHECK(last.kind==PC_MOVE && last.x==180 && last.y==0);
     in.settled=false; Path_Tick(&m,2002,&in); CHECK(m.step==11);
     in.settled=true; Path_Tick(&m,2003,&in); CHECK(m.step==12);
     Path_Tick(&m,2005,&in); CHECK(last.kind==PC_BODY && last.y==30 && last.timeout_ms==50000);
@@ -64,11 +65,11 @@ static int exit_route(void) {
     in.settled=true; in.gray=0; Path_Tick(&m,2075,&in);
     CHECK(m.result==PATH_RUNNING && m.step==12 && m.phase==1);
     in.gray=14; Path_Tick(&m,2080,&in);
-    CHECK(last.kind==PC_LINE_SEARCH && m.step==12);
+    CHECK(last.kind==PC_MAP_SEARCH && m.step==12);
     in.gray=6; Path_Tick(&m,2085,&in); CHECK(last.kind==PC_HOLD);
     Path_Tick(&m,2090,&in); Path_Tick(&m,2189,&in); CHECK(m.step==12);
     Path_Tick(&m,2190,&in);
-    CHECK(last.kind==PC_MAP_HEADING && last.x==0 && m.step==13);
+    CHECK(m.step==13);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; m.phase=1; in.gray=14;
     Path_Tick(&m,0,&in); Path_Tick(&m,30000,&in);
     Path_Tick(&m,30005,&in);

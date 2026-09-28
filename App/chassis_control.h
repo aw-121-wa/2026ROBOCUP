@@ -67,6 +67,7 @@ bool Chassis_Body(float forward_mm_s, float left_mm_s, float radians_s);
 bool Chassis_MotionBusy(void);
 bool Chassis_IsSettled(void);
 float Chassis_ContinuousYaw(void);
+float Chassis_MapYaw(void);
 float Chassis_MeasuredYaw(void);
 float Chassis_LineYaw(void);
 bool Chassis_SetLineReference(void);
