@@ -100,7 +100,7 @@ class StairRecognitionTests(unittest.TestCase):
             (root / 'rdk_vision').mkdir()
             config = load_config(ROOT / 'rdk_vision/config.yaml')
             config = replace(config, roi=replace(config.roi, height=260))
-            save_config(config, root / 'rdk_vision/stair_runtime.yaml')
+            save_config(config, root / 'rdk_vision/stair_low.yaml')
             with patch('stair_task.LatestFrameCamera'), \
                  patch('stair_task.HiwonderActionBoard'), \
                  patch('stair_task.recognize_point', return_value=False) as recognize:
@@ -122,7 +122,10 @@ class StairRecognitionTests(unittest.TestCase):
                                                on_action_complete=lambda _: None))
                 board.return_value.__enter__.return_value.start_group.assert_called_with(group)
                 board.return_value.__enter__.return_value.wait_group_complete.assert_called_with(group, timeout_s=30.0)
-                self.assertEqual(recognize.call_args.args[1].config.ball.reference_width, 76)
+                from rdk_vision.config import load_config
+                level = 'low' if point <= 2 else 'high' if point <= 6 else 'mid'
+                expected = load_config(ROOT / 'rdk_vision' / f'stair_{level}.yaml')
+                self.assertEqual(recognize.call_args.args[1].config, expected)
             self.assertEqual(camera.return_value.stop.call_count, 8)
 
 

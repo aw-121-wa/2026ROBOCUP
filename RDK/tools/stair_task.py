@@ -58,10 +58,24 @@ def recognize_point(camera, detector, gate, grab, on_action_complete, *,
 def run_stair_point(project_root, point, *, rfid_gate, on_action_complete):
     if not 1 <= point <= 8:
         raise ValueError('STAIR point must be 1..8')
-    group = 106 if point <= 2 else 107 if point <= 6 else 108
-    config_path = project_root / 'rdk_vision/stair_runtime.yaml'
+
+    if point <= 2:
+        level = 'low'
+        group = 106
+    elif point <= 6:
+        level = 'high'
+        group = 107
+    else:
+        level = 'mid'
+        group = 108
+
+    config_path = project_root / 'rdk_vision' / f'stair_{level}.yaml'
     config = load_config(config_path)
-    print(f'STAIR CONFIG: {config_path} ROI={config.roi} BALL={config.ball}', flush=True)
+    print(
+        f'STAIR CONFIG: point={point} level={level} group={group} '
+        f'file={config_path} ROI={config.roi} BALL={config.ball}',
+        flush=True,
+    )
     camera = LatestFrameCamera(config.camera)
     try:
         camera.start()

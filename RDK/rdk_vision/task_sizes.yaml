@@ -1,4 +1,3 @@
-# Empty sections inherit the existing calibration in config.yaml.
 disc: {}
 pillar: {}
 stair:

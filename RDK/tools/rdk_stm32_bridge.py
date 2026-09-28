@@ -27,6 +27,7 @@ from rdk_vision.task_config import load_task_config
 from pillar_ball_trigger import PillarBallTrigger
 from stair_task import run_stair_point
 from vision_servo_direct_test import build_parser as build_disc_parser, run_disc_task
+from rdk_vision.config import load_config
 
 DEFAULT_DISC_TIMEOUT_S = 60.0
 
@@ -39,7 +40,7 @@ def run_pillar_in_process(project_root: Path, **kwargs) -> int:
     args.prep_group = 103
     args.trigger_group = 104
     args.max_actions = 59  # Remaining entries in the STM32 64-UID result buffer.
-    config = load_task_config(args.config, 'pillar')
+    config = load_config(project_root / 'rdk_vision' / 'pillar_runtime.yaml')
     # Shared detector/ROI/HSV; pillar stops on any normally valid fresh ball.
     return run_disc_task(args, config=config, trigger=PillarBallTrigger(), **kwargs)
 

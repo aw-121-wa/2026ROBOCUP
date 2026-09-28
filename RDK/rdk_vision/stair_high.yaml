@@ -46,8 +46,8 @@ ball:
   min_height: 20
   max_width: 260
   max_height: 260
-  reference_width: 86
-  reference_height: 86
+  reference_width: 142
+  reference_height: 140
   aspect_ratio_min: 0.75
   aspect_ratio_max: 1.3
   size_min_scale: 0.65

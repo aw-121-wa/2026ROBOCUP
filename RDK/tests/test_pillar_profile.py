@@ -53,7 +53,7 @@ class PillarProfileTests(unittest.TestCase):
         self.assertIsNone(trigger.update(DetectionResult(True, 'ok', (266,155,152,148))))
         self.assertIsNone(trigger.update(DetectionResult(False, 'edge_margin', (266,125,152,148))))
 
-    def test_pillar_runner_uses_disc_vision_and_g104(self):
+    def test_pillar_runner_uses_independent_profile_and_g104(self):
         with patch('rdk_stm32_bridge.run_disc_task', return_value=0) as run:
             self.assertEqual(run_pillar_in_process(ROOT), 0)
             args = run.call_args.args[0]
@@ -63,7 +63,7 @@ class PillarProfileTests(unittest.TestCase):
             trigger = run.call_args.kwargs['trigger']
             self.assertEqual(trigger.update(DetectionResult(True, 'ok', (266,125,152,148))), 'TRIGGER_VALID')
             self.assertIsNone(trigger.update(DetectionResult(False, 'edge_margin', (92,125,100,148))))
-            self.assertEqual(run.call_args.kwargs['config'], load_config(ROOT / 'rdk_vision/config.yaml'))
+            self.assertEqual(run.call_args.kwargs['config'], load_config(ROOT / 'rdk_vision/pillar_runtime.yaml'))
 
 
 if __name__ == '__main__':

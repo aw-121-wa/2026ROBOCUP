@@ -38,8 +38,11 @@ class TaskConfigTests(unittest.TestCase):
             with patch('rdk_stm32_bridge.run_disc_task', return_value=0) as run:
                 run_disc_in_process(root, rfid_gate=None, on_action_complete=None)
                 self.assertEqual(run.call_args.kwargs['config'].ball.reference_width, 120)
+                independent = yaml.safe_load((root / 'rdk_vision/config.yaml').read_text())
+                independent['ball']['reference_width'] = 95
+                (root / 'rdk_vision/pillar_runtime.yaml').write_text(yaml.safe_dump(independent))
                 run_pillar_in_process(root)
-                self.assertEqual(run.call_args.kwargs['config'].ball.reference_width, 90)
+                self.assertEqual(run.call_args.kwargs['config'].ball.reference_width, 95)
                 self.assertEqual(run.call_args.args[0].trigger_group, 104)
 
     def test_invalid_overrides_fail(self):
