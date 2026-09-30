@@ -61,6 +61,7 @@ static bool rotate_measured_zero;
 static float line_yaw_reference;
 static float route_heading;
 static bool path_heading_enabled, normal_stopping, line_search;
+static bool capture_braking;
 static float body_output[3]; /* Last wheel-limited body command, not measured velocity. */
 #define BODY_ACCEL_MM_S2 550.0f
 #define BODY_BRAKE_MM_S2 800.0f
@@ -341,7 +342,7 @@ bool Chassis_ReturnHome(void)
     float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);
     route_heading = heading = map_yaw;
     integral = 0;
-    return Chassis_Move(x*c+y*s, -x*s+y*c, 250, 300, 300);
+    return Chassis_Move(x*c+y*s, -x*s+y*c, 450, 300, 300);
 }
 void Chassis_Stop(void)
 {
@@ -432,6 +433,7 @@ bool Chassis_MoveArc(float radius, float start_degrees, float turn_degrees,
 }
 void Chassis_Hold(void)
 {
+    capture_braking = false;
     path_blend = blend_continuous = path_heading_chain = false;
     planner.active = false;
     path_rotation = path_body = path_arc = false;
@@ -443,6 +445,11 @@ void Chassis_Hold(void)
     normal_stopping = body_output[0] != 0 || body_output[1] != 0 || body_output[2] != 0;
     heading = path_heading_active() ? route_heading : state.yaw_rad;
     integral = 0;
+}
+void Chassis_HoldCapture(void)
+{
+    Chassis_Hold();
+    capture_braking = true;
 }
 void Chassis_HoldImmediate(void)
 {
@@ -1007,8 +1014,8 @@ void Chassis_Update(void)
     {
         float target[3] = {vx, vy, wz};
         Motion_SlewVelocity(body_output, target, dt,
-                            normal_stopping ? BODY_BRAKE_MM_S2 : BODY_ACCEL_MM_S2,
-                            normal_stopping ? YAW_BRAKE_RAD_S2 : YAW_ACCEL_RAD_S2);
+                            normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? 1.5f : 1.0f) : BODY_ACCEL_MM_S2,
+                            normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? 1.5f : 1.0f) : YAW_ACCEL_RAD_S2);
         vx = body_output[0]; vy = body_output[1]; wz = body_output[2];
         if (normal_stopping && vx == 0 && vy == 0 && wz == 0) normal_stopping = false;
     }

@@ -65,6 +65,20 @@ int main(int argc,char **argv) {
         assert(fabsf(heading)<1e-6f);
         assert(Chassis_Body(-200,0,-0.7f));tick();
         assert(fabsf(heading)<1e-6f);
+    } else if(!strcmp(argv[1],"capture")) {
+        assert(Chassis_Body(-295,0,-0.86f));
+        for(int n=0;n<200;n++) tick();
+        float before=body_output[0];
+        Chassis_HoldCapture(); tick();
+        assert(normal_stopping && fabsf(body_output[0]-before-6.0f)<0.01f);
+        assert(fabsf(body_output[2]/body_output[0]-0.86f/295)<1e-5f);
+        unsigned n=1; while(!Chassis_IsSettled() && n<100) {tick();++n;}
+        assert(n>=65 && n<75 && Chassis_IsSettled());
+        assert(Chassis_Body(-295,0,-0.86f));for(int i=0;i<200;i++)tick();
+        before=body_output[0]; Chassis_Hold();tick();
+        assert(fabsf(body_output[0]-before-4.0f)<0.01f);
+        unsigned normal_n=1; while(!Chassis_IsSettled() && normal_n<150) {tick();++normal_n;}
+        assert(Chassis_IsSettled() && normal_n>n);
     } else if(!strcmp(argv[1],"slew")) {
         assert(Chassis_Body(-200,0,-0.7f));tick();
         float v[3];Mecanum_Forward(geometry(),state.rpm_requested,v);

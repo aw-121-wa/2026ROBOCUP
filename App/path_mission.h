@@ -80,12 +80,15 @@ typedef struct
     uint32_t id_list[64]; /* Full UID, wire byte order represented as big-endian integer. */
     uint8_t id_count;
     BallInventory inventory;
+    uint8_t warehouse_plan_column, warehouse_order[3];
     bool id_overflow;
     float orbit_yaw;
     float stair_origin_x, stair_origin_y, stair_axis, stair_distance;
     uint32_t stair_started;
     unsigned stair_base_grabs;
     bool stair_scanning;
+    bool approach_started, approach_slow;
+    float approach_x, approach_y;
     float line_scan_yaw;
     uint32_t line_since, line_shift_since;
     unsigned line_scan_stage, line_shift_count;
@@ -97,6 +100,8 @@ typedef struct
     bool line_active, line_stopping, line_skipped;
     bool stair_heading_locked, warehouse_heading_locked;
     bool waiting, stable, expired;
+    bool prep_pending;
+    uint32_t prep_since;
     bool heading_align_active;
     uint32_t heading_align_since;
     PathSend send;

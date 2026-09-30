@@ -12,7 +12,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
     if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0) bad=true; }
-    if(c->kind==PC_TURN) { turns++; if(c->argument>1) bad=true; }
+    if(c->kind==PC_TURN) { turns++; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }
         group_ids[groups]=c->argument;
@@ -38,7 +38,7 @@ static int run(unsigned mask) {
     for(unsigned t=0;t<30000 && m.result==PATH_RUNNING;t+=5) {
         if(turns>finished_turns) {
             if(++turn_wait==3) {
-                BallInventory_Step(&m.inventory,last.argument!=0);
+                for(unsigned k=0;k<(unsigned)last.x;k++) BallInventory_Step(&m.inventory,last.argument!=0);
                 in.turn_reply=PATH_OK; finished_turns=turns; turn_wait=0;
             } else in.turn_reply=PATH_WAIT;
         }
@@ -46,13 +46,28 @@ static int run(unsigned mask) {
     }
     CHECK(m.result==PATH_DONE && moves==2 && calibrations==3 && homes==1 && !bad);
     CHECK(groups==expected && m.inventory.placed==expected && !m.inventory.occupied);
-    unsigned n=0;
-    for(unsigned col=1;col<=3;col++) for(unsigned row=1;row<=3;row++) {
-        uint8_t code=(uint8_t)((row<<4)|col);
-        for(unsigned i=0;i<9;i++) if(order[i]==code && (mask&(1U<<i))) {
-            CHECK(ball_codes[n]==code && group_ids[n]==108+row); n++;
+    unsigned seen=0, previous_col=0;
+    for(unsigned n=0;n<groups;n++) {
+        unsigned code=ball_codes[n], col=code&15, row=code>>4;
+        CHECK(col>=previous_col && group_ids[n]==108+row);
+        previous_col=col;
+        for(unsigned i=0;i<9;i++) if(order[i]==code) {
+            CHECK((mask&(1U<<i)) && !(seen&(1U<<i))); seen|=1U<<i;
         }
     }
+    CHECK(seen==mask);
+    return 0;
+}
+static int optimized_order(void) {
+    init();
+    /* Current pocket already holds row 3: row 3 -> 2 -> 1 avoids a reversal. */
+    m.inventory.current=0; CHECK(BallInventory_Record(&m.inventory,1,0x31)==BALL_ADDED);
+    m.inventory.current=1; CHECK(BallInventory_Record(&m.inventory,2,0x21)==BALL_ADDED);
+    m.inventory.current=5; CHECK(BallInventory_Record(&m.inventory,3,0x11)==BALL_ADDED);
+    m.inventory.current=0; m.phase=1;
+    PathInput in={.armed=true,.settled=true,.gray=6};
+    Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
+    CHECK(last.kind==PC_GROUP && last.argument==111 && turns==0);
     return 0;
 }
 static int alignment(void) {
@@ -70,10 +85,17 @@ static int alignment(void) {
     in.settled=false; Path_Tick(&m,1010,&in); CHECK(last.kind==PC_HOLD);
     in.settled=true; Path_Tick(&m,1020,&in);
     CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
-    Path_Tick(&m,2020,&in); CHECK(last.kind==PC_HOLD);
-    Path_Tick(&m,2025,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==-10);
-    Path_Tick(&m,3025,&in); CHECK(last.kind==PC_HOLD);
-    Path_Tick(&m,3030,&in); CHECK(m.phase==1 && m.line_skipped);
+    Path_Tick(&m,2020,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
+    Path_Tick(&m,2500,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
+    in.gray=6; Path_Tick(&m,2510,&in); CHECK(last.kind==PC_HOLD);
+    in.settled=false; Path_Tick(&m,2520,&in); CHECK(m.phase==4 && groups==0);
+    in.settled=true; Path_Tick(&m,2530,&in);
+    Path_Tick(&m,2630,&in); CHECK(m.phase==1 && !m.line_skipped);
+    init(); in.gray=0;
+    Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
+    Path_Tick(&m,1005,&in); Path_Tick(&m,1020,&in);
+    Path_Tick(&m,6019,&in); CHECK(m.result==PATH_RUNNING && last.y==10);
+    Path_Tick(&m,6020,&in); CHECK(m.result==PATH_TIMEOUT && groups==0);
     return 0;
 }
 static int errors(void) {
@@ -81,8 +103,8 @@ static int errors(void) {
     init(); CHECK(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
     BallInventory_Step(&m.inventory,false); m.phase=1;
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_TURN && groups==0);
-    Path_Tick(&m,1999,&in); CHECK(m.result==PATH_RUNNING && groups==0);
-    Path_Tick(&m,2000,&in); CHECK(m.result==PATH_TIMEOUT && groups==0 && m.inventory.occupied==1);
+    Path_Tick(&m,2999,&in); CHECK(m.result==PATH_RUNNING && groups==0);
+    Path_Tick(&m,3000,&in); CHECK(m.result==PATH_TIMEOUT && groups==0 && m.inventory.occupied==1);
     init(); CHECK(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED); m.phase=1;
     Path_Tick(&m,0,&in); Path_Tick(&m,5,&in); CHECK(groups==1 && m.inventory.occupied==1);
     Path_Tick(&m,100,&in); CHECK(m.inventory.occupied==1);
@@ -98,7 +120,7 @@ static int errors(void) {
     return 0;
 }
 int main(void) {
-    CHECK(run(0x1ff)==0); CHECK(run(0)==0); CHECK(run(1)==0); CHECK(run(0x112)==0);
-    CHECK(errors()==0); CHECK(alignment()==0);
+    for(unsigned mask=0;mask<512;mask++) CHECK(run(mask)==0);
+    CHECK(optimized_order()==0); CHECK(errors()==0); CHECK(alignment()==0);
     puts("warehouse sorted rows, missing cells, three columns and failure gates passed"); return 0;
 }

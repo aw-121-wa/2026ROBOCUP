@@ -1,12 +1,14 @@
 #include "path_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
+#include "path_warehouse.h"
 #include "rdk_link.h"
 #include "turntable_link.h"
 #include "chassis_control.h"
 #include "pin_config.h"
 #include "disc_task_config.h"
 #include <string.h>
+#include <math.h>
 static PathMission mission;
 static RdkLink rdk;
 static TurntableLink turn;
@@ -52,7 +54,8 @@ static void service_turn(uint32_t now)
     if (turn_purpose != TURN_IDLE && !turn.pending)
     {
         if (turn.reply == PATH_OK)
-            BallInventory_Step(&mission.inventory, turn.direction != 0);
+            for (unsigned i=0;i<turn.steps;++i)
+                BallInventory_Step(&mission.inventory, turn.direction != 0);
         else
         {
             inventory_fault |= INVENTORY_TURN_ERROR;
@@ -330,7 +333,9 @@ static bool send(void *ctx, const PathCommand *c)
         motion_pending = true;
         return true;
     case PC_HOLD:
-        Chassis_Hold();
+        if (mission.step == 6 && (mission.phase == 2 || mission.phase == 3))
+            Chassis_HoldCapture();
+        else Chassis_Hold();
         motion_pending = false;
         motion_continuous = false;
         return true;
@@ -339,7 +344,8 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_TURN:
         if (mission.step != 13 || !Chassis_IsSettled() || rdk.active || turn.pending ||
             turn_purpose != TURN_IDLE || turn_issued < mission.id_count || mission.inventory.uncertain ||
-            c->argument > 1 || !Turn_Start(&turn, c->argument != 0, now)) return false;
+            c->argument > 1 || !isfinite(c->x) || c->x < 1 || c->x > BALL_SLOT_COUNT/2 ||
+            c->x != (unsigned)c->x || !Turn_StartSteps(&turn, c->argument != 0, (uint8_t)c->x, now)) return false;
         turn_purpose = TURN_UNLOAD;
         return true;
     case PC_GROUP:
@@ -727,7 +733,7 @@ void PathPorts_Tick(void)
                                          .inventory_uncertain = mission.inventory.uncertain,
                                          .warehouse_placed = mission.inventory.placed,
                                          .warehouse_code = mission.step == 13 && mission.point < 9 ?
-                                              ((mission.point % 3 + 1U) << 4) | (mission.point / 3 + 1U) : 0,
+                                              PathWarehouse_Code(&mission) : 0,
                                          .step = mission.step,
                                          .phase = mission.phase,
                                          .point = mission.step == 9 ? mission.point + 1U : 0U,

@@ -1,5 +1,35 @@
 #include "path_warehouse.h"
 #include "path_chassis.h"
+/* Plan once per column; never change a target while a turn or arm action is active. */
+static void plan_column(PathMission *m)
+{
+    static const uint8_t orders[6][3]={{1,2,3},{1,3,2},{2,1,3},{2,3,1},{3,1,2},{3,2,1}};
+    unsigned col=m->point/3+1, best=~0U;
+    for(unsigned p=0;p<6;p++) {
+        unsigned current=m->inventory.current, cost=0;
+        for(unsigned i=0;i<3;i++) {
+            int slot=BallInventory_Find(&m->inventory,(uint8_t)((orders[p][i]<<4)|col));
+            if(slot<0) continue;
+            unsigned forward=((unsigned)slot+BALL_SLOT_COUNT-current)%BALL_SLOT_COUNT;
+            unsigned reverse=(current+BALL_SLOT_COUNT-(unsigned)slot)%BALL_SLOT_COUNT;
+            unsigned distance=forward<reverse?forward:reverse;
+            if(distance) cost+=240U*distance;
+            current=(unsigned)slot;
+        }
+        if(cost<best) {
+            best=cost;
+            for(unsigned i=0;i<3;i++) m->warehouse_order[i]=orders[p][i];
+        }
+    }
+    m->warehouse_plan_column=(uint8_t)col;
+}
+uint8_t PathWarehouse_Code(const PathMission *m)
+{
+    if(m->point>=9) return 0;
+    unsigned col=m->point/3+1;
+    unsigned row=m->warehouse_plan_column==col ? m->warehouse_order[m->point%3] : m->point%3+1;
+    return (uint8_t)((row<<4)|col);
+}
 static void fail(PathMission *m, PathResult result)
 {
     if (m->inventory.occupied || m->phase == 2) m->inventory.uncertain = true;
@@ -53,7 +83,9 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         fail(m,PATH_ERROR);
         return;
     }
-    uint8_t code=(uint8_t)(((m->point%3+1)<<4) | (m->point/3+1));
+    if(m->warehouse_plan_column!=m->point/3+1) plan_column(m);
+    uint8_t code=PathWarehouse_Code(m);
+    if (m->prep_pending && (m->phase==1 || m->phase==3)) return;
     switch(m->phase)
     {
     case 0: /* Start at the detected line; only subsequent columns require a move. */
@@ -68,7 +100,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->entered=now;
             m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=200,
-                                          .speed=40,.timeout_ms=30000});
+                                          .speed=100,.timeout_ms=30000});
         }
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
         else if (in->settled)
@@ -101,8 +133,11 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             m->entered=now;
         }
         else if (emit(m,(PathCommand){.kind=PC_TURN,
+                     .x=BallInventory_ReverseTo(m->inventory.current,(uint8_t)slot)
+                         ? (m->inventory.current+BALL_SLOT_COUNT-slot)%BALL_SLOT_COUNT
+                         : (slot+BALL_SLOT_COUNT-m->inventory.current)%BALL_SLOT_COUNT,
                      .argument=BallInventory_ReverseTo(m->inventory.current,(uint8_t)slot),
-                     .timeout_ms=2000}))
+                     .timeout_ms=3000}))
         {
             m->phase=2;
             m->entered=now;
@@ -111,7 +146,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
     }
     case 2: /* Adapter updates the current slot only on successful turn completion. */
         if (!in->settled || in->turn_reply==PATH_FAILED) fail(m,PATH_ERROR);
-        else if ((uint32_t)(now-m->entered)>=2000) fail(m,PATH_TIMEOUT);
+        else if ((uint32_t)(now-m->entered)>=3000) fail(m,PATH_TIMEOUT);
         else if (in->turn_reply==PATH_OK) m->phase=1;
         break;
     case 3:
@@ -125,7 +160,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting)
         {
             m->entered=now;
-            m->waiting=emit(m,(PathCommand){.kind=PC_GROUP,.argument=109+m->point%3,.timeout_ms=30000});
+            m->waiting=emit(m,(PathCommand){.kind=PC_GROUP,.argument=108+(code>>4),.timeout_ms=30000});
         }
         else if (in->reply==PATH_FAILED) fail(m,PATH_ERROR);
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);

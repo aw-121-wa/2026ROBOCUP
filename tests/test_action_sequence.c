@@ -22,13 +22,13 @@ int main(void) {
     CHECK(last.kind==PC_GROUP && last.argument==100);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=4;
     Path_Tick(&m,20,&in); CHECK(last.kind==PC_GROUP && last.argument==1);
-    in.reply=PATH_WAIT; Path_Tick(&m,25,&in); CHECK(m.step==4);
-    in.reply=PATH_OK; Path_Tick(&m,30,&in); CHECK(m.step==5);
+    in.reply=PATH_WAIT; Path_Tick(&m,25,&in); CHECK(m.step==5 && m.prep_pending && last.kind==PC_MOVE_ROTATE);
+    in.reply=PATH_OK; Path_Tick(&m,30,&in); CHECK(m.step==6 && !m.prep_pending);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=6;
     Path_Tick(&m,40,&in); Path_Tick(&m,70,&in); Path_Tick(&m,75,&in);
     CHECK(last.kind==PC_VISION); /* RDK prepares G103 before reporting READY. */
     in.reply=PATH_WAIT; in.vision_ready=true;
-    Path_Tick(&m,80,&in); CHECK(last.kind==PC_BODY && m.phase==2 && last.x==-64.4f && last.speed==-49);
+    Path_Tick(&m,80,&in); CHECK(last.kind==PC_BODY && m.phase==2 && last.x==-81.144f && last.speed==-61.74f);
     in.settled=false; in.ball_index=1; in.yaw_deg=-120;
     Path_Tick(&m,85,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
     Path_Tick(&m,90,&in); CHECK(last.kind==PC_HOLD);
@@ -36,7 +36,7 @@ int main(void) {
     CHECK(last.kind==PC_PILLAR_STOPPED && last.argument==1 && m.phase==6);
     Path_RecordId(&m,0x12345678); CHECK(m.id_count==1);
     Path_Tick(&m,20000,&in); CHECK(m.phase==6); /* RFID wait is not orbit time. */
-    in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-64.4f && last.speed==-49);
+    in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-81.144f && last.speed==-61.74f);
     in.yaw_deg=-351; Path_Tick(&m,20010,&in); CHECK(m.phase==2);
     in.yaw_deg=-355; Path_Tick(&m,20015,&in); CHECK(m.phase==3 && last.kind==PC_HOLD);
     Path_Tick(&m,20020,&in); CHECK(last.kind==PC_PILLAR_END);

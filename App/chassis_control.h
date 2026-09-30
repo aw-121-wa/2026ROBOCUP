@@ -60,6 +60,7 @@ bool Chassis_MapLateral(float mm);
 bool Chassis_MapSearch(float mm_s);
 /* Normal stop ramps to zero; fault/cancel paths bypass the ramp. */
 void Chassis_Hold(void);
+void Chassis_HoldCapture(void); /* Faster smooth braking; still requires IsSettled. */
 void Chassis_HoldImmediate(void);
 bool Chassis_Rotate(float degrees);
 bool Chassis_AlignZero(void);

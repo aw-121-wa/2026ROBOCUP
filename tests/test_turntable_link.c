@@ -40,6 +40,7 @@ int main(void)
     CHECK(p.len[2] == 13 && !memcmp(p.data[2], pos, 13));
     CHECK(p.data[1][1] == 0xff && p.data[3][2] == 0x66);
     CHECK(t.reply == PATH_WAIT);
+    Turn_Tick(&t, t.at+839, true); CHECK(t.pending);
     Turn_Tick(&t, 851, true);
     CHECK(t.reply == PATH_OK);
     CHECK(Turn_Start(&t, true, 851));
@@ -51,6 +52,21 @@ int main(void)
         Turn_Tick(&t, n, true);
     CHECK(p.count == 7 && p.data[5][1] == 0xfe);
     CHECK(!t.pending);
+    p=(Port){0}; Turn_Init(&t,tx,&p);
+    CHECK(!Turn_StartSteps(&t,false,0,0));
+    CHECK(!Turn_StartSteps(&t,false,7,0));
+    CHECK(Turn_StartSteps(&t,true,6,0));
+    CHECK(!Turn_StartSteps(&t,false,1,0));
+    for(unsigned n=0;n<100;n++) Turn_Tick(&t,n,true);
+    CHECK(p.count==4 && p.data[2][2]==1);
+    CHECK(p.data[2][6]==0 && p.data[2][7]==0 && p.data[2][8]==30 && p.data[2][9]==0);
+    Turn_Tick(&t,t.at+1439,true); CHECK(t.pending);
+    Turn_Tick(&t,t.at+1440,true); CHECK(!t.pending && t.reply==PATH_OK);
+    p=(Port){0}; Turn_Init(&t,tx,&p);
+    CHECK(Turn_StartSteps(&t,false,1,0));
+    for(unsigned n=0;n<100;n++) Turn_Tick(&t,n,true);
+    Turn_Tick(&t,t.at+239,true); CHECK(t.pending);
+    Turn_Tick(&t,t.at+240,true); CHECK(!t.pending && t.reply==PATH_OK);
     puts("Turntable transport tests passed");
     return 0;
 }
