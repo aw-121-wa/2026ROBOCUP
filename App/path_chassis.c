@@ -279,9 +279,25 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         m->line_since = now; m->line_recovery = 0;
         m->line_stopping = m->stable = false;
     }
+    /* Stop fully before each warehouse search reversal. */
+    if (m->step != 9 && (m->line_recovery == 7 || m->line_recovery == 9)) {
+        if (!in->settled) return false;
+        ++m->line_recovery;
+        m->line_since=now;
+        m->line_stopping=m->stable=false;
+    }
     if (m->heading_align_active && !PathHeading_Ready(m, now, in)) return false;
-    if (m->line_recovery == 6 || (uint32_t)(now-m->line_since) >= 2000U)
-        return line_skip(m, now, in);
+    const uint32_t search_ms = m->step == 9 ? 2000U : 1000U;
+    if (m->line_recovery == 6) return line_skip(m,now,in);
+    if ((uint32_t)(now-m->line_since) >= search_ms &&
+        (m->step == 9 || m->line_recovery == 0 || !PathLine_Aligned(in->gray))) {
+        if (m->step != 9 && (m->line_recovery == 1 || m->line_recovery == 8)) {
+            hold(m);
+            m->line_recovery = m->line_recovery == 1 ? 7 : 9;
+            return false;
+        }
+        return line_skip(m,now,in);
+    }
     if (PathLine_Aligned(in->gray) || m->heading_align_active) {
         if (!m->line_stopping) {
             hold(m); m->line_stopping = true; m->stable = false;
@@ -301,114 +317,117 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         m->line_stopping = false;
     }
     /* Digital gray is position evidence, never a yaw command.
-     * Use the established map-right reacquisition direction, bounded to 2 s. */
-    (void)emit(m, PC_MAP_SEARCH, 0, -40, 0, 0, 3000);
+     * Map-right search: stairs 40 mm/s for 2 s; warehouse 10 mm/s for 1 s. */
+    if (m->step != 9 && m->line_recovery == 0) m->line_recovery=1;
+    (void)emit(m, PC_MAP_SEARCH, 0, m->step == 9 ? -40 : (m->line_recovery == 8 ? 10 : -10), 0, 0, 3000);
     return false;
 }
+/* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    static const float retreat[] = {90, 117, 90, 90, 90, 117, 90};
-    switch (m->phase)
-    {
-    case 0:
-        if (PathLine_Align(m, now, in, 50000, 30)) /* Reverse only the post-orbit stair line approach. */
-        {
-            m->phase = 5;
-            m->point = m->grabs = 0; /* Stair count excludes disc and pillar balls. */
-            m->waiting = false;
+    static const float ends[] = {120, 500, 520, 860};
+    if (m->phase >= 20) {
+        if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
+            fail(m, PATH_ERROR); return;
         }
-        break;
-    case 5: /* Retreat once after line alignment, before G105. */
-        if (move(m, in, 25, 0, 40)) m->phase = 1;
+        float d = (in->x_mm-m->stair_origin_x)*cosf(m->stair_axis) +
+                  (in->y_mm-m->stair_origin_y)*sinf(m->stair_axis);
+        if (!isfinite(d) || d < -10 || d > ends[3] + 20.0f) { fail(m,PATH_ERROR); return; }
+        m->stair_distance = fmaxf(m->stair_distance,d);
+        if ((uint32_t)(now-m->stair_started)>=300000U) { fail(m,PATH_TIMEOUT);return; }
+        if (m->stair_scanning && in->reply==PATH_FAILED) { fail(m,PATH_ERROR);return; }
+    }
+    switch(m->phase) {
+    case 0:
+        if (PathLine_Align(m,now,in,50000,30)) {
+            m->phase=1; m->point=m->grabs=0; m->waiting=false;
+        }
         break;
     case 1:
-        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
-        if (group(m, now, in, 105))
-        {
-            m->phase = 4;
-            m->entered = now;
-            m->stable = false;
+        if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
+        if (group(m,now,in,105)) {
+            m->phase=4; m->line_active=false; m->stable=false;
         }
         break;
-    case 2:
-        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
-        if (!m->waiting && !m->line_skipped && !PathLine_Aligned(in->gray)) {
-            m->line_active = false; m->phase = 4;
-            break;
+    case 4:
+        if (PathLine_AlignFour(m,now,in)) {
+            m->stair_origin_x=in->x_mm; m->stair_origin_y=in->y_mm;
+            m->stair_axis=in->yaw_deg*0.01745329252f;
+            m->stair_distance=0; m->stair_started=now;
+            m->phase=20; m->waiting=false;
         }
-        if (!PATH_VISION_ENABLE)
-        {
-            if (in->settled) m->phase = 3;
-            break;
-        }
-        if (m->grabs >= 2)
-            m->phase = 3; /* Still visit every remaining point. */
-        else if (!m->waiting)
-        {
-            if (in->settled)
-            {
-                m->entered = now;
-                m->waiting = emit(m, PC_STAIR, 0, 0, 0, m->point + 1, 70000);
+        break;
+    case 20: /* Start a level only when stopped, with a fresh detection session. */
+        if (!in->settled) break;
+        m->stair_base_grabs=m->grabs;
+        if (PATH_VISION_ENABLE && m->grabs<2) {
+            if (emit(m,PC_STAIR_SCAN,0,0,0,(m->point == 0 ? 1 : m->point < 3 ? 2 : 3),180000)) {
+                m->stair_scanning=true; m->phase=21;
             }
-        }
-        else if (in->reply == PATH_FAILED || (uint32_t)(now - m->entered) >= 70000)
-            fail(m, in->reply == PATH_FAILED ? PATH_ERROR : PATH_TIMEOUT);
-        else if (in->reply == PATH_OK || in->reply == PATH_NONE)
-        {
-            if (in->reply == PATH_OK) ++m->grabs; /* DONE requires confirmed RFID. */
-            m->waiting = false;
-            m->phase = 3;
-        }
+        } else { m->stair_scanning=false; m->phase=22; }
         break;
-    case 3:
-        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
-        if (m->point == 1)
-        {
-            m->phase = 6;
-            m->entered = now;
+    case 21:
+        if (in->vision_ready) { m->phase=22; m->waiting=false; }
+        break;
+    case 22: {
+        float remaining=ends[m->point]-m->stair_distance;
+        /* Boundary wins over a simultaneous BALL; never authorize old-level grabs. */
+        if (remaining<=0.5f || (m->waiting && in->settled)) {
+            if (remaining>2.0f) { fail(m,PATH_ERROR);break; }
+            hold(m); m->phase=m->stair_scanning?25:27; m->waiting=false;
             break;
         }
-        /* Other points keep the existing retreat sequence. */
-        if (m->point == 7)
-        {
-            hold(m);
-            if (m->result == PATH_RUNNING) next(m, now);
+        if (m->stair_scanning && in->ball_index>in->resume_index) {
+            hold(m);m->phase=23;m->waiting=false;break;
         }
-        else if (move(m, in, retreat[m->point], 0, 40))
-        {
+        if (!m->waiting) {
+            if (!in->settled) break;
+            m->waiting=emit(m,PC_MOVE,remaining,0,20,0,30000);
+        }
+        break;
+    }
+    case 23:
+        if (!in->settled) break;
+        if (m->stair_distance>=ends[m->point]-0.5f) { m->phase=25;break; }
+        if (emit(m,PC_PILLAR_STOPPED,0,0,0,in->ball_index,0)) m->phase=24;
+        break;
+    case 24:
+        if (in->resume_index>m->grabs-m->stair_base_grabs) {
+            m->grabs=m->stair_base_grabs+in->resume_index;
+            m->phase=m->grabs>=2?25:22; m->waiting=false;
+        }
+        break;
+    case 25:
+        if (in->settled && emit(m,PC_PILLAR_END,0,0,0,0,5000)) {
+            m->phase=26; m->entered=now;
+        }
+        break;
+    case 26:
+        if ((uint32_t)(now-m->entered)>=5000U) { fail(m,PATH_TIMEOUT);break; }
+        if (in->reply==PATH_OK) {
+            m->stair_scanning=false; m->waiting=false;
+            m->phase=m->stair_distance>=ends[m->point]-0.5f?27:22;
+        }
+        break;
+    case 27:
+        if (!in->settled) break;
+        if (m->point==0 && !group(m,now,in,4)) break;
+        if (m->point==3) { next(m,now); break; } /* G3, no extra retreat. */
+        /* Each intermediate boundary must reacquire the line, even after a skip. */
+        m->stair_heading_locked=false;
+        m->line_active=m->line_stopping=m->stable=m->line_skipped=false;
+        m->line_recovery=0;
+        m->waiting=false;
+        m->phase=28;
+        break;
+    case 28:
+        if (PathLine_AlignFour(m,now,in)) {
             ++m->point;
-            m->phase = 4;
-            m->entered = now;
-            m->stable = false;
+            m->phase=20;
+            m->waiting=false;
         }
         break;
-    case 6: /* Low section complete: G4 must finish before the 117 mm retreat. */
-        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
-        if (group(m, now, in, 4))
-        {
-            m->phase = 7;
-            m->entered = now;
-        }
-        break;
-    case 7:
-        if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
-        if (move(m, in, retreat[m->point], 0, 40))
-        {
-            ++m->point;
-            m->phase = 4;
-            m->entered = now;
-            m->stable = false;
-        }
-        break;
-    case 4: /* Every stopped stair point must physically cover all four probes. */
-        if (PathLine_AlignFour(m, now, in)) {
-            m->waiting = false;
-            m->phase = 2;
-        }
-        break;
-    default:
-        fail(m, PATH_ERROR);
-        break;
+    default: fail(m,PATH_ERROR);break;
     }
 }
 void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
@@ -432,7 +451,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_TIMEOUT);
         else if (!m->waiting)
         {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1797, .y = 0,
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1775, .y = 0,
                              .angle = 180, .speed = 130, .timeout_ms = 30000};
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
@@ -460,17 +479,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         stair(m, now, in);
         break;
     case 10:
-        if (m->phase == 0)
-        {
-            if (group(m, now, in, 3))
-            {
-                m->phase = 1;
-                m->entered = now;
-            }
-        }
-        else if ((uint32_t)(now - m->entered) >= 30000U)
-            fail(m, PATH_TIMEOUT);
-        else if (move(m, in, 100, 0, 40)) next(m, now);
+        if (group(m, now, in, 3)) next(m, now);
         break;
     case 11:
         if ((uint32_t)(now - m->entered) >= 30000U)

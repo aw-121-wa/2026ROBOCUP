@@ -4,6 +4,7 @@
 #include "chassis_control.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 UART_HandleTypeDef huart4 = {0, 4}, huart6 = {0, 6}, huart7 = {0, 7};
 ChassisConfig chassis_config = {
@@ -19,7 +20,7 @@ static bool gray_line = true;
 static bool outer_line;
 static float yaw, measured_yaw, map_yaw_test;
 static unsigned map_headings, line_calibrations, zero_aligns, blend_moves, arc_moves;
-static float blend_end, arc_begin;
+static float blend_end, arc_begin, pending_x, pending_y;
 
 uint32_t HAL_GetTick(void) { return now; }
 uint32_t PathSession_Create(void) { return 123; }
@@ -52,11 +53,11 @@ float Chassis_ContinuousYaw(void) { return yaw; }
 float Chassis_MeasuredYaw(void) { return measured_yaw; }
 float Chassis_LineYaw(void) { return measured_yaw; }
 bool Chassis_SetLineReference(void) { return !moving; }
-void Chassis_Hold(void) { moving = false; ++holds; }
+void Chassis_Hold(void) { moving = false; pending_x=pending_y=0; ++holds; }
 bool Chassis_Move(float x, float y, float v, float a, float d) {
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (!state.armed || moving) return false;
-    moving = true; return true;
+    pending_x=x; pending_y=y; moving = true; return true;
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
@@ -87,7 +88,11 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *u) {
 }
 
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n",__LINE__,#x); return 1; } } while(0)
-static void tick(void) { now += 5; PathPorts_Tick(); }
+static void tick(void) {
+    if(!moving) { state.x_mm+=pending_x*cosf(yaw)-pending_y*sinf(yaw);
+        state.y_mm+=pending_x*sinf(yaw)+pending_y*cosf(yaw);pending_x=pending_y=0; }
+    now += 5; PathPorts_Tick();
+}
 static void reply(const char *line) {
     for (const char *p = line; *p; ++p) { *rx4 = (uint8_t)*p; PathPorts_RxComplete(&huart4); }
 }
@@ -189,13 +194,13 @@ int main(int argc, char **argv) {
             CHECK(wire[0]==0 && !path_diagnostics.fault);
         }
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==0 && map_headings==12 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==0 && map_headings==8 && zero_aligns==0 && path_diagnostics.rfid_count==0);
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());
         CHECK(PathPorts_Start()); tick(); state.fault=2; tick();
         CHECK(path_diagnostics.result==PATH_ERROR && !moving && wire[0]==0);
-        puts("no-vision route, 8 heading points, restart, STOP and fault passed");
+        puts("no-vision continuous stair route, restart, STOP and fault passed");
         return 0;
     }
     if (!strncmp(argv[1],"boot_",5)) {
@@ -320,29 +325,31 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(wire,"GROUP 105\r\n") && !moving);
         measured_yaw=5;
         reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();
-        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 1\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"STAIR_CHECK 1\r\n") && !moving && line_calibrations==0 && map_headings==1 && zero_aligns==0);
-        reply("STAIR_ACK 1\r\nSTAIR_NONE 1\r\n"); tick();
-        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 2\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"STAIR_CHECK 2\r\n"));
-        reply("STAIR_ACK 2\r\nSTAIR_ACTION_DONE 2\r\n"); tick();
-        CHECK(path_diagnostics.disc_waiting_rfid==1 && !moving);
-        id(99); tick(); CHECK(path_diagnostics.rfid_count==6+extra && !moving);
-        id(101); tick(); finish_store();
-        CHECK(!strcmp(wire,"STAIR_RFID_OK 2\r\n") && !moving);
-        reply("STAIR_DONE 2\r\n"); tick();
-        for(unsigned i=0;i<20 && strcmp(wire,"GROUP 4\r\n");i++) {moving=false; tick();}
+        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_SCAN 1\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"STAIR_SCAN 1\r\n") && !moving);
+        reply("PILLAR_ACK\r\nPILLAR_READY\r\n"); tick(); tick();CHECK(moving);
+        reply("PILLAR_BALL 1\r\n");tick();tick();tick();
+        CHECK(!moving && !strcmp(wire,"PILLAR_STOPPED 1\r\n"));
+        reply("PILLAR_ACTION_DONE 1\r\n");tick();
+        id(99);tick();CHECK(path_diagnostics.rfid_count==6+extra);
+        id(101);tick();finish_store();CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
+        reply("PILLAR_RESUME 1\r\n");tick();
+        for(unsigned i=0;i<60 && strcmp(wire,"PILLAR_END\r\n");i++) {moving=false;tick();}
+        CHECK(!strcmp(wire,"PILLAR_END\r\n"));reply("PILLAR_DONE\r\n");tick();
+        for(unsigned i=0;i<30 && strcmp(wire,"GROUP 4\r\n");i++) tick();
         CHECK(!strcmp(wire,"GROUP 4\r\n") && !moving);
-        reply("GROUP_ACK 4\r\n");
-        for(unsigned i=0;i<10;i++) tick();
-        CHECK(!moving && !strcmp(wire,"GROUP 4\r\n"));
-        reply("GROUP_DONE 4\r\n"); tick();
-        for(unsigned i=0;i<60 && strcmp(wire,"STAIR_CHECK 3\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"STAIR_CHECK 3\r\n"));
-        reply("STAIR_ACK 3\r\nSTAIR_ACTION_DONE 3\r\n"); tick();
-        id(101); tick(); CHECK(path_diagnostics.rfid_count==7+extra && !moving);
-        id(102); tick(); finish_store(); CHECK(!strcmp(wire,"STAIR_RFID_OK 3\r\n") && !moving);
-        reply("STAIR_DONE 3\r\n"); tick();
+        reply("GROUP_ACK 4\r\n");for(unsigned i=0;i<10;i++)tick();CHECK(!moving);
+        reply("GROUP_DONE 4\r\n");tick();
+        for(unsigned i=0;i<30 && strcmp(wire,"STAIR_SCAN 2\r\n");i++)tick();
+        CHECK(!strcmp(wire,"STAIR_SCAN 2\r\n"));
+        reply("PILLAR_ACK\r\nPILLAR_READY\r\n");tick();tick();CHECK(moving);
+        reply("PILLAR_BALL 1\r\n");tick();tick();tick();
+        CHECK(!strcmp(wire,"PILLAR_STOPPED 1\r\n") && !moving);
+        reply("PILLAR_ACTION_DONE 1\r\n");tick();
+        id(101);tick();CHECK(path_diagnostics.rfid_count==7+extra);
+        id(102);tick();finish_store();CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
+        reply("PILLAR_RESUME 1\r\n");tick();tick();tick();
+        CHECK(!strcmp(wire,"PILLAR_END\r\n"));reply("PILLAR_DONE\r\n");tick();
         bool group3_replied=false;
         unsigned warehouse_done=0, group_sequence=0;
         for(unsigned i=0;i<30000 && path_diagnostics.result==PATH_RUNNING;i++) {

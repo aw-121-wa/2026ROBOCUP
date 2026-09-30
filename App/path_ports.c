@@ -351,6 +351,12 @@ static bool send(void *ctx, const PathCommand *c)
         close_rfid_gate();
         disc_action_done_index = disc_rfid_confirmed_index = 0;
         return true;
+    case PC_STAIR_SCAN:
+        if (!Chassis_IsSettled() || mission.id_count >= 64 ||
+            !Rdk_Begin(&rdk, "STAIR_SCAN", c->argument, now, c->timeout_ms)) return false;
+        close_rfid_gate();
+        disc_action_done_index = disc_rfid_confirmed_index = 0;
+        return true;
     case PC_VISION:
         if (!Chassis_IsSettled() || !Rdk_Begin(&rdk, "PILLAR", 0, now, c->timeout_ms)) return false;
         close_rfid_gate();
@@ -672,6 +678,8 @@ void PathPorts_Tick(void)
                     .motion_done = motion_done,
                     .gray = gray,
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
+                    .x_mm = Chassis_GetState()->x_mm,
+                    .y_mm = Chassis_GetState()->y_mm,
                     .map_yaw_deg = Chassis_MapYaw(),
                     .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,

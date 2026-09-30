@@ -201,7 +201,7 @@ void Path_RecordId(PathMission *m, uint32_t id)
     if (!PATH_VISION_ENABLE) return;
     if (m->result != PATH_RUNNING ||
         !((m->step == 3 && m->phase == 1) || (m->step == 6 && m->phase == 6) ||
-          (m->step == 9 && m->phase == 2 && m->waiting && m->grabs < 2)))
+          (m->step == 9 && m->phase == 24 && m->stair_scanning && m->grabs < 2)))
         return;
     for (unsigned i = 0; i < m->id_count; ++i)
         if (m->id_list[i] == id) return;

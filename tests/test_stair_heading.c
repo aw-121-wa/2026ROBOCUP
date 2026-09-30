@@ -52,10 +52,9 @@ int main(void) {
  init(&m,&in,9);in.map_yaw_deg=NAN;PathLine_AlignFour(&m,0,&in);assert(m.result==PATH_ERROR);
  init(&m,&in,9);reject=true;PathLine_AlignFour(&m,0,&in);assert(m.result==PATH_ERROR);
  /* A running arm task is never interrupted by a heading command. */
- init(&m,&in,9);m.phase=2;m.waiting=true;in.reply=PATH_WAIT;in.map_yaw_deg=174;
- Path_Tick(&m,5,&in);assert(!turns);
- in.reply=PATH_NONE;Path_Tick(&m,10,&in);assert(m.phase==3 && !turns);
- Path_Tick(&m,15,&in);assert(turns==1);
+ init(&m,&in,9);m.phase=24;m.stair_scanning=true;in.reply=PATH_WAIT;in.map_yaw_deg=174;
+ Path_Tick(&m,5,&in);assert(!turns && m.phase==24);
+ in.resume_index=1;Path_Tick(&m,10,&in);assert(m.phase==22 && !turns && m.grabs==1);
  init(&m,&in,13);m.phase=3;m.waiting=true;in.map_yaw_deg=5;in.reply=PATH_WAIT;
  assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
  Path_Tick(&m,5,&in);assert(!turns);

@@ -63,6 +63,17 @@ static int alignment(void) {
     in.gray=6; Path_Tick(&m,20,&in); Path_Tick(&m,25,&in);
     Path_Tick(&m,124,&in); CHECK(m.phase==4);
     Path_Tick(&m,125,&in); CHECK(m.phase==1 && calibrations==1);
+    init(); in.gray=0; in.settled=true;
+    Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
+    CHECK(last.kind==PC_MAP_SEARCH && last.y==-10);
+    Path_Tick(&m,1005,&in); CHECK(last.kind==PC_HOLD);
+    in.settled=false; Path_Tick(&m,1010,&in); CHECK(last.kind==PC_HOLD);
+    in.settled=true; Path_Tick(&m,1020,&in);
+    CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
+    Path_Tick(&m,2020,&in); CHECK(last.kind==PC_HOLD);
+    Path_Tick(&m,2025,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==-10);
+    Path_Tick(&m,3025,&in); CHECK(last.kind==PC_HOLD);
+    Path_Tick(&m,3030,&in); CHECK(m.phase==1 && m.line_skipped);
     return 0;
 }
 static int errors(void) {

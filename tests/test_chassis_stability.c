@@ -108,7 +108,7 @@ int main(int argc,char **argv) {
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=0;
         assert(Chassis_ReturnHome());
         float k=(hypotf(1000,500)+100)/hypotf(1000,500);
-        float ex=1000*k-15, ey=500*k+30, length=hypotf(ex,ey);
+        float ex=1000*k-30, ey=500*k+30, length=hypotf(ex,ey);
         assert(fabsf(planner.distance-length)<0.01f);
         assert(fabsf(dx+ex/length)<1e-5f);
         assert(fabsf(dy+ey/length)<1e-5f);

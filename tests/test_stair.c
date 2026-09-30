@@ -14,28 +14,6 @@ static bool send(void *ctx, const PathCommand *c) {
     if (c->kind == PC_ROTATE) { rotations++; }
     return true;
 }
-static int route(unsigned mask, unsigned expected_checks, unsigned balls) {
-    PathMission m; Path_Init(&m, send, 0);
-    m.result = PATH_RUNNING; m.step = 8;
-    PathInput in = {.armed=true, .settled=true, .gray=6};
-    ng=checks=moves=rotations=0;
-    last=(PathCommand){0};
-    for (unsigned t=0; t<20000 && m.result==PATH_RUNNING; t+=100) {
-        in.reply = last.kind == PC_STAIR && !(mask & (1U << (last.argument-1))) ? PATH_NONE : PATH_OK;
-        in.map_yaw_deg=m.step<=9 ? 180 : 0;
-        Path_Tick(&m,t,&in);
-    }
-    CHECK(m.result == PATH_DONE);
-    CHECK(ng==4 && groups[0]==2 && groups[1]==105 && groups[2]==4 && groups[3]==3);
-    CHECK(m.step==13);
-    CHECK(checks == expected_checks);
-    CHECK(m.grabs == balls);
-    CHECK(rotations==0);
-    CHECK(moves==13);
-    const float expected[]={-350,25,90,117,90,90,90,117,90,100,180,200,200};
-    for(unsigned i=0;i<13;i++) CHECK(distances[i]==expected[i]);
-    return 0;
-}
 static char wire[80];
 static bool tx(void *ctx,const char *s,size_t n) {
     (void)ctx; memcpy(wire,s,n); wire[n]=0; return true;
@@ -47,10 +25,7 @@ static int exit_route(void) {
     ng=0;
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_GROUP && last.argument==3);
     Path_Tick(&m,100,&in); CHECK(m.step==10);
-    in.reply=PATH_OK; Path_Tick(&m,105,&in); CHECK(m.step==10 && m.phase==1);
-    Path_Tick(&m,106,&in); CHECK(last.kind==PC_MOVE && last.x==100 && last.y==0);
-    in.settled=false; Path_Tick(&m,107,&in); CHECK(m.step==10);
-    in.settled=true; Path_Tick(&m,108,&in); CHECK(m.step==11);
+    in.reply=PATH_OK; Path_Tick(&m,105,&in); CHECK(m.step==11);
     Path_Tick(&m,110,&in);
     CHECK(last.kind==PC_MOVE_ROTATE && last.x==0 && last.y==-1500 && last.angle==180);
     CHECK(last.speed==60 && last.timeout_ms==30000);
@@ -72,7 +47,10 @@ static int exit_route(void) {
     CHECK(m.step==13);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; m.phase=1; in.gray=14;
     Path_Tick(&m,0,&in); Path_Tick(&m,30000,&in);
-    Path_Tick(&m,30005,&in);
+    Path_Tick(&m,30005,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
+    Path_Tick(&m,31005,&in); Path_Tick(&m,31010,&in);
+    CHECK(last.kind==PC_MAP_SEARCH && last.y==-10);
+    Path_Tick(&m,32010,&in); Path_Tick(&m,32015,&in);
     CHECK(m.result==PATH_RUNNING && last.kind==PC_MAP_HEADING && last.x==0 && m.step==13);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; in.gray=0;
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
@@ -86,8 +64,6 @@ static int exit_route(void) {
 }
 int main(void) {
     CHECK(exit_route()==0);
-    CHECK(route(0,8,0)==0); CHECK(route(1,8,1)==0); CHECK(route(3,2,2)==0);
-    CHECK(route(0x84,8,2)==0); /* A gap and second ball at the last point. */
     PathMission m; Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=9;
     PathInput in={.armed=true,.settled=true};
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.timeout_ms==50000);

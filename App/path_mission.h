@@ -45,7 +45,8 @@ typedef enum
     PC_MAP_LATERAL,
     PC_MAP_HEADING,
     PC_HOME_ALIGN,
-    PC_MAP_SEARCH
+    PC_MAP_SEARCH,
+    PC_STAIR_SCAN
 } PathCommandKind;
 typedef struct
 {
@@ -59,6 +60,7 @@ typedef struct
 {
     bool armed, fault, settled, motion_done;
     float yaw_deg;
+    float x_mm, y_mm; /* Existing wheel-command odometry, in world frame. */
     float map_yaw_deg; /* Measured yaw relative to the fixed PATH start direction. */
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
     uint8_t gray; /* active-low: bit3 PD3, bit2 PD0, bit1 PD1, bit0 PB13; stair/warehouse target 0110 */
@@ -80,6 +82,10 @@ typedef struct
     BallInventory inventory;
     bool id_overflow;
     float orbit_yaw;
+    float stair_origin_x, stair_origin_y, stair_axis, stair_distance;
+    uint32_t stair_started;
+    unsigned stair_base_grabs;
+    bool stair_scanning;
     float line_scan_yaw;
     uint32_t line_since, line_shift_since;
     unsigned line_scan_stage, line_shift_count;

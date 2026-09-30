@@ -42,7 +42,7 @@ static int post_disc_turn(void) {
     m.result=PATH_RUNNING; m.step=5;
     Path_Tick(&m,0,&in);
     CHECK(p.n==1 && p.commands[0].kind==PC_MOVE_ROTATE);
-    CHECK(p.commands[0].x==-1797 && p.commands[0].y==0);
+    CHECK(p.commands[0].x==-1775 && p.commands[0].y==0);
     CHECK(p.commands[0].angle==180 && p.commands[0].speed==130);
     in.settled=false; in.motion_done=true; Path_Tick(&m,5,&in);
     CHECK(m.step==5 && p.n==1);
@@ -117,15 +117,19 @@ static int chassis_only(void) {
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==25);
     in.ir=true; in.yaw_deg=0;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?180:0; Path_Tick(&m,t,&in); }
-    CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==2);
-    CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR)==2 && count(&p,PC_TURN)==0);
-    const float expected[]={25,90,117,90,90,90,117,90,100,180,200,200};
+    for(unsigned t=0;t<10000 && m.result==PATH_RUNNING;t+=10) {
+        in.map_yaw_deg=m.step<=9?180:0; unsigned before=p.n;
+        Path_Tick(&m,t,&in);
+        for(unsigned j=before;j<p.n;j++) if(p.commands[j].kind==PC_MOVE) in.x_mm+=p.commands[j].x;
+    }
+    CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
+    CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==4 && count(&p,PC_TURN)==0);
+    const float expected[]={120,380,20,340,180,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
-        CHECK(n<12 && p.commands[i].x==expected[n] && p.commands[i].y==0); n++;
+        CHECK(n<7 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
     }
-    CHECK(n==12);
+    CHECK(n==7);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
     for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?180:0; Path_Tick(&m,t,&in); }

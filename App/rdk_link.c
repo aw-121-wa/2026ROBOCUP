@@ -75,9 +75,13 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
         r->disc_action_event_pending = r->aux_pending = false;
         r->cancel_after_aux = false;
     }
-    else if (!strcmp(v, "PILLAR") && (r->stage == 2 || r->stage == 5))
+    else if ((!strcmp(v, "PILLAR") || (!strcmp(v, "STAIR_SCAN") && a>=1 && a<=3)) &&
+             (r->stage == 2 || r->stage == 5))
     {
-        strcpy(r->request, "PILLAR_START\r\n");
+        r->stair_scan = !strcmp(v, "STAIR_SCAN");
+        if (r->stair_scan)
+            snprintf(r->request,sizeof(r->request),"STAIR_SCAN %lu\r\n",(unsigned long)a);
+        else strcpy(r->request, "PILLAR_START\r\n");
         r->stage = 9;
         r->pillar_ready = r->pillar_ending = false;
         r->ball_index = r->stopped_index = r->resume_index = 0;
@@ -307,7 +311,8 @@ bool Rdk_PillarStopped(RdkLink *r, uint8_t index)
 bool Rdk_PillarEnd(RdkLink *r)
 {
     if (!r->active || r->locked || r->stage != 10 || r->aux_pending ||
-        r->ball_index != r->resume_index) return false;
+        (r->ball_index != r->resume_index &&
+         !(r->stair_scan && r->stopped_index == r->resume_index))) return false;
     strcpy(r->aux_request, "PILLAR_END\r\n");
     r->aux_length = strlen(r->aux_request);
     r->aux_pending = r->pillar_ending = true;

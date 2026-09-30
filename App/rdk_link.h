@@ -18,6 +18,7 @@ typedef struct
     bool aux_pending, cancel_after_aux, disc_action_event_pending;
     uint32_t group;
     bool pillar_ready, pillar_ending;
+    bool stair_scan;
     uint8_t ball_index, stopped_index, resume_index;
     RdkTransmit transmit;
     void *context;

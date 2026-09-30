@@ -29,6 +29,7 @@ from stair_task import run_stair_point
 from vision_servo_direct_test import build_parser as build_disc_parser, run_disc_task
 from rdk_vision.config import load_config
 from shared_task_camera import SharedTaskCamera
+from stair_scan import run_stair_scan
 
 DEFAULT_DISC_TIMEOUT_S = 60.0
 
@@ -123,6 +124,7 @@ class BridgeCore:
         run_pillar=None,
         run_stair=None,
         close_camera=lambda: None,
+        run_scan=None,
     ):
         self._send_line = send_line
         self._run_disc = run_disc
@@ -135,6 +137,7 @@ class BridgeCore:
         self._run_group = run_group
         self._run_pillar = run_pillar
         self._run_stair = run_stair
+        self._run_scan = run_scan
         self._close_camera = close_camera
         self._stair_point = 0
         self._mode = None
@@ -173,9 +176,10 @@ class BridgeCore:
                 return False
         return not self._cancel.is_set() and not self._finish.is_set()
 
-    def _pillar_main(self, gate):
+    def _pillar_main(self, gate, level=None):
         try:
-            rc = self._run_pillar(
+            runner = self._run_pillar if level is None else lambda **kw: self._run_scan(level, **kw)
+            rc = runner(
                 rfid_gate=gate,
                 on_action_complete=lambda n: self._send_line(f'PILLAR_ACTION_DONE {n}'),
                 on_ready=lambda: self._send_line('PILLAR_READY'),
@@ -296,10 +300,12 @@ class BridgeCore:
                 if self._mode == 'stair' and self._stair_point == int(match.group(1)):
                     self._gate.on_rfid_confirmed(1)
             return
-        if command == 'PILLAR_START':
+        scan_match = re.fullmatch(r'STAIR_SCAN ([1-3])', command)
+        if command == 'PILLAR_START' or scan_match:
             with self._lock:
                 if self._worker is not None: return
-                if self._run_pillar is None:
+                level = int(scan_match.group(1)) if scan_match else None
+                if (self._run_pillar if level is None else self._run_scan) is None:
                     self._send_line('PILLAR_ERROR'); return
                 self._mode = 'pillar'
                 self._cancel.clear(); self._finish.clear(); self._stopped.clear()
@@ -307,7 +313,7 @@ class BridgeCore:
                 self._waiting_stop = False
                 self._gate = DiscRfidGate(max_actions=59)
                 self._deadline = self._clock() + 300.0
-                self._worker = threading.Thread(target=self._pillar_main, args=(self._gate,), daemon=True)
+                self._worker = threading.Thread(target=self._pillar_main, args=(self._gate,level), daemon=True)
                 self._send_line('PILLAR_ACK')
                 self._worker.start()
             return
@@ -450,6 +456,8 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
                 run_disc=lambda **kwargs: run_disc_in_process(project_root, **kwargs),
                 run_pillar=lambda **kwargs: run_pillar_in_process(project_root, camera_session=camera_session, **kwargs),
                 run_stair=run_shared_stair,
+                run_scan=lambda level, **kwargs: run_stair_scan(project_root,level,
+                    camera_session=camera_session,**kwargs),
                 close_camera=camera_session.close,
             )
             rx = bytearray()
