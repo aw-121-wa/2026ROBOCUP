@@ -70,7 +70,12 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             m->entered=now;
             m->waiting=emit(m,(PathCommand){.kind=PC_HOME_ALIGN,.timeout_ms=15000});
         } else if ((uint32_t)(now-m->entered)>=15000) fail(m,PATH_TIMEOUT);
-        else if (in->settled) { m->waiting=false; m->phase=5; m->entered=now; }
+        else if (in->settled) {
+            /* Recheck the absolute map angle after braking before admitting HOME. */
+            if (PathHeading_Ready(m,now,in)) {
+                m->waiting=false; m->phase=5; m->entered=now;
+            }
+        }
         return;
     }
     if (m->point==9 && m->phase==5 && !m->inventory.occupied && !m->inventory.uncertain) {

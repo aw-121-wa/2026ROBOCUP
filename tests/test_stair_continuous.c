@@ -1,3 +1,4 @@
+#include "stair_heading.h"
 #include "path_mission.h"
 #include "rdk_link.h"
 #include <assert.h>
@@ -17,7 +18,7 @@ static bool send(void *p,const PathCommand *c) {
 }
 static void run(unsigned balls) {
  PathMission m; Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;
- PathInput in={.armed=true,.settled=true,.gray=6,.map_yaw_deg=180};
+ PathInput in={.armed=true,.settled=true,.gray=6,.map_yaw_deg=STAIR_MAP_TARGET_DEG};
  scans=g4=g3=stopped=headings=0; unsigned got=0; bool event=false;
  for(unsigned t=0;t<100000 && m.step<11;t+=10) {
   in.reply=PATH_OK; in.vision_ready=true;

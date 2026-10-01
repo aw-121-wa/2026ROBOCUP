@@ -119,16 +119,33 @@ int main(int argc,char **argv) {
         state.yaw_rad=0;Chassis_BeginPath();
         state.yaw_rad=170*RAD;path_yaw.continuous=170*RAD;
         assert(Chassis_AlignMapAxis());
-        assert(fabsf(path_target-180*RAD)<1e-5f);
+        assert(fabsf(path_target-STAIR_MAP_TARGET_DEG*RAD)<1e-5f);
         Chassis_Hold();wait_stop();state.yaw_rad=10*RAD;path_yaw.continuous=10*RAD;
         assert(Chassis_AlignMapAxis());
-        assert(fabsf(path_target-180*RAD)<1e-5f); /* Near zero still targets map 180. */
+        assert(fabsf(path_target-STAIR_MAP_TARGET_DEG*RAD)<1e-5f); /* Near zero still targets map 180. */
         Chassis_Hold();wait_stop();state.yaw_rad=180*RAD;
         assert(Chassis_MapLateral(30));
         assert(fabsf(dx)<1e-5f && fabsf(dy+1)<1e-5f);
         Chassis_Hold();wait_stop();state.yaw_rad=0;
         assert(Chassis_MapLateral(30));
         assert(fabsf(dx)<1e-5f && fabsf(dy-1)<1e-5f);
+        /* Stair grab hold corrects both signs, limits rate, never translates. */
+        Chassis_Hold();wait_stop();
+        path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=9;path_diagnostics.phase=24;
+        fake_imu.yaw_deg=179.5f;
+        for(int n=0;n<50;n++) tick();
+        assert(body_output[2]>0 && body_output[2]<=1.01f*RAD);
+        assert(fabsf(body_output[0])+fabsf(body_output[1])<1e-6f);
+        fake_imu.yaw_deg=180.5f;
+        for(int n=0;n<100;n++) tick();
+        assert(body_output[2]<0 && body_output[2]>=-1.01f*RAD);
+        path_diagnostics.step=8;path_diagnostics.phase=0;fake_imu.yaw_deg=176;
+        tick();assert(body_output[2]==0); /* Let IsSettled admit the normal large-angle turn. */
+        wait_stop();assert(Chassis_AlignMapAxis());assert(path_rotation);
+        Chassis_Hold();wait_stop();
+        path_diagnostics.step=13;tick();assert(body_output[2]==0);
+        path_diagnostics.step=9;Chassis_Stop();tick();
+        assert(!state.armed && body_output[2]==0);
     } else if(!strcmp(argv[1],"home")) {
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;Chassis_BeginPath();
@@ -142,7 +159,7 @@ int main(int argc,char **argv) {
         Chassis_Hold();wait_stop();
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=90*RAD;
         assert(!Chassis_ReturnHome());
-        assert(Chassis_AlignHome());
+        assert(Chassis_AlignHome());assert(fabsf(rotate_tolerance_deg-0.1f)<1e-6f);
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;state.yaw_rad=map_yaw;

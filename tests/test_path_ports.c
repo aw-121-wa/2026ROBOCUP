@@ -1,3 +1,4 @@
+#include "stair_heading.h"
 #include "disc_task_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
@@ -287,6 +288,7 @@ int main(int argc, char **argv) {
     } else if (!strncmp(argv[1], "full_path",9)) {
         const unsigned extra=!strcmp(argv[1],"full_path9");
         for (uint8_t i=1;i<=5;i++) CHECK(complete_gate(i,i)==0);
+        CHECK(moving && strcmp(wire,"GROUP 1\r\n"));
         reply("DISC_DONE\r\n"); tick(); tick(); tick();
         CHECK(!strcmp(wire,"GROUP 1\r\n")); CHECK(moving);
         reply("GROUP_ACK 1\r\nGROUP_DONE 1\r\n"); tick(); tick(); CHECK(moving);
@@ -353,7 +355,8 @@ int main(int argc, char **argv) {
         reply("PILLAR_ACTION_DONE 1\r\n");tick();
         id(101);tick();CHECK(path_diagnostics.rfid_count==7+extra);
         id(102);tick();finish_store();CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
-        reply("PILLAR_RESUME 1\r\n");tick();tick();tick();
+        reply("PILLAR_RESUME 1\r\n");
+        for(unsigned i=0;i<10 && strcmp(wire,"PILLAR_END\r\n");i++) tick();
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));reply("PILLAR_DONE\r\n");tick();
         bool group3_replied=false;
         unsigned warehouse_done=0, group_sequence=0;
@@ -424,7 +427,7 @@ int main(int argc, char **argv) {
         CHECK(path_diagnostics.result == PATH_TIMEOUT);
         CHECK(path_diagnostics.disc_waiting_rfid == 0 && path_diagnostics.disc_action_allowed == 0);
     } else if (!strcmp(argv[1], "late")) {
-        for (uint8_t i=1;i<=5;i++) CHECK(complete_gate(i, i) == 0);
+        for (uint8_t i=1;i<=4;i++) CHECK(complete_gate(i, i) == 0);
         now += DISC_TASK_TIMEOUT_MS; tick(); reply("DISC_DONE\r\n"); tick();
         CHECK(path_diagnostics.result == PATH_TIMEOUT);
     } else if (!strcmp(argv[1], "error")) {
@@ -470,10 +473,10 @@ void Chassis_HoldCapture(void) { Chassis_Hold(); }
 bool Chassis_LineSearch(float y,float w) { return Chassis_Body(0,y,w); }
 bool Chassis_CalibrateLine(void) { if(moving)return false; line_calibrations++; measured_yaw=0; return true; }
 
-bool Chassis_AlignMapAxis(void) { map_yaw_test=180; moving=true; return true; }
+bool Chassis_AlignMapAxis(void) { map_yaw_test=STAIR_MAP_TARGET_DEG; moving=true; return true; }
 bool Chassis_MapSearch(float mm_s) { (void)mm_s; moving=true; return true; }
 bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
-bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=180))return false; map_headings++; map_yaw_test=degrees; return true; }
+bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=STAIR_MAP_TARGET_DEG))return false; map_headings++; map_yaw_test=degrees; return true; }
 
 bool Chassis_AlignHome(void) { map_yaw_test=0; moving=true; return true; }

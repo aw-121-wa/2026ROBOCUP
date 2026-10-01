@@ -103,6 +103,7 @@ typedef struct
     bool stair_heading_locked, warehouse_heading_locked;
     bool waiting, stable, expired;
     bool prep_pending;
+    bool disc_depart_pending;
     uint32_t prep_since;
     bool heading_align_active;
     uint32_t heading_align_since;

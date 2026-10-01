@@ -353,7 +353,10 @@ static bool send(void *ctx, const PathCommand *c)
         return true;
     case PC_GROUP:
         return (mission.step != 13 || (!turn.pending && turn_purpose == TURN_IDLE &&
-                turn_issued == mission.id_count)) && Chassis_IsSettled() && Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
+                turn_issued == mission.id_count)) &&
+               (Chassis_IsSettled() || (c->argument == 1 && mission.disc_depart_pending &&
+                 (mission.step == 5 || mission.step == 6))) &&
+               Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
     case PC_STAIR:
         if (!Chassis_IsSettled() || mission.id_count >= 64 ||
             !Rdk_Begin(&rdk, "STAIR", c->argument, now, c->timeout_ms)) return false;

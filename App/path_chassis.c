@@ -146,7 +146,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 355)
+        else if (m->orbit_yaw - in->yaw_deg >= 353.5f)
         {
             hold(m);
             m->entered = now;
@@ -208,7 +208,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 355)
+            else if (m->orbit_yaw - in->yaw_deg >= 353.5f)
                 m->phase = 3;
             else if (emit(m, PC_BODY, -81.144f, 0, -61.74f, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
@@ -241,8 +241,8 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Absolute heading is checked only at safe boundaries, never during an arm task. */
 bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
 {
-    float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.5f;
-    float target = m->step <= 9 ? 180.0f : 0.0f;
+    float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f;
+    float target = m->step <= 9 ? STAIR_MAP_TARGET_DEG : 0.0f;
     float error = remainderf(target - in->map_yaw_deg, 360.0f);
     if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
     if (m->heading_align_active) {
@@ -273,7 +273,7 @@ static bool line_skip(PathMission *m, uint32_t now, const PathInput *in)
         return false;
     }
     if (!PathHeading_Ready(m, now, in)) return false;
-    if (!emit(m, PC_MAP_HEADING, m->step == 9 ? 180 : 0, 0, 0, 0, 0)) return false;
+    if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_MAP_TARGET_DEG : 0, 0, 0, 0, 0)) return false;
     m->line_skipped = true;
     if (m->step == 9) m->stair_heading_locked = true;
     else m->warehouse_heading_locked = true;
@@ -289,7 +289,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
     }
     if (!m->line_active) {
         if (!in->settled) return false;
-        if (!emit(m, PC_MAP_HEADING, m->step == 9 ? 180 : 0, 0, 0, 0, 0)) return false;
+        if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_MAP_TARGET_DEG : 0, 0, 0, 0, 0)) return false;
         m->line_active = true; m->line_skipped = false;
         m->line_since = now; m->line_recovery = 0;
         m->line_stopping = m->stable = false;
@@ -412,13 +412,17 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     case 23:
         if (!in->settled) break;
         if (m->stair_distance>=ends[m->point]-0.5f) { m->phase=25;break; }
+        if (!PathHeading_Ready(m,now,in)) break;
         if (emit(m,PC_PILLAR_STOPPED,0,0,0,in->ball_index,0)) m->phase=24;
         break;
     case 24:
         if (in->resume_index>m->grabs-m->stair_base_grabs) {
             m->grabs=m->stair_base_grabs+in->resume_index;
-            m->phase=m->grabs>=2?25:22; m->waiting=false;
+            m->phase=29; m->waiting=false;
         }
+        break;
+    case 29: /* RFID resume confirms the arm task has ended; check yaw before travel. */
+        if (PathHeading_Ready(m,now,in)) m->phase=m->grabs>=2?25:22;
         break;
     case 25:
         if (in->settled && emit(m,PC_PILLAR_END,0,0,0,0,5000)) {
@@ -434,6 +438,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case 27:
         if (!in->settled) break;
+        if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
         if (m->point==0 && !group(m,now,in,4)) break;
         if (m->point==3) { next(m,now); break; } /* G3, no extra retreat. */
         /* Each intermediate boundary must reacquire the line, even after a skip. */
@@ -463,7 +468,9 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             next(m, now);
             break;
         }
-        if (emit(m, PC_GROUP, 0, 0, 0, 1, 30000)) {
+        if (m->disc_depart_pending) {
+            next(m, now); /* Travel now; send G1 only after DISC_DONE. */
+        } else if (emit(m, PC_GROUP, 0, 0, 0, 1, 30000)) {
             m->prep_pending = true;
             m->prep_since = now;
             next(m, now); /* Run G1 while travelling to the pillar. */
@@ -509,6 +516,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     case 8:
         if (m->phase == 0)
         {
+            if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
             if (move(m, in, -350, 0, 160)) m->phase = 1;
         }
         else if (m->phase == 1)

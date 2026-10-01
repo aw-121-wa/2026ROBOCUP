@@ -85,7 +85,14 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (in->reply == PATH_FAILED || (uint32_t)(now-m->prep_since)>=30000U) {
             fail(m,in->reply==PATH_FAILED?PATH_ERROR:PATH_TIMEOUT); return;
         }
-        if (in->reply == PATH_OK) m->prep_pending=false;
+        if (in->reply == PATH_OK) {
+            if (m->disc_depart_pending) {
+                PathCommand c = {.kind=PC_GROUP,.argument=1,.timeout_ms=30000};
+                if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); return; }
+                m->disc_depart_pending=false;
+                m->prep_since=now;
+            } else m->prep_pending=false;
+        }
     }
     if (m->step >= 4)
     {
@@ -198,13 +205,16 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
     {
         if (!in->settled || in->reply == PATH_FAILED)
             fail(m, PATH_ERROR);
-        else if (in->reply == PATH_OK)
+        else if (m->id_count >= DISC_REQUIRED_RFID_COUNT || in->reply == PATH_OK)
         {
             if (m->id_count < DISC_REQUIRED_RFID_COUNT)
                 fail(m, PATH_ERROR);
             else
             {
                 (void)emit(m, PC_HOLD, 0, 0, 0, 0);
+                m->disc_depart_pending = in->reply != PATH_OK;
+                m->prep_pending = m->disc_depart_pending;
+                m->prep_since = now;
                 m->result = PATH_DONE;
             }
         }

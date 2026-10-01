@@ -2,6 +2,7 @@
 #include "host_command.h"
 #include "host_uart.h"
 #include "path_ports.h"
+#include "path_mission.h"
 #include "path_yaw.h"
 #include "stair_heading.h"
 #include "forward_comp.h"
@@ -507,8 +508,8 @@ static bool align_map_heading(float degrees, float tolerance)
     rotate_tolerance_deg = tolerance;
     return true;
 }
-bool Chassis_AlignMapAxis(void) { return align_map_heading(180, 0.05f); }
-bool Chassis_AlignHome(void) { return align_map_heading(0, 0.5f); }
+bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, STAIR_HEADING_STOP_TOLERANCE_DEG); }
+bool Chassis_AlignHome(void) { return align_map_heading(0, 0.1f); }
 bool Chassis_MapSearch(float mm_s)
 {
     if (!path_heading_enabled) return false;
@@ -992,8 +993,29 @@ void Chassis_Update(void)
             integral = 0;
         }
     }
+    /* Keep stationary yaw active from post-orbit alignment through the stairs.
+     * STOP, faults, other stages and motion commands retain their original behavior. */
+    float stair_hold_error = Angle_Wrap(map_yaw + STAIR_MAP_TARGET_DEG * RAD - state.yaw_rad);
+    bool stair_arm_active = path_diagnostics.step == 9 &&
+                            (path_diagnostics.phase == 24 ||
+                             (path_diagnostics.phase == 1 || path_diagnostics.phase == 27));
+    bool stair_hold = state.armed && !state.fault && path_heading_enabled &&
+                      zero_output && !normal_stopping &&
+                      path_diagnostics.result == PATH_RUNNING &&
+                      path_diagnostics.step >= 8 && path_diagnostics.step <= 10 &&
+                      (stair_arm_active || fabsf(stair_hold_error) < 0.5f * RAD);
     if (zero_output || !state.armed)
         vx = vy = wz = 0;
+    if (stair_hold) {
+        heading = Angle_Wrap(map_yaw + STAIR_MAP_TARGET_DEG * RAD);
+        state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
+        /* Proportional + gyro damping only: no stored integral kick near the arm. */
+        wz = clamp(chassis_config.kp * state.yaw_error -
+                   chassis_config.gyro_damping * gyro_rad_s, 1.0f * RAD);
+        wz = body_output[2] + clamp(wz-body_output[2], 5.0f * RAD * dt);
+        if (fabsf(state.yaw_error) < STAIR_HEADING_STOP_TOLERANCE_DEG * RAD &&
+            fabsf(gyro_rad_s) < 0.5f * RAD) wz = 0;
+    }
     ForwardCompResult forward_comp =
         ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
                           chassis_config.right_gain, chassis_config.forward_lateral_comp);
@@ -1005,7 +1027,7 @@ void Chassis_Update(void)
         send_telemetry(0, 0, 0, 0, 0, now);
         return;
     }
-    if (!state.armed || (zero_output && !normal_stopping))
+    if (!state.armed || (zero_output && !normal_stopping && !stair_hold))
     {
         memset(body_output, 0, sizeof(body_output));
         vx = vy = wz = 0; /* STOP/fault bypass all smoothing. */

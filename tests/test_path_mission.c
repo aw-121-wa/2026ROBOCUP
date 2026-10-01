@@ -1,3 +1,4 @@
+#include "stair_heading.h"
 #include "disc_task_config.h"
 #include "path_mission.h"
 #include "path_chassis.h"
@@ -54,7 +55,7 @@ static int startup(void) {
 }
 static int stair_prep_parallel(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
-    m.result=PATH_RUNNING; m.step=8; m.phase=1; in.map_yaw_deg=180; in.reply=PATH_WAIT;
+    m.result=PATH_RUNNING; m.step=8; m.phase=1; in.map_yaw_deg=STAIR_MAP_TARGET_DEG; in.reply=PATH_WAIT;
     Path_Tick(&m,0,&in); CHECK(m.step==9 && m.prep_pending && p.commands[p.n-1].argument==2);
     in.gray=0; Path_Tick(&m,5,&in); CHECK(p.commands[p.n-1].kind==PC_BODY);
     in.gray=6; Path_Tick(&m,10,&in); Path_Tick(&m,15,&in);
@@ -137,8 +138,16 @@ static int disc_contract(void) {
     CHECK(count(&p,PC_TURN)==0);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=3; m.phase=1;
     m.id_count=DISC_REQUIRED_RFID_COUNT; in.reply=PATH_WAIT;
-    Path_Tick(&m,100,&in); CHECK(m.step==3 && m.result==PATH_RUNNING);
-    in.reply=PATH_OK; Path_Tick(&m,105,&in); CHECK(m.result==PATH_DONE);
+    Path_Tick(&m,100,&in); CHECK(m.result==PATH_DONE && m.disc_depart_pending);
+    m.result=PATH_RUNNING; m.step=4; m.waiting=false;
+    unsigned groups=count(&p,PC_GROUP);
+    Path_Tick(&m,105,&in); CHECK(m.step==5 && m.prep_pending);
+    CHECK(count(&p,PC_GROUP)==groups && p.commands[p.n-1].kind==PC_MOVE_ROTATE);
+    in.settled=false; in.reply=PATH_OK; Path_Tick(&m,110,&in);
+    CHECK(!m.disc_depart_pending && m.prep_pending && count(&p,PC_GROUP)==groups+1);
+    in.reply=PATH_WAIT; Path_Tick(&m,115,&in); CHECK(m.prep_pending);
+    in.reply=PATH_OK; Path_Tick(&m,120,&in); CHECK(!m.prep_pending);
+    in.settled=true;
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=3; m.phase=1;
     m.entered=0xfffffff0U; in.reply=PATH_WAIT;
     Path_Tick(&m,DISC_TASK_TIMEOUT_MS-17U,&in); CHECK(m.result==PATH_RUNNING);
@@ -176,7 +185,7 @@ static int chassis_only(void) {
     in.ir=true; in.yaw_deg=0;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<10000 && m.result==PATH_RUNNING;t+=10) {
-        in.map_yaw_deg=m.step<=9?180:0; unsigned before=p.n;
+        in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; unsigned before=p.n;
         Path_Tick(&m,t,&in);
         for(unsigned j=before;j<p.n;j++) if(p.commands[j].kind==PC_MOVE) in.x_mm+=p.commands[j].x;
     }
@@ -190,7 +199,7 @@ static int chassis_only(void) {
     CHECK(n==7);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?180:0; Path_Tick(&m,t,&in); }
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
     CHECK(count(&p,PC_MOVE)==2 && count(&p,PC_ROTATE)==0);
     return 0;

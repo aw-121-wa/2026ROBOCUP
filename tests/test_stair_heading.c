@@ -1,3 +1,4 @@
+#include "stair_heading.h"
 #include "path_mission.h"
 #include "path_chassis.h"
 #include <assert.h>
@@ -16,24 +17,30 @@ static bool send(void *ctx,const PathCommand *c) {
 }
 static void init(PathMission *m,PathInput *in,unsigned step) {
  Path_Init(m,send,0);m->result=PATH_RUNNING;m->step=step;m->phase=step==12?1:4;
- *in=(PathInput){.armed=true,.settled=true,.gray=15,.map_yaw_deg=step==9?180:0};
+ *in=(PathInput){.armed=true,.settled=true,.gray=15,.map_yaw_deg=step==9?STAIR_MAP_TARGET_DEG:0};
  searches=turns=actions=0;reject=false;
 }
 int main(void) {
  PathMission m;PathInput in; unsigned patterns[]={6,15,9};
  /* Stair admission is strict: a 0.15-degree error must request alignment. */
- init(&m,&in,9);in.map_yaw_deg=179.85f;
+ init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.15f;
  assert(!PathHeading_Ready(&m,0,&in));assert(turns==1 && last.kind==PC_MAP_AXIS);
  in.settled=false;assert(!PathHeading_Ready(&m,5,&in));
- in.settled=true;in.map_yaw_deg=179.95f;
+ in.settled=true;in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.02f;
  assert(PathHeading_Ready(&m,10,&in));
- init(&m,&in,9);in.map_yaw_deg=179.95f;
+ init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.02f;
  assert(PathHeading_Ready(&m,0,&in) && turns==0);
- init(&m,&in,9);in.map_yaw_deg=179.8f;
+ init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.2f;
  assert(!PathHeading_Ready(&m,0,&in) && turns==1);
- /* Warehouse keeps its existing tolerance. */
- init(&m,&in,13);in.map_yaw_deg=0.15f;
+ /* Stair 0.08-degree gate accepts 0.07 but rejects 0.09. */
+ init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.07f;
  assert(PathHeading_Ready(&m,0,&in) && turns==0);
+ init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.09f;
+ assert(!PathHeading_Ready(&m,0,&in) && turns==1);
+ /* Warehouse rejects the same 0.15-degree residual as stairs. */
+ init(&m,&in,13);in.map_yaw_deg=0.15f;
+ assert(!PathHeading_Ready(&m,0,&in) && turns==1 && last.kind==PC_HOME_ALIGN);
+ in.map_yaw_deg=0.05f; assert(PathHeading_Ready(&m,5,&in));
 
  for(unsigned step=9;step<=13;step++) {
   if(step==10 || step==11)continue;
@@ -50,7 +57,7 @@ int main(void) {
   in.settled=false;assert(!PathLine_AlignFour(&m,100,&in));assert(turns==1);
   /* Crossing the gray timeout while rotating must not cancel the rotation. */
   assert(!PathLine_AlignFour(&m,2100,&in));assert(turns==1);
-  in.settled=true;in.map_yaw_deg=step==9?-180:0;
+  in.settled=true;in.map_yaw_deg=step==9?STAIR_MAP_TARGET_DEG-360:0;
   assert(!PathLine_AlignFour(&m,2110,&in));
   assert(PathLine_AlignFour(&m,2120,&in));assert(m.line_skipped);
   in.map_yaw_deg+=3;assert(!PathLine_AlignFour(&m,2130,&in));assert(turns==2);
@@ -60,7 +67,7 @@ int main(void) {
  in.map_yaw_deg=177;assert(!PathLine_AlignFour(&m,2000,&in));
  assert(!PathLine_AlignFour(&m,2005,&in));assert(turns==1);
  in.settled=false;assert(!PathLine_AlignFour(&m,2010,&in));
- in.settled=true;in.map_yaw_deg=180;assert(PathLine_AlignFour(&m,2020,&in));
+ in.settled=true;in.map_yaw_deg=STAIR_MAP_TARGET_DEG;assert(PathLine_AlignFour(&m,2020,&in));
  init(&m,&in,9);in.map_yaw_deg=175;PathLine_AlignFour(&m,0,&in);PathLine_AlignFour(&m,5,&in);
  in.settled=false;PathLine_AlignFour(&m,30005,&in);assert(m.result==PATH_TIMEOUT);
  init(&m,&in,9);in.map_yaw_deg=NAN;PathLine_AlignFour(&m,0,&in);assert(m.result==PATH_ERROR);
@@ -68,7 +75,12 @@ int main(void) {
  /* A running arm task is never interrupted by a heading command. */
  init(&m,&in,9);m.phase=24;m.stair_scanning=true;in.reply=PATH_WAIT;in.map_yaw_deg=174;
  Path_Tick(&m,5,&in);assert(!turns && m.phase==24);
- in.resume_index=1;Path_Tick(&m,10,&in);assert(m.phase==22 && !turns && m.grabs==1);
+ in.resume_index=1;Path_Tick(&m,10,&in);assert(m.phase==29 && !turns && m.grabs==1);
+ Path_Tick(&m,15,&in);assert(turns==1 && m.phase==29);
+ in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.02f;Path_Tick(&m,20,&in);assert(m.phase==22);
+ init(&m,&in,9);m.phase=23;m.stair_scanning=true;in.ball_index=1;in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.15f;
+ Path_Tick(&m,0,&in);assert(m.phase==23 && turns==1 && last.kind==PC_MAP_AXIS);
+ in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.02f;Path_Tick(&m,5,&in);assert(m.phase==24 && last.kind==PC_PILLAR_STOPPED);
  init(&m,&in,13);m.phase=3;m.waiting=true;in.map_yaw_deg=5;in.reply=PATH_WAIT;
  assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
  Path_Tick(&m,5,&in);assert(!turns);
@@ -80,14 +92,14 @@ int main(void) {
  init(&m,&in,13);m.phase=3;m.line_skipped=true;in.gray=0;
  assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
  Path_Tick(&m,0,&in);assert(m.waiting && actions==1);
- init(&m,&in,7);m.phase=0;in.map_yaw_deg=179;
+ init(&m,&in,7);m.phase=0;in.map_yaw_deg=STAIR_MAP_TARGET_DEG;
  Path_Tick(&m,0,&in);assert(m.step==8 && turns==0);
  Path_Tick(&m,5,&in);assert(last.kind==PC_MOVE && last.x==-350 && turns==0);
  in.settled=false;Path_Tick(&m,10,&in);assert(m.phase==0 && turns==0);
  in.settled=true;Path_Tick(&m,15,&in);assert(m.phase==1);
- Path_Tick(&m,20,&in);assert(last.kind==PC_MAP_AXIS && turns==1 && actions==0);
+ in.map_yaw_deg=179;Path_Tick(&m,20,&in);assert(last.kind==PC_MAP_AXIS && turns==1 && actions==0);
  in.settled=false;Path_Tick(&m,16000,&in);assert(m.result==PATH_RUNNING && m.step==8);
- in.settled=true;in.map_yaw_deg=179.95f;Path_Tick(&m,16005,&in);
+ in.settled=true;in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.02f;Path_Tick(&m,16005,&in);
  assert(last.kind==PC_GROUP && actions==1);
  in.reply=PATH_OK;Path_Tick(&m,16010,&in);assert(m.step==9);
  puts("map heading and arm boundary checks passed");return 0;
