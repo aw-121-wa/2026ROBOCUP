@@ -85,14 +85,26 @@ static int post_disc_parallel(void) {
 }
 static int post_disc_turn(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
-    m.result=PATH_RUNNING; m.step=5;
+    m.result=PATH_RUNNING; m.step=5; in.ir=false;
     Path_Tick(&m,0,&in);
     CHECK(p.n==1 && p.commands[0].kind==PC_MOVE_ROTATE);
-    CHECK(p.commands[0].x==-1740 && p.commands[0].y==0);
+    CHECK(p.commands[0].x==-1640 && p.commands[0].y==0);
     CHECK(p.commands[0].angle==180 && p.commands[0].speed==150);
+    CHECK(p.commands[0].continuous && p.commands[0].end_speed==45);
     in.settled=false; in.motion_done=true; Path_Tick(&m,5,&in);
-    CHECK(m.step==5 && p.n==1);
-    in.settled=true; Path_Tick(&m,10,&in); CHECK(m.step==6);
+    CHECK(m.step==5 && m.phase==1 && p.commands[p.n-1].kind==PC_ARC);
+    PathCommand arc=p.commands[p.n-1];
+    CHECK(arc.x==100 && arc.y==0 && arc.angle==90 && arc.continuous);
+    CHECK(arc.speed==45 && arc.start_speed==45 && arc.end_speed==30);
+    /* In the original map frame the arc adds (-100,-100), retaining X=-1740. */
+    CHECK(p.commands[0].x-arc.x==-1740);
+    Path_Tick(&m,10,&in); CHECK(m.step==6 && p.commands[p.n-1].kind==PC_BODY);
+    CHECK(p.commands[p.n-1].x==0 && p.commands[p.n-1].y==30 && count(&p,PC_HOLD)==0);
+    in.motion_done=false; in.ir=true; Path_Tick(&m,15,&in);
+    CHECK(p.commands[p.n-1].kind==PC_HOLD);
+    /* An IR hit during the arc cancels it immediately, without waiting for motion_done. */
+    Path_Init(&m,send,&p);m.result=PATH_RUNNING;m.step=5;m.phase=1;
+    Path_Tick(&m,20,&in);CHECK(m.step==6 && p.commands[p.n-1].kind==PC_HOLD);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=5;
     Path_Tick(&m,30000,&in); CHECK(m.result==PATH_TIMEOUT);
     return 0;

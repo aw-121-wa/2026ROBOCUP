@@ -1,33 +1,39 @@
 #include "path_warehouse.h"
 #include "path_chassis.h"
-/* Plan once per column; never change a target while a turn or arm action is active. */
-static void plan_column(PathMission *m)
+/* Compare all 6^3 row orders once, including the transitions between columns.
+ * Cache pocket lookups before enumeration; do not plan again after unloading. */
+static void plan_warehouse(PathMission *m)
 {
     static const uint8_t orders[6][3]={{1,2,3},{1,3,2},{2,1,3},{2,3,1},{3,1,2},{3,2,1}};
-    unsigned col=m->point/3+1, best=~0U;
-    for(unsigned p=0;p<6;p++) {
-        unsigned current=m->inventory.current, cost=0;
-        for(unsigned i=0;i<3;i++) {
-            int slot=BallInventory_Find(&m->inventory,(uint8_t)((orders[p][i]<<4)|col));
-            if(slot<0) continue;
-            unsigned forward=((unsigned)slot+BALL_SLOT_COUNT-current)%BALL_SLOT_COUNT;
-            unsigned reverse=(current+BALL_SLOT_COUNT-(unsigned)slot)%BALL_SLOT_COUNT;
-            unsigned distance=forward<reverse?forward:reverse;
-            if(distance) cost+=240U*distance;
-            current=(unsigned)slot;
+    int slots[9];
+    for(unsigned col=0;col<3;col++)
+        for(unsigned row=0;row<3;row++)
+            slots[col*3+row]=BallInventory_Find(&m->inventory,(uint8_t)(((row+1)<<4)|(col+1)));
+    unsigned best=~0U, chosen=0;
+    for(unsigned candidate=0;candidate<216;candidate++) {
+        unsigned current=m->inventory.current, cost=0, order=candidate;
+        for(unsigned col=0;col<3;col++,order/=6) {
+            if(col<m->point/3) continue;
+            for(unsigned i=0;i<3;i++) {
+                int slot=slots[col*3+orders[order%6][i]-1];
+                if(slot<0) continue;
+                unsigned forward=((unsigned)slot+BALL_SLOT_COUNT-current)%BALL_SLOT_COUNT;
+                unsigned reverse=(current+BALL_SLOT_COUNT-(unsigned)slot)%BALL_SLOT_COUNT;
+                cost+=forward<reverse?forward:reverse;
+                current=(unsigned)slot;
+            }
         }
-        if(cost<best) {
-            best=cost;
-            for(unsigned i=0;i<3;i++) m->warehouse_order[i]=orders[p][i];
-        }
+        if(cost<best) { best=cost; chosen=candidate; }
     }
-    m->warehouse_plan_column=(uint8_t)col;
+    for(unsigned col=0;col<3;col++,chosen/=6)
+        for(unsigned i=0;i<3;i++) m->warehouse_order[col*3+i]=orders[chosen%6][i];
+    m->warehouse_plan_ready=true;
 }
 uint8_t PathWarehouse_Code(const PathMission *m)
 {
     if(m->point>=9) return 0;
     unsigned col=m->point/3+1;
-    unsigned row=m->warehouse_plan_column==col ? m->warehouse_order[m->point%3] : m->point%3+1;
+    unsigned row=m->warehouse_plan_ready ? m->warehouse_order[m->point] : m->point%3+1;
     return (uint8_t)((row<<4)|col);
 }
 static void fail(PathMission *m, PathResult result)
@@ -83,7 +89,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         fail(m,PATH_ERROR);
         return;
     }
-    if(m->warehouse_plan_column!=m->point/3+1) plan_column(m);
+    if(!m->warehouse_plan_ready) plan_warehouse(m);
     uint8_t code=PathWarehouse_Code(m);
     if (m->prep_pending && (m->phase==1 || m->phase==3)) return;
     switch(m->phase)
@@ -100,7 +106,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->entered=now;
             m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=200,
-                                          .speed=100,.timeout_ms=30000});
+                                          .speed=100,.acceleration=750,.deceleration=750,.timeout_ms=30000});
         }
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
         else if (in->settled)

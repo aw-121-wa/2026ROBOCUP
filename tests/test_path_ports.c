@@ -61,6 +61,9 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
+    if(path_diagnostics.step==13 && x==200 && y==0) {
+        if(a!=750 || d!=750) return false;
+    } else if(a!=550 || d!=550) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }

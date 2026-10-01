@@ -1,3 +1,4 @@
+#include "path_chassis.h"
 #include "path_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
@@ -268,7 +269,9 @@ static bool send(void *ctx, const PathCommand *c)
         motion_timeout = c->timeout_ms;
         return true;
     case PC_MOVE:
-        if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale, 550, 550,
+        if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale,
+                                  c->acceleration > 0 ? c->acceleration : 550,
+                                  c->deceleration > 0 ? c->deceleration : 550,
                                   c->start_speed * scale, c->end_speed * scale))
             return false;
         motion_pending = true;
@@ -713,6 +716,7 @@ void PathPorts_Tick(void)
         mission.phase = 0;
         mission.entered = now;
         mission.waiting = mission.stable = false;
+        PathChassis_Tick(&mission,now,&in); /* DISC_DONE -> G1 + travel without idle ticks. */
     }
     if (mission.result != PATH_RUNNING ||
         (mission.step != 3 && mission.step != 6 && mission.step != 9) || rdk.locked)

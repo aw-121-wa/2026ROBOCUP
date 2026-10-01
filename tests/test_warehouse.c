@@ -6,13 +6,14 @@ static PathMission m;
 static PathCommand last;
 static unsigned moves, groups, turns, calibrations, homes, group_ids[9], ball_codes[9];
 static bool bad;
+static unsigned turn_steps;
 static bool send(void *ctx,const PathCommand *c) {
     (void)ctx; last=*c;
     if(c->kind==PC_RETURN_HOME) homes++;
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0) bad=true; }
-    if(c->kind==PC_TURN) { turns++; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=750 || c->deceleration!=750) bad=true; }
+    if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }
         group_ids[groups]=c->argument;
@@ -23,7 +24,22 @@ static bool send(void *ctx,const PathCommand *c) {
 }
 static void init(void) {
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=13;
-    moves=groups=turns=calibrations=homes=0; bad=false; last=(PathCommand){0};
+    moves=groups=turns=calibrations=homes=turn_steps=0; bad=false; last=(PathCommand){0};
+}
+/* Independent exhaustive visit search: enforce increasing columns, try each
+ * remaining destination in the current column and count physical pocket steps. */
+static unsigned optimum(const BallInventory *stock,unsigned current,unsigned col,unsigned used) {
+    if(col>3) return 0;
+    unsigned best=~0U; bool found=false;
+    for(unsigned slot=0;slot<BALL_SLOT_COUNT;slot++) {
+        if(!(stock->occupied&(1U<<slot)) || (used&(1U<<slot)) || (stock->code[slot]&15)!=col) continue;
+        found=true;
+        unsigned d=current>slot?current-slot:slot-current;
+        if(d>BALL_SLOT_COUNT/2) d=BALL_SLOT_COUNT-d;
+        unsigned cost=d+optimum(stock,slot,col,used|(1U<<slot));
+        if(cost<best) best=cost;
+    }
+    return found?best:optimum(stock,current,col+1,used);
 }
 static int run(unsigned mask) {
     init();
@@ -33,6 +49,7 @@ static int run(unsigned mask) {
         CHECK(BallInventory_Record(&m.inventory,i+1,order[i])==BALL_ADDED);
         BallInventory_Step(&m.inventory,false); expected++;
     }
+    unsigned optimal_steps=optimum(&m.inventory,m.inventory.current,1,0);
     PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_OK,.turn_reply=PATH_WAIT};
     unsigned finished_turns=0, turn_wait=0;
     for(unsigned t=0;t<30000 && m.result==PATH_RUNNING;t+=5) {
@@ -56,6 +73,7 @@ static int run(unsigned mask) {
         }
     }
     CHECK(seen==mask);
+    CHECK(turn_steps==optimal_steps);
     return 0;
 }
 static int optimized_order(void) {

@@ -69,8 +69,8 @@ int main(void) {
     PathInput in={.armed=true,.settled=true};
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.timeout_ms==50000);
     CHECK(last.x==0 && last.y==75 && last.speed==0);
-    in.y_mm=899; Path_Tick(&m,95,&in); CHECK(last.y==75);
-    in.y_mm=900; Path_Tick(&m,100,&in); CHECK(last.y==25);
+    in.y_mm=1049; Path_Tick(&m,95,&in); CHECK(last.y==75);
+    in.y_mm=1050; Path_Tick(&m,100,&in); CHECK(last.y==25);
     in.y_mm=0; Path_Tick(&m,105,&in); CHECK(last.y==25); /* Slow mode latches. */
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
     Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT);

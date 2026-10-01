@@ -2,6 +2,9 @@
 #include "path_chassis.h"
 #include "stair_heading.h"
 #include "path_warehouse.h"
+#define PILLAR_ENTRY_RADIUS_MM 100.0f
+#define PILLAR_ENTRY_SPEED_RPM 45.0f
+#define PILLAR_SEARCH_SPEED_RPM 30.0f
 /* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
                  uint32_t timeout)
@@ -59,7 +62,7 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
         }
         float x=in->x_mm-m->approach_x, y=in->y_mm-m->approach_y;
         /* Command odometry only limits fast travel; gray detection always takes priority. */
-        if (in->gray || x*x+y*y >= 900.0f*900.0f) m->approach_slow=true;
+        if (in->gray || x*x+y*y >= 1050.0f*1050.0f) m->approach_slow=true;
         if (!m->approach_slow) lateral=75;
     }
     if (!m->stable) {
@@ -464,18 +467,38 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             m->prep_pending = true;
             m->prep_since = now;
             next(m, now); /* Run G1 while travelling to the pillar. */
-        }
-        break;
+        } else break;
+        /* Begin travel in the same tick as G1. */
+        /* fall through */
     case 5:
         if ((uint32_t)(now - m->entered) >= 30000U)
             fail(m, PATH_TIMEOUT);
+        else if (m->phase == 1) {
+            /* Body heading is now 180 degrees. The arc turns translation from
+             * body +X to +Y, reaching the original -1740 mm approach axis. */
+            if (in->ir || in->motion_done) {
+                next(m,now);
+                pillar(m,now,in); /* IR wins; otherwise carry the arc exit speed. */
+            }
+        }
         else if (!m->waiting)
         {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1740, .y = 0,
-                             .angle = 180, .speed = 150, .timeout_ms = 30000};
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1740 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
+                             .angle = 180, .speed = 150, .end_speed = PILLAR_ENTRY_SPEED_RPM,
+                             .continuous = true, .timeout_ms = 30000};
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
-        else if (in->settled) next(m, now);
+        else if (in->motion_done) {
+            if (in->ir) {
+                next(m,now); pillar(m,now,in);
+            } else {
+                PathCommand c = {.kind=PC_ARC,.x=PILLAR_ENTRY_RADIUS_MM,.y=0,.angle=90,
+                                 .speed=PILLAR_ENTRY_SPEED_RPM,.start_speed=PILLAR_ENTRY_SPEED_RPM,
+                                 .end_speed=PILLAR_SEARCH_SPEED_RPM,.continuous=true,.timeout_ms=10000};
+                if (!m->send(m->context,&c)) fail(m,PATH_ERROR);
+                else { m->phase=1; m->entered=now; }
+            }
+        }
         break;
     case 6:
         pillar(m, now, in);

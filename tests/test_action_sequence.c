@@ -21,9 +21,10 @@ int main(void) {
     Path_Tick(&m,10,&in); Path_Tick(&m,15,&in);
     CHECK(last.kind==PC_GROUP && last.argument==100);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=4;
-    Path_Tick(&m,20,&in); CHECK(last.kind==PC_GROUP && last.argument==1);
+    Path_Tick(&m,20,&in); CHECK(last.kind==PC_MOVE_ROTATE && m.prep_pending);
     in.reply=PATH_WAIT; Path_Tick(&m,25,&in); CHECK(m.step==5 && m.prep_pending && last.kind==PC_MOVE_ROTATE);
-    in.reply=PATH_OK; Path_Tick(&m,30,&in); CHECK(m.step==6 && !m.prep_pending);
+    in.reply=PATH_OK; in.motion_done=true; Path_Tick(&m,30,&in); CHECK(m.step==6 && !m.prep_pending);
+    in.motion_done=false;
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=6;
     Path_Tick(&m,40,&in); Path_Tick(&m,70,&in); Path_Tick(&m,75,&in);
     CHECK(last.kind==PC_VISION); /* RDK prepares G103 before reporting READY. */

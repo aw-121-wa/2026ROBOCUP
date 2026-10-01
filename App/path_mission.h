@@ -53,6 +53,7 @@ typedef struct
     PathCommandKind kind;
     float x, y, angle, speed;
     float start_speed, end_speed;
+    float acceleration, deceleration; /* mm/s^2; zero selects the standard profile. */
     bool continuous;
     uint32_t argument, timeout_ms;
 } PathCommand;
@@ -80,7 +81,8 @@ typedef struct
     uint32_t id_list[64]; /* Full UID, wire byte order represented as big-endian integer. */
     uint8_t id_count;
     BallInventory inventory;
-    uint8_t warehouse_plan_column, warehouse_order[3];
+    bool warehouse_plan_ready;
+    uint8_t warehouse_order[9];
     bool id_overflow;
     float orbit_yaw;
     float stair_origin_x, stair_origin_y, stair_axis, stair_distance;

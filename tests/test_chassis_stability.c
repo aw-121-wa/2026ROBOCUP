@@ -58,6 +58,19 @@ int main(int argc,char **argv) {
         fake_imu.yaw_deg=179.7f;planner.active=false;
         for(int n=0;n<12;n++)tick();
         wait_stop();assert(fabsf(Angle_Wrap(heading-180*RAD))<1e-5f);
+    } else if(!strcmp(argv[1],"entry_arc")) {
+        assert(Chassis_MoveRotateBoundary(-1640,0,180,550,550,550,0,165));
+        fake_imu.yaw_deg=180; segment_progress=1640; tick();
+        assert(!Chassis_MotionBusy() && path_heading_chain && !normal_stopping);
+        assert(fabsf(dx-1)<0.001f && fabsf(dy)<0.001f);
+        assert(Chassis_MoveArc(100,0,90,165,550,550,165,110));tick();
+        assert(hypotf(body_output[0],body_output[1])>100);
+        segment_progress=planner.distance; tick();
+        assert(!Chassis_MotionBusy() && !normal_stopping);
+        assert(fabsf(dx)<0.01f && dy>0.99f);
+        assert(Chassis_Body(0,110,0));tick();
+        assert(body_output[1]>100 && !normal_stopping);
+        Chassis_Hold();wait_stop();assert(Chassis_IsSettled());
     } else if(!strcmp(argv[1],"orbit")) {
         assert(Chassis_Body(-200,0,-0.7f));
         for(int n=0;n<150;n++)tick();
