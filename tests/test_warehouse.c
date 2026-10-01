@@ -12,7 +12,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_RETURN_HOME) homes++;
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=750 || c->deceleration!=750) bad=true; }
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
     if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }

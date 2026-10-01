@@ -27,7 +27,7 @@ static void run(unsigned balls) {
   assert(m.result==PATH_RUNNING);
   if(last.kind==PC_STAIR_SCAN) { in.ball_index=in.resume_index=0; }
   if(last.kind==PC_MOVE) {
-   assert(last.speed==(m.grabs>=2 && !m.stair_scanning ? 90 : 30) && last.x>0);
+   assert(last.speed==(m.grabs>=2 && !m.stair_scanning ? 110 : 35) && last.x>0);
    if(got<balls) { in.x_mm+=40;in.settled=false;in.ball_index++;event=true; }
    else { in.x_mm+=last.x;in.settled=true; }
   }

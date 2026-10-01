@@ -245,11 +245,11 @@ static bool send(void *ctx, const PathCommand *c)
         if (c->continuous)
         {
             if (c->end_speed <= 0 ||
-                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale, 550, 550,
+                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale, 650, 650,
                                             c->start_speed * scale, c->end_speed * scale))
                 return false;
         }
-        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, 550, 550))
+        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, 650, 650))
             return false;
         motion_pending = true;
         motion_continuous = c->continuous;
@@ -270,8 +270,8 @@ static bool send(void *ctx, const PathCommand *c)
         return true;
     case PC_MOVE:
         if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale,
-                                  c->acceleration > 0 ? c->acceleration : 550,
-                                  c->deceleration > 0 ? c->deceleration : 550,
+                                  c->acceleration > 0 ? c->acceleration : 650,
+                                  c->deceleration > 0 ? c->deceleration : 650,
                                   c->start_speed * scale, c->end_speed * scale))
             return false;
         motion_pending = true;
@@ -280,7 +280,7 @@ static bool send(void *ctx, const PathCommand *c)
         motion_timeout = c->timeout_ms;
         return true;
     case PC_ARC:
-        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, 550, 550,
+        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, 650, 650,
                              c->start_speed * scale, c->end_speed * scale))
             return false;
         motion_pending = true;
@@ -354,7 +354,9 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_GROUP:
         return (mission.step != 13 || (!turn.pending && turn_purpose == TURN_IDLE &&
                 turn_issued == mission.id_count)) &&
-               (Chassis_IsSettled() || (c->argument == 1 && mission.disc_depart_pending &&
+               (Chassis_IsSettled() || (c->argument == 2 && mission.step == 8 && mission.phase == 3) ||
+                (c->argument == 100 && mission.step == 3 && mission.phase == 2) ||
+                (c->argument == 1 && mission.disc_depart_pending &&
                  (mission.step == 5 || mission.step == 6))) &&
                Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
     case PC_STAIR:

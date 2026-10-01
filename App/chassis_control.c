@@ -64,7 +64,7 @@ static float route_heading;
 static bool path_heading_enabled, normal_stopping, line_search;
 static bool capture_braking;
 static float body_output[3]; /* Last wheel-limited body command, not measured velocity. */
-#define BODY_ACCEL_MM_S2 550.0f
+#define BODY_ACCEL_MM_S2 650.0f
 #define BODY_BRAKE_MM_S2 800.0f
 #define YAW_ACCEL_RAD_S2 3.0f
 #define YAW_BRAKE_RAD_S2 6.0f
@@ -343,7 +343,7 @@ bool Chassis_ReturnHome(void)
     float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);
     route_heading = heading = map_yaw;
     integral = 0;
-    return Chassis_Move(x*c+y*s, -x*s+y*c, 450, 300, 300);
+    return Chassis_Move(x*c+y*s, -x*s+y*c, 520, 380, 380);
 }
 void Chassis_Stop(void)
 {
@@ -599,7 +599,7 @@ const ChassisState *Chassis_GetState(void)
 static void send_telemetry(float vx, float vy, float wz, float forward_comp_vy, float vy_original,
                            uint32_t now)
 {
-    if (DWT_DeltaSec(now, telemetry_cycle) < 0.05f ||
+    if (DWT_DeltaSec(now, telemetry_cycle) < 0.025f ||
         PINCFG_VOFA_UART->gState != HAL_UART_STATE_READY)
         return;
     telemetry_cycle = now;
@@ -907,8 +907,13 @@ void Chassis_Update(void)
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
     if (state.armed && !path_blend)
     {
+        /* Extra moving-heading authority; stationary and rotate loops stay unchanged. */
+        bool translating = !zero_output && !path_rotation &&
+                           (planner.active || (path_body && body_w == 0 && !line_search));
         wz = Heading_Update(state.yaw_error, gyro_rad_s, dt,
-                            chassis_config.kp, chassis_config.ki, chassis_config.gyro_damping,
+                            translating ? chassis_config.kp * 1.5f : chassis_config.kp,
+                            chassis_config.ki,
+                            translating ? chassis_config.gyro_damping * (7.0f/3.0f) : chassis_config.gyro_damping,
                             chassis_config.wz_limit, &integral);
     }
     if (state.armed && path_blend)
@@ -997,8 +1002,7 @@ void Chassis_Update(void)
      * STOP, faults, other stages and motion commands retain their original behavior. */
     float stair_hold_error = Angle_Wrap(map_yaw + STAIR_MAP_TARGET_DEG * RAD - state.yaw_rad);
     bool stair_arm_active = path_diagnostics.step == 9 &&
-                            (path_diagnostics.phase == 24 ||
-                             (path_diagnostics.phase == 1 || path_diagnostics.phase == 27));
+                            path_diagnostics.phase == 24;
     bool stair_hold = state.armed && !state.fault && path_heading_enabled &&
                       zero_output && !normal_stopping &&
                       path_diagnostics.result == PATH_RUNNING &&
@@ -1047,6 +1051,13 @@ void Chassis_Update(void)
         wz = body_output[2] + clamp(wz - body_output[2], YAW_ACCEL_RAD_S2 * dt);
     }
     float t[4], r[4], out[4];
+    /* Reserve wheel authority during fixed-heading travel; restore speed as yaw recovers. */
+    if (!zero_output && !path_rotation && !blending_this_cycle &&
+        (planner.active || (path_body && body_w == 0 && !line_search))) {
+        float excess=fmaxf(0, fabsf(state.yaw_error)/RAD - 0.5f);
+        float reserve=1.0f-fminf(0.2f, excess*0.1f);
+        vx*=reserve; vy*=reserve;
+    }
     Mecanum_Inverse(geometry(), vx, vy, 0, t);
     if (planner.braking && planner.active && jog_remaining <= 0)
     {

@@ -34,18 +34,6 @@ static void next(PathMission *m, uint32_t now)
     m->stable = false;
     m->entered = now;
 }
-static bool move(PathMission *m, const PathInput *in, float x, float y, float rpm)
-{
-    if (!m->waiting)
-    {
-        m->waiting = emit(m, PC_MOVE, x, y, rpm, 0, 30000);
-        return false;
-    }
-    if (!in->settled)
-        return false;
-    m->waiting = false;
-    return true;
-}
 /* Detect the two inner probes, brake lateral search, then continue.
  * Outer probes remain available in telemetry but do not block the route. */
 bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
@@ -62,8 +50,8 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
         }
         float x=in->x_mm-m->approach_x, y=in->y_mm-m->approach_y;
         /* Command odometry only limits fast travel; gray detection always takes priority. */
-        if (in->gray || x*x+y*y >= 1050.0f*1050.0f) m->approach_slow=true;
-        if (!m->approach_slow) lateral=75;
+        if (in->gray || x*x+y*y >= 1080.0f*1080.0f) m->approach_slow=true;
+        if (!m->approach_slow) lateral=80;
     }
     if (!m->stable) {
         if ((in->gray & 6U)!=6U) {
@@ -80,7 +68,7 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
     m->stable=false;
     return true;
 }
-/* Orbit translation and rotation both scaled by 1.26, preserving the command radius. */
+/* Orbit translation and rotation both scaled by 1.323, preserving the command radius. */
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
     if ((PATH_VISION_ENABLE && in->reply == PATH_FAILED) ||
@@ -125,7 +113,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->orbit_yaw = in->yaw_deg;
                 m->orbit_ms = 0;
                 m->previous = now;
-                if (emit(m, PC_BODY, -81.144f, 0, -61.74f, 0, 15000)) m->phase = 2;
+                if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000)) m->phase = 2;
                 break;
             }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
@@ -146,7 +134,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 353.5f)
+        else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
         {
             hold(m);
             m->entered = now;
@@ -187,7 +175,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (emit(m, PC_BODY, -81.144f, 0, -61.74f, 0, 15000)) m->phase = 2;
+            else if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000)) m->phase = 2;
         }
         break;
     case 5:
@@ -208,9 +196,9 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 353.5f)
+            else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
                 m->phase = 3;
-            else if (emit(m, PC_BODY, -81.144f, 0, -61.74f, 0, 15000 - m->orbit_ms)) m->phase = 2;
+            else if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
         break;
     case 7:
@@ -250,7 +238,10 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_TIMEOUT); return false;
         }
         if (!in->settled) return false;
-        if (fabsf(error) >= tolerance) { fail(m, PATH_ERROR); return false; }
+        if (fabsf(error) >= tolerance) {
+            if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, 0,0,0,0,30000)) return false;
+            return false;
+        }
         m->heading_align_active = false;
         return true;
     }
@@ -294,8 +285,8 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         m->line_since = now; m->line_recovery = 0;
         m->line_stopping = m->stable = false;
     }
-    /* Stop fully before each warehouse search reversal. */
-    if (m->step != 9 && m->line_recovery == 7) {
+    /* Stop fully before reversing the lateral search. */
+    if (m->line_recovery == 7 || (m->step == 9 && m->line_recovery == 9)) {
         if (!in->settled) return false;
         ++m->line_recovery;
         m->line_since=now;
@@ -306,7 +297,13 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
                                (m->line_recovery == 8 ? 5000U : 1000U);
     if (m->line_recovery == 6) return line_skip(m,now,in);
     if ((uint32_t)(now-m->line_since) >= search_ms &&
-        (m->step == 9 || m->line_recovery == 0 || !PathLine_Aligned(in->gray))) {
+        ((m->step != 9 && m->line_recovery == 0) || !PathLine_Aligned(in->gray))) {
+        if (m->step == 9) {
+            if (m->line_recovery == 10) { fail(m,PATH_TIMEOUT); return false; }
+            hold(m);
+            m->line_recovery = m->line_recovery == 8 ? 9 : 7;
+            return false;
+        }
         if (m->step != 9 && m->line_recovery == 8) {
             fail(m,PATH_TIMEOUT); return false;
         }
@@ -339,7 +336,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
      * Map-right search: stairs 40 mm/s for 2 s; warehouse 10 mm/s for 1 s,
      * then return until aligned (5 s watchdog), without another timed reversal. */
     if (m->step != 9 && m->line_recovery == 0) m->line_recovery=1;
-    (void)emit(m, PC_MAP_SEARCH, 0, m->step == 9 ? -40 : (m->line_recovery == 8 ? 10 : -10), 0, 0, 3000);
+    (void)emit(m, PC_MAP_SEARCH, 0, m->step == 9 ? (m->line_recovery == 8 ? 40 : -40) : (m->line_recovery == 8 ? 10 : -10), 0, 0, 3000);
     return false;
 }
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
@@ -360,6 +357,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     switch(m->phase) {
     case 0:
         if (PathLine_Align(m,now,in,50000,25)) {
+            if (PATH_STOP_AT_STAIR_LINE) {
+                hold(m); m->result=PATH_DONE;
+                break;
+            }
             m->phase=1; m->point=m->grabs=0; m->waiting=false;
         }
         break;
@@ -404,7 +405,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting) {
             if (!in->settled) break;
             /* Fast transit only after two confirmed grabs and scan END acknowledgement. */
-            float speed = m->grabs>=2 && !m->stair_scanning ? 90 : 30;
+            float speed = m->grabs>=2 && !m->stair_scanning ? 110 : 35;
             m->waiting=emit(m,PC_MOVE,remaining,0,speed,0,30000);
         }
         break;
@@ -482,7 +483,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_TIMEOUT);
         else if (m->phase == 1) {
             /* Body heading is now 180 degrees. The arc turns translation from
-             * body +X to +Y, reaching the original -1740 mm approach axis. */
+             * body +X to +Y, reaching the original -1735 mm approach axis. */
             if (in->ir || in->motion_done) {
                 next(m,now);
                 pillar(m,now,in); /* IR wins; otherwise carry the arc exit speed. */
@@ -490,8 +491,8 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (!m->waiting)
         {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1740 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
-                             .angle = 180, .speed = 150, .end_speed = PILLAR_ENTRY_SPEED_RPM,
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1735 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
+                             .angle = 180, .speed = 185, .end_speed = PILLAR_ENTRY_SPEED_RPM,
                              .continuous = true, .timeout_ms = 30000};
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
@@ -517,15 +518,37 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (m->phase == 0)
         {
             if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
-            if (move(m, in, -350, 0, 160)) m->phase = 1;
+            if (!m->waiting) {
+                PathCommand c={.kind=PC_MOVE,.x=-300,.speed=195,.end_speed=80,
+                               .continuous=true,.timeout_ms=30000};
+                if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
+            } else if (in->motion_done) {
+                PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
+                               .speed=80,.start_speed=80,.end_speed=80,
+                               .continuous=true,.timeout_ms=10000};
+                if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
+                m->approach_started=true; m->approach_x=in->x_mm; m->approach_y=in->y_mm;
+                m->phase=2; m->entered=now;
+            }
+            if ((uint32_t)(now-m->entered)>=30000U) fail(m,PATH_TIMEOUT);
         }
-        else if (m->phase == 1)
+        else if (m->phase == 2) {
+            if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT); break; }
+            if (in->gray && !m->approach_slow) {
+                /* Brake on an early line; never carry the fast arc across it. */
+                hold(m); m->approach_slow=true;
+                m->stable=(in->gray & 6U)==6U;
+            }
+            if (m->approach_slow ? in->settled : in->motion_done) m->phase=3;
+        }
+        else if (m->phase == 1 || m->phase == 3)
         {
-            if (!m->waiting && !PathHeading_Ready(m, now, in)) break;
-            if (!PATH_VISION_ENABLE) { next(m,now); break; }
+            if (m->phase == 1 && !m->waiting && !PathHeading_Ready(m, now, in)) break;
+            bool detected=m->stable;
+            if (!PATH_VISION_ENABLE) { next(m,now); m->stable=detected; break; }
             if (emit(m,PC_GROUP,0,0,0,2,30000)) {
                 m->prep_pending=true; m->prep_since=now;
-                next(m,now);
+                next(m,now); m->stable=detected;
             }
         }
         else fail(m, PATH_ERROR);
@@ -541,24 +564,40 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 11:
-        if ((uint32_t)(now - m->entered) >= 30000U)
-            fail(m, PATH_TIMEOUT);
-        else if (m->phase == 1)
-        {
-            if (move(m, in, 185, 0, 100)) next(m, now);
-        }
-        else if (!m->waiting)
-        {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = 0, .y = -1500,
-                             .angle = 180, .speed = 125, .timeout_ms = 30000};
-            if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
-        }
-        else if (in->settled)
-        {
-            m->phase = 1;
-            m->waiting = false;
-            m->entered = now;
-        }
+        if ((uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
+        if (m->phase == 0) {
+            if (!m->waiting) {
+                m->approach_slow=false;
+                PathCommand c={.kind=PC_MOVE_ROTATE,.y=-1425,.angle=180,.speed=155,
+                               .end_speed=45,.continuous=true,.timeout_ms=30000};
+                if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
+            } else if (in->motion_done) {
+                PathCommand c={.kind=PC_ARC,.x=50,.y=90,.angle=-90,.speed=45,
+                               .start_speed=45,.end_speed=45,.continuous=true,.timeout_ms=10000};
+                if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
+                m->phase=2;
+            }
+        } else if (m->phase == 2) {
+            if (in->motion_done) { m->phase=1; m->waiting=false; }
+        } else if (m->phase == 1) {
+            if (!m->waiting) {
+                PathCommand c={.kind=PC_MOVE,.x=110,.speed=125,.start_speed=45,
+                               .end_speed=40,.continuous=true,.timeout_ms=10000};
+                if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
+            } else if (in->motion_done) {
+                PathCommand c={.kind=PC_ARC,.x=25,.y=0,.angle=90,.speed=40,
+                               .start_speed=40,.end_speed=40,.continuous=true,.timeout_ms=10000};
+                if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
+                m->phase=3; m->stable=false;
+            }
+        } else if (m->phase == 3) {
+            if (in->gray && !m->approach_slow) {
+                hold(m); m->approach_slow=true; m->stable=(in->gray & 6U)==6U;
+            }
+            if (m->approach_slow ? in->settled : in->motion_done) {
+                bool detected=m->stable; next(m,now); m->stable=detected;
+            }
+        } else fail(m,PATH_ERROR);
         break;
     case 12:
         if (m->phase == 0)

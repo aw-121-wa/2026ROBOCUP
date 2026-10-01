@@ -3,8 +3,8 @@
 #include <math.h>
 #define STAIR_MAP_TARGET_DEG 180.0f
 #define STAIR_HEADING_KP 4.0f
-#define STAIR_HEADING_TOLERANCE_DEG 0.08f
-#define STAIR_HEADING_STOP_TOLERANCE_DEG 0.08f
+#define STAIR_HEADING_TOLERANCE_DEG 0.07f
+#define STAIR_HEADING_STOP_TOLERANCE_DEG 0.07f
 #define STAIR_HEADING_STABLE_MS 100U
 #define STAIR_HEADING_TIMEOUT_MS 1000U
 /* Sensor angle zero; wrap the measured error to choose the shortest correction. */

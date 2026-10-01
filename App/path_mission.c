@@ -3,10 +3,12 @@
 #include "disc_task_config.h"
 #include "path_chassis.h"
 #define START_BLEND_RADIUS_MM 800.0f
-#define START_BLEND_SPEED_RPM 130.0f
+#define START_BLEND_SPEED_RPM 155.0f
 #define START_DIAG_X_MM 1558.8922f
 #define START_DIAG_Y_MM 567.3904f
-#define START_FORWARD_MM 2008.9384f
+#define DISC_ENTRY_RADIUS_MM 50.0f
+#define DISC_ENTRY_SPEED_RPM 25.0f
+#define START_FORWARD_MM (2008.9384f - DISC_ENTRY_RADIUS_MM)
 /* Approach + G100 + disc; RDK owns G101, vision and five G102 actions. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float speed, uint32_t t)
 {
@@ -33,7 +35,7 @@ static bool emit_arc(PathMission *m)
      * Tangent offset is R*tan(10 deg)=141.0616 mm, so the final global endpoint is unchanged.
      * Body heading stays fixed: arc starts at +20 deg and keeps the diagonal boundary speed. */
     PathCommand c = {.kind = PC_ARC, .x = START_BLEND_RADIUS_MM, .y = 20.0f, .angle = -20.0f,
-                     .speed = 130.0f, .start_speed = START_BLEND_SPEED_RPM,
+                     .speed = 155.0f, .start_speed = START_BLEND_SPEED_RPM,
                      .end_speed = START_BLEND_SPEED_RPM, .continuous = true,
                      .timeout_ms = 30000};
     if (m->send(m->context, &c))
@@ -117,18 +119,28 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         return;
     }
+    /* Fillet into +Y line search without stopping at the straight endpoint. */
+    if (m->step == 1 && m->part == 1) {
+        if ((in->gray & 6U) == 6U || in->motion_done) {
+            bool detected = (in->gray & 6U) == 6U;
+            if (detected && !emit(m, PC_HOLD, 0, 0, 0, 0)) return;
+            m->step=3; m->phase=2; m->part=0; m->waiting=false;
+            m->stable=detected; m->entered=now;
+        }
+        return;
+    }
     if (m->step < 3)
     {
         if (!m->waiting)
         {
             if (m->step == 0 && m->part == 0)
-                m->waiting = emit_move(m, START_DIAG_X_MM, START_DIAG_Y_MM, 130.0f,
+                m->waiting = emit_move(m, START_DIAG_X_MM, START_DIAG_Y_MM, 155.0f,
                                        0, START_BLEND_SPEED_RPM, true);
             else if (m->step == 0)
                 m->waiting = emit_arc(m);
             else if (m->step == 1)
-                m->waiting = emit_move(m, START_FORWARD_MM, 0, 195.0f,
-                                       START_BLEND_SPEED_RPM, 0, false);
+                m->waiting = emit_move(m, START_FORWARD_MM, 0, 230.0f,
+                                       START_BLEND_SPEED_RPM, DISC_ENTRY_SPEED_RPM, true);
             else
             {
                 m->step = 3; /* No startup body rotation. */
@@ -147,10 +159,18 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             {
                 m->step = 1;
                 m->part = 0;
-                m->waiting = emit_move(m, START_FORWARD_MM, 0, 195.0f,
-                                       START_BLEND_SPEED_RPM, 0, false);
+                m->waiting = emit_move(m, START_FORWARD_MM, 0, 230.0f,
+                                       START_BLEND_SPEED_RPM, DISC_ENTRY_SPEED_RPM, true);
             }
             m->entered = now;
+        }
+        else if (m->step == 1 && in->motion_done)
+        {
+            PathCommand c = {.kind=PC_ARC,.x=DISC_ENTRY_RADIUS_MM,.y=0,.angle=90,
+                             .speed=DISC_ENTRY_SPEED_RPM,.start_speed=DISC_ENTRY_SPEED_RPM,
+                             .end_speed=DISC_ENTRY_SPEED_RPM,.continuous=true,.timeout_ms=30000};
+            if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); return; }
+            m->part=1; m->entered=now;
         }
         else if (m->step != 0 && in->settled)
         {

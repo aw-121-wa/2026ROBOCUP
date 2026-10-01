@@ -38,7 +38,10 @@ add_executable(${CMAKE_PROJECT_NAME})
 option(CHASSIS_RELEASE_LTO "Enable experimental Release link-time optimization" OFF)
 option(CHASSIS_TELEMETRY_ENABLE "Enable binary VOFA transmission (host RX stays enabled)" ON)
 option(CHASSIS_TELEMETRY_FULL "Include full IMU diagnostics in VOFA frames" ON)
+option(PATH_STOP_AT_STAIR_LINE "Stop test route after first stair line detection" OFF)
+
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
+    PATH_STOP_AT_STAIR_LINE=$<BOOL:${PATH_STOP_AT_STAIR_LINE}>
     CHASSIS_TELEMETRY_ENABLE=$<BOOL:${CHASSIS_TELEMETRY_ENABLE}>
     CHASSIS_TELEMETRY_FULL=$<BOOL:${CHASSIS_TELEMETRY_FULL}>)
 if(CHASSIS_RELEASE_LTO)

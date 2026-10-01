@@ -111,7 +111,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->entered=now;
             m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=200,
-                                          .speed=100,.acceleration=750,.deceleration=750,.timeout_ms=30000});
+                                          .speed=120,.acceleration=850,.deceleration=850,.timeout_ms=30000});
         }
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
         else if (in->settled)

@@ -95,7 +95,7 @@ int main(int argc,char **argv) {
     } else if(!strcmp(argv[1],"slew")) {
         assert(Chassis_Body(-200,0,-0.7f));tick();
         float v[3];Mecanum_Forward(geometry(),state.rpm_requested,v);
-        assert(v[0]<0 && fabsf(v[0])<=550*0.005f+0.001f);
+        assert(v[0]<0 && fabsf(v[0])<=650*0.005f+0.001f);
         assert(fabsf(v[2]/v[0]-0.7f/200)<1e-5f);
         for(int n=0;n<150;n++)tick();
         Chassis_Hold();tick();

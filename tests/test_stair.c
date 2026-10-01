@@ -27,13 +27,15 @@ static int exit_route(void) {
     Path_Tick(&m,100,&in); CHECK(m.step==11 && last.kind==PC_MOVE_ROTATE);
     in.settled=false; in.reply=PATH_OK; Path_Tick(&m,105,&in); CHECK(m.step==11);
     Path_Tick(&m,110,&in);
-    CHECK(last.kind==PC_MOVE_ROTATE && last.x==0 && last.y==-1500 && last.angle==180);
-    CHECK(last.speed==125 && last.timeout_ms==30000);
+    CHECK(last.kind==PC_MOVE_ROTATE && last.x==0 && last.y==-1425 && last.angle==180);
+    CHECK(last.speed==155 && last.timeout_ms==30000);
     in.settled=false; Path_Tick(&m,1000,&in); CHECK(m.step==11);
-    in.settled=true; Path_Tick(&m,2000,&in); CHECK(m.step==11 && m.phase==1);
-    Path_Tick(&m,2001,&in); CHECK(last.kind==PC_MOVE && last.x==185 && last.y==0);
-    in.settled=false; Path_Tick(&m,2002,&in); CHECK(m.step==11);
-    in.settled=true; Path_Tick(&m,2003,&in); CHECK(m.step==12);
+    in.motion_done=true; Path_Tick(&m,1995,&in); CHECK(m.phase==2 && last.kind==PC_ARC && last.y==90 && last.angle==-90);
+    Path_Tick(&m,2000,&in); CHECK(m.phase==1);
+    Path_Tick(&m,2001,&in); CHECK(last.kind==PC_MOVE && last.x==110 && last.start_speed==45 && last.end_speed==40);
+    in.motion_done=false; Path_Tick(&m,2002,&in); CHECK(m.step==11);
+    in.motion_done=true; Path_Tick(&m,2003,&in); CHECK(last.kind==PC_ARC && last.x==25 && last.angle==90);
+    Path_Tick(&m,2004,&in); CHECK(m.step==12);
     Path_Tick(&m,2005,&in); CHECK(last.kind==PC_BODY && last.y==40 && last.timeout_ms==50000);
     in.gray=6; in.settled=false; Path_Tick(&m,2010,&in); CHECK(last.kind==PC_HOLD);
     Path_Tick(&m,2070,&in); CHECK(m.result==PATH_RUNNING);
@@ -68,9 +70,9 @@ int main(void) {
     PathMission m; Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=9;
     PathInput in={.armed=true,.settled=true};
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.timeout_ms==50000);
-    CHECK(last.x==0 && last.y==75 && last.speed==0);
-    in.y_mm=1049; Path_Tick(&m,95,&in); CHECK(last.y==75);
-    in.y_mm=1050; Path_Tick(&m,100,&in); CHECK(last.y==25);
+    CHECK(last.x==0 && last.y==80 && last.speed==0);
+    in.y_mm=1079; Path_Tick(&m,95,&in); CHECK(last.y==80);
+    in.y_mm=1080; Path_Tick(&m,100,&in); CHECK(last.y==25);
     in.y_mm=0; Path_Tick(&m,105,&in); CHECK(last.y==25); /* Slow mode latches. */
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
     Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT);

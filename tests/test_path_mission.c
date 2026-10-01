@@ -37,21 +37,29 @@ static int startup(void) {
     CHECK(fabsf(p.commands[1].x-1558.8922f)<0.02f);
     CHECK(fabsf(p.commands[1].y-567.3904f)<0.02f);
     CHECK(p.commands[1].angle==0 && p.commands[1].continuous);
-    CHECK(p.commands[1].start_speed==0 && p.commands[1].end_speed==130);
+    CHECK(p.commands[1].start_speed==0 && p.commands[1].end_speed==155);
     in.settled=true; in.motion_done=false; Path_Tick(&m,8,&in);
     CHECK(m.part==0 && p.n==2);
     in.settled=false; in.motion_done=true; Path_Tick(&m,10,&in);
     CHECK(m.step==0 && m.part==1 && m.waiting && p.commands[p.n-1].kind==PC_ARC);
     CHECK(p.commands[p.n-1].x==800 && p.commands[p.n-1].y==20);
-    CHECK(p.commands[p.n-1].angle==-20 && p.commands[p.n-1].start_speed==130);
-    CHECK(p.commands[p.n-1].speed==130 && p.commands[p.n-1].end_speed==130);
+    CHECK(p.commands[p.n-1].angle==-20 && p.commands[p.n-1].start_speed==155);
+    CHECK(p.commands[p.n-1].speed==155 && p.commands[p.n-1].end_speed==155);
     in.settled=false; in.motion_done=true; Path_Tick(&m,15,&in);
     CHECK(m.step==1 && m.part==0 && m.waiting && p.commands[p.n-1].kind==PC_MOVE);
-    CHECK(fabsf(p.commands[p.n-1].x-2008.9384f)<0.02f);
-    CHECK(p.commands[p.n-1].start_speed==130 && !p.commands[p.n-1].continuous);
-    in.motion_done=false; in.settled=true; Path_Tick(&m,20,&in);
+    CHECK(fabsf(p.commands[p.n-1].x-1958.9384f)<0.02f);
+    CHECK(p.commands[p.n-1].start_speed==155 && p.commands[p.n-1].continuous && p.commands[p.n-1].end_speed==25);
+    in.motion_done=true; in.settled=false; in.gray=0; Path_Tick(&m,20,&in);
+    CHECK(m.step==1 && m.part==1 && p.commands[p.n-1].kind==PC_ARC);
+    CHECK(p.commands[p.n-1].x==50 && p.commands[p.n-1].angle==90);
+    CHECK(p.commands[p.n-1].start_speed==25 && p.commands[p.n-1].end_speed==25);
+    Path_Tick(&m,25,&in);
     CHECK(m.step==3 && m.phase==2 && count(&p,PC_ROTATE)==0);
-    CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_HOLD)==0); return 0;
+    CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_HOLD)==0);
+    m.step=1; m.part=1; m.waiting=true; in.motion_done=false; in.gray=6;
+    Path_Tick(&m,30,&in);
+    CHECK(m.step==3 && m.stable && p.commands[p.n-1].kind==PC_HOLD);
+    return 0;
 }
 static int stair_prep_parallel(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
@@ -89,16 +97,16 @@ static int post_disc_turn(void) {
     m.result=PATH_RUNNING; m.step=5; in.ir=false;
     Path_Tick(&m,0,&in);
     CHECK(p.n==1 && p.commands[0].kind==PC_MOVE_ROTATE);
-    CHECK(p.commands[0].x==-1640 && p.commands[0].y==0);
-    CHECK(p.commands[0].angle==180 && p.commands[0].speed==150);
+    CHECK(p.commands[0].x==-1635 && p.commands[0].y==0);
+    CHECK(p.commands[0].angle==180 && p.commands[0].speed==185);
     CHECK(p.commands[0].continuous && p.commands[0].end_speed==45);
     in.settled=false; in.motion_done=true; Path_Tick(&m,5,&in);
     CHECK(m.step==5 && m.phase==1 && p.commands[p.n-1].kind==PC_ARC);
     PathCommand arc=p.commands[p.n-1];
     CHECK(arc.x==100 && arc.y==0 && arc.angle==90 && arc.continuous);
     CHECK(arc.speed==45 && arc.start_speed==45 && arc.end_speed==30);
-    /* In the original map frame the arc adds (-100,-100), retaining X=-1740. */
-    CHECK(p.commands[0].x-arc.x==-1740);
+    /* In the original map frame the arc adds (-100,-100), retaining X=-1735. */
+    CHECK(p.commands[0].x-arc.x==-1735);
     Path_Tick(&m,10,&in); CHECK(m.step==6 && p.commands[p.n-1].kind==PC_BODY);
     CHECK(p.commands[p.n-1].x==0 && p.commands[p.n-1].y==30 && count(&p,PC_HOLD)==0);
     in.motion_done=false; in.ir=true; Path_Tick(&m,15,&in);
@@ -164,7 +172,7 @@ static int chassis_only(void) {
     CHECK(m.step==7 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==1 && count(&p,PC_TURN)==0);
     bool orbit=false;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+81.144f)<0.001f && p.commands[i].speed==-61.74f) orbit=true;
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+85.2012f)<0.001f && p.commands[i].speed==-64.827f) orbit=true;
     CHECK(orbit);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6;
     in.ir=true; in.settled=false;
@@ -185,13 +193,13 @@ static int chassis_only(void) {
     in.ir=true; in.yaw_deg=0;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<10000 && m.result==PATH_RUNNING;t+=10) {
-        in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; unsigned before=p.n;
+        in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; in.motion_done=true; unsigned before=p.n;
         Path_Tick(&m,t,&in);
         for(unsigned j=before;j<p.n;j++) if(p.commands[j].kind==PC_MOVE) in.x_mm+=p.commands[j].x;
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==4 && count(&p,PC_TURN)==0);
-    const float expected[]={120,380,20,340,185,200,200};
+    const float expected[]={120,380,20,340,110,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<7 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
