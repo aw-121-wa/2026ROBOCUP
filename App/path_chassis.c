@@ -238,7 +238,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Absolute heading is checked only at safe boundaries, never during an arm task. */
 bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
 {
-    float tolerance = m->step == 8 ? 0.1f : 0.5f;
+    float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.5f;
     float target = m->step <= 9 ? 180.0f : 0.0f;
     float error = remainderf(target - in->map_yaw_deg, 360.0f);
     if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }

@@ -3,7 +3,7 @@
 #include "disc_task_config.h"
 #include "path_chassis.h"
 #define START_BLEND_RADIUS_MM 800.0f
-#define START_BLEND_SPEED_RPM 75.0f
+#define START_BLEND_SPEED_RPM 130.0f
 #define START_DIAG_X_MM 1558.8922f
 #define START_DIAG_Y_MM 567.3904f
 #define START_FORWARD_MM 2008.9384f

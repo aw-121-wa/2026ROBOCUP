@@ -21,6 +21,20 @@ static void init(PathMission *m,PathInput *in,unsigned step) {
 }
 int main(void) {
  PathMission m;PathInput in; unsigned patterns[]={6,15,9};
+ /* Stair admission is strict: a 0.15-degree error must request alignment. */
+ init(&m,&in,9);in.map_yaw_deg=179.85f;
+ assert(!PathHeading_Ready(&m,0,&in));assert(turns==1 && last.kind==PC_MAP_AXIS);
+ in.settled=false;assert(!PathHeading_Ready(&m,5,&in));
+ in.settled=true;in.map_yaw_deg=179.95f;
+ assert(PathHeading_Ready(&m,10,&in));
+ init(&m,&in,9);in.map_yaw_deg=179.95f;
+ assert(PathHeading_Ready(&m,0,&in) && turns==0);
+ init(&m,&in,9);in.map_yaw_deg=179.8f;
+ assert(!PathHeading_Ready(&m,0,&in) && turns==1);
+ /* Warehouse keeps its existing tolerance. */
+ init(&m,&in,13);in.map_yaw_deg=0.15f;
+ assert(PathHeading_Ready(&m,0,&in) && turns==0);
+
  for(unsigned step=9;step<=13;step++) {
   if(step==10 || step==11)continue;
   for(unsigned i=0;i<3;i++) {
