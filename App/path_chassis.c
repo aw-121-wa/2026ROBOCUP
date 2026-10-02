@@ -34,8 +34,7 @@ static void next(PathMission *m, uint32_t now)
     m->stable = false;
     m->entered = now;
 }
-/* Detect the two inner probes, brake lateral search, then continue.
- * Outer probes remain available in telemetry but do not block the route. */
+/* Brake when the station-specific lateral position condition is met. */
 bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
                     uint32_t timeout, float lateral)
 {
@@ -54,7 +53,7 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
         if (!m->approach_slow) lateral=80;
     }
     if (!m->stable) {
-        if ((in->gray & 6U)!=6U) {
+        if (m->step == 3 ? (in->gray & 6U) != 6U : !PathLine_Aligned(m, in->gray)) {
             (void)emit(m,PC_BODY,0,lateral,0,0,timeout);
             return false;
         }
@@ -253,8 +252,11 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
     m->heading_align_since = now;
     return false;
 }
-bool PathLine_Aligned(uint8_t gray)
+bool PathLine_Aligned(const PathMission *m, uint8_t gray)
 {
+    /* Gray selects lateral position only; heading is checked separately. */
+    gray &= 15U;
+    if (m->step==13) return (gray & 6U)==6U;
     return gray == 6U || gray == 15U || gray == 9U;
 }
 static bool line_skip(PathMission *m, uint32_t now, const PathInput *in)
@@ -273,8 +275,9 @@ static bool line_skip(PathMission *m, uint32_t now, const PathInput *in)
 }
 bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
 {
+    const bool bidirectional = m->step==9 || m->step==13;
     if (!isfinite(in->map_yaw_deg)) { fail(m, PATH_ERROR); return false; }
-    if (m->step == 9 ? m->stair_heading_locked : m->warehouse_heading_locked) {
+    if (m->step == 9 ? m->stair_heading_locked : (m->step != 13 && m->warehouse_heading_locked)) {
         m->line_skipped = true;
         return PathHeading_Ready(m, now, in);
     }
@@ -286,19 +289,19 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         m->line_stopping = m->stable = false;
     }
     /* Stop fully before reversing the lateral search. */
-    if (m->line_recovery == 7 || (m->step == 9 && m->line_recovery == 9)) {
+    if (m->line_recovery == 7 || (bidirectional && m->line_recovery == 9)) {
         if (!in->settled) return false;
         ++m->line_recovery;
         m->line_since=now;
         m->line_stopping=m->stable=false;
     }
     if (m->heading_align_active && !PathHeading_Ready(m, now, in)) return false;
-    const uint32_t search_ms = m->step == 9 ? 2000U :
+    const uint32_t search_ms = bidirectional ? (m->step==13 && m->line_recovery==8 ? 4000U : 2000U) :
                                (m->line_recovery == 8 ? 5000U : 1000U);
     if (m->line_recovery == 6) return line_skip(m,now,in);
     if ((uint32_t)(now-m->line_since) >= search_ms &&
-        ((m->step != 9 && m->line_recovery == 0) || !PathLine_Aligned(in->gray))) {
-        if (m->step == 9) {
+        ((!bidirectional && m->line_recovery == 0) || !PathLine_Aligned(m, in->gray))) {
+        if (bidirectional) {
             if (m->line_recovery == 10) { fail(m,PATH_TIMEOUT); return false; }
             hold(m);
             m->line_recovery = m->line_recovery == 8 ? 9 : 7;
@@ -314,14 +317,14 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         }
         return line_skip(m,now,in);
     }
-    if (PathLine_Aligned(in->gray) || m->heading_align_active) {
+    if (PathLine_Aligned(m, in->gray) || m->heading_align_active) {
         if (!m->line_stopping) {
             hold(m); m->line_stopping = true; m->stable = false;
             return false;
         }
         if (!PathHeading_Ready(m, now, in)) { m->stable = false; return false; }
         /* A rotation may change gray; re-evaluate before admitting vision. */
-        if (!PathLine_Aligned(in->gray)) return false;
+        if (!PathLine_Aligned(m, in->gray)) return false;
         if (!m->stable) { m->stable = true; m->stable_since = now; }
         if ((uint32_t)(now-m->stable_since) < 100U) return false;
         m->line_active = m->line_stopping = m->stable = false;
@@ -332,11 +335,10 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         if (!in->settled) return false;
         m->line_stopping = false;
     }
-    /* Digital gray is position evidence, never a yaw command.
-     * Map-right search: stairs 40 mm/s for 2 s; warehouse 10 mm/s for 1 s,
-     * then return until aligned (5 s watchdog), without another timed reversal. */
-    if (m->step != 9 && m->line_recovery == 0) m->line_recovery=1;
-    (void)emit(m, PC_MAP_SEARCH, 0, m->step == 9 ? (m->line_recovery == 8 ? 40 : -40) : (m->line_recovery == 8 ? 10 : -10), 0, 0, 3000);
+    /* Gray controls lateral position; map search retains the gyro heading loop.
+     * Warehouse sweeps right, left across the start, then right again. */
+    if (!bidirectional && m->line_recovery == 0) m->line_recovery=1;
+    (void)emit(m, PC_MAP_SEARCH, 0, m->step == 9 ? (m->line_recovery == 8 ? 40 : -40) : (m->line_recovery == 8 ? 10 : -10), 0, 0, m->step==13 ? 12000 : 3000);
     return false;
 }
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
@@ -356,6 +358,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     }
     switch(m->phase) {
     case 0:
+        if (PATH_VISION_ENABLE && !m->prep_pending && !m->stair_ready_started) {
+            if (!emit(m,PC_GROUP,0,0,0,105,30000)) break;
+            m->stair_ready_started=true; m->prep_pending=true; m->prep_since=now;
+        }
         if (PathLine_Align(m,now,in,50000,25)) {
             if (PATH_STOP_AT_STAIR_LINE) {
                 hold(m); m->result=PATH_DONE;
@@ -367,7 +373,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     case 1:
         if (m->prep_pending) break; /* G2 may still be running during line approach. */
         if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
-        if (group(m,now,in,105)) {
+        if (m->stair_ready_started || group(m,now,in,105)) {
             m->phase=4; m->line_active=false; m->stable=false;
         }
         break;
@@ -375,6 +381,17 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         if (PathLine_AlignFour(m,now,in)) {
             m->stair_origin_x=in->x_mm; m->stair_origin_y=in->y_mm;
             m->stair_axis=in->yaw_deg*0.01745329252f;
+            m->stair_distance=0; m->stair_started=now;
+            m->phase=30; m->waiting=false;
+        }
+        break;
+    case 30: /* Advance five millimetres on the locked stair heading before vision. */
+        if (!m->waiting) {
+            if (!in->settled || !PathHeading_Ready(m,now,in)) break;
+            m->waiting=emit(m,PC_MOVE,PATH_STAIR_ENTRY_ADVANCE_MM,0,20,0,5000); m->entered=now;
+        } else if ((uint32_t)(now-m->entered)>=5000U) fail(m,PATH_TIMEOUT);
+        else if (in->settled) {
+            m->stair_origin_x=in->x_mm; m->stair_origin_y=in->y_mm;
             m->stair_distance=0; m->stair_started=now;
             m->phase=20; m->waiting=false;
         }
@@ -406,7 +423,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             if (!in->settled) break;
             /* Fast transit only after two confirmed grabs and scan END acknowledgement. */
             float speed = m->grabs>=2 && !m->stair_scanning ? 110 : 35;
-            m->waiting=emit(m,PC_MOVE,remaining,0,speed,0,30000);
+            PathCommand c={.kind=PC_MOVE,.x=remaining,.speed=speed,
+                .acceleration=(speed==110 ? PATH_STAIR_FAST_ACCEL : 650),.deceleration=650,.timeout_ms=30000};
+            m->waiting=m->send(m->context,&c);
+            if (!m->waiting) fail(m,PATH_ERROR);
         }
         break;
     }
@@ -515,9 +535,17 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         next(m, now);
         break;
     case 8:
+        if (PATH_VISION_ENABLE && !m->prep_pending) {
+            unsigned id = !m->stair_prep_started ? 2 : !m->stair_ready_started ? 105 : 0;
+            if (id) {
+                if (!emit(m,PC_GROUP,0,0,0,id,30000)) break;
+                m->prep_pending=true; m->prep_since=now;
+                if (id==2) m->stair_prep_started=true; else m->stair_ready_started=true;
+            }
+        }
         if (m->phase == 0)
         {
-            if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
+            if (!m->waiting && !emit(m,PC_MAP_HEADING,180,0,0,0,0)) break;
             if (!m->waiting) {
                 PathCommand c={.kind=PC_MOVE,.x=-300,.speed=195,.end_speed=80,
                                .continuous=true,.timeout_ms=30000};
@@ -537,7 +565,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (in->gray && !m->approach_slow) {
                 /* Brake on an early line; never carry the fast arc across it. */
                 hold(m); m->approach_slow=true;
-                m->stable=(in->gray & 6U)==6U;
+                m->stable=PathLine_Aligned(m, in->gray);
             }
             if (m->approach_slow ? in->settled : in->motion_done) m->phase=3;
         }
@@ -546,10 +574,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (m->phase == 1 && !m->waiting && !PathHeading_Ready(m, now, in)) break;
             bool detected=m->stable;
             if (!PATH_VISION_ENABLE) { next(m,now); m->stable=detected; break; }
-            if (emit(m,PC_GROUP,0,0,0,2,30000)) {
-                m->prep_pending=true; m->prep_since=now;
-                next(m,now); m->stable=detected;
-            }
+            next(m,now); m->stable=detected;
         }
         else fail(m, PATH_ERROR);
         break;
@@ -592,7 +617,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             }
         } else if (m->phase == 3) {
             if (in->gray && !m->approach_slow) {
-                hold(m); m->approach_slow=true; m->stable=(in->gray & 6U)==6U;
+                hold(m); m->approach_slow=true; m->stable=PathLine_Aligned(m, in->gray);
             }
             if (m->approach_slow ? in->settled : in->motion_done) {
                 bool detected=m->stable; next(m,now); m->stable=detected;

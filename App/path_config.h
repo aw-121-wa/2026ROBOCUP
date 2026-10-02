@@ -1,5 +1,16 @@
 #ifndef PATH_CONFIG_H
 #define PATH_CONFIG_H
+/* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
+#define PATH_WAREHOUSE_FIRST_RIGHT_MM 15.0f
+#define PATH_WAREHOUSE_CREEP_LIMIT_MM 200.0f
+#define PATH_WAREHOUSE_CREEP_SPEED_RPM 10.0f
+#define PATH_WAREHOUSE_CREEP_ACCEL 150.0f
+#define PATH_WAREHOUSE_DIGIT_TIMEOUT_MS 10000U
+#define PATH_WAREHOUSE_DIGIT_GUARD_MS 11000U
+#define PATH_WAREHOUSE_CREEP_TIMEOUT_MS 12000U
+#define PATH_STAIR_ENTRY_ADVANCE_MM 5.0f
+#define PATH_STAIR_FAST_ACCEL 850.0f
+
 /* Shared outer/inner deadline for multi-stage disc line alignment. */
 #define PATH_DISC_LINE_TIMEOUT_MS 30000U
 #ifndef PATH_STOP_AT_STAIR_LINE

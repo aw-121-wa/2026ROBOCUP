@@ -27,6 +27,7 @@ static void run(unsigned balls) {
   assert(m.result==PATH_RUNNING);
   if(last.kind==PC_STAIR_SCAN) { in.ball_index=in.resume_index=0; }
   if(last.kind==PC_MOVE) {
+   if(last.x==5 && last.speed==20) { in.x_mm+=5; continue; }
    assert(last.speed==(m.grabs>=2 && !m.stair_scanning ? 110 : 35) && last.x>0);
    if(got<balls) { in.x_mm+=40;in.settled=false;in.ball_index++;event=true; }
    else { in.x_mm+=last.x;in.settled=true; }
@@ -34,7 +35,7 @@ static void run(unsigned balls) {
   if(event && last.kind==PC_HOLD) { in.x_mm+=2;in.settled=true; }
   if(last.kind==PC_PILLAR_STOPPED) { got++;in.resume_index=in.ball_index;event=false; }
  }
- assert(m.step==11 && fabsf(in.x_mm-860)<.1f);
+ assert(m.step==11 && fabsf(in.x_mm-865)<.1f);
  assert(g4==1 && g3==1 && stopped==balls && m.grabs==balls);
  assert(scans==(balls==2?1:4));
  assert(headings==4); /* Entry plus all three intermediate boundaries, even when full. */

@@ -50,7 +50,7 @@ class LatestFrameCamera:
         return self._thread is not None and self._thread.is_alive()
 
     def _set_v4l2_controls(self, controls) -> None:
-        if not str(self.config.device).startswith("/dev/video"):
+        if not str(self.config.device).startswith(("/dev/video", "/dev/v4l/")):
             return
         assignment = ",".join(f"{name}={value}" for name, value in controls.items())
         subprocess.run(
@@ -66,7 +66,7 @@ class LatestFrameCamera:
         )
 
     def _read_v4l2_controls(self) -> str:
-        if not str(self.config.device).startswith("/dev/video"):
+        if not str(self.config.device).startswith(("/dev/video", "/dev/v4l/")):
             return ""
         names = list(_UVC_BASE_CONTROLS) + [
             "white_balance_automatic",
@@ -88,7 +88,7 @@ class LatestFrameCamera:
         return result.stdout.strip()
 
     def _prime_auto_white_balance(self, capture) -> None:
-        if not str(self.config.device).startswith("/dev/video"):
+        if not str(self.config.device).startswith(("/dev/video", "/dev/v4l/")):
             return
 
         # Apply the known-good baseline first, then explicitly enable AWB.

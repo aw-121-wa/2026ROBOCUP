@@ -59,6 +59,7 @@ static float path_target, body_x, body_y, body_w, arc_start, arc_turn;
 static uint8_t rotate_stable_count;
 static float rotate_tolerance_deg = 0.05f;
 static bool rotate_measured_zero;
+static bool rotate_map_precision;
 static float line_yaw_reference;
 static float route_heading;
 static bool path_heading_enabled, normal_stopping, line_search;
@@ -356,6 +357,7 @@ void Chassis_Stop(void)
     path_rotation = path_body = path_arc = false;
     line_search = false;
     rotate_measured_zero = false;
+    rotate_map_precision = false;
     zero_output = true;
     planner.active = false;
     jog_remaining = 0;
@@ -440,6 +442,7 @@ void Chassis_Hold(void)
     path_rotation = path_body = path_arc = false;
     line_search = false;
     rotate_measured_zero = false;
+    rotate_map_precision = false;
     rotate_stable_count = 0;
     jog_remaining = 0;
     zero_output = true;
@@ -481,6 +484,7 @@ bool Chassis_Rotate(float degrees)
         return false;
     rotate_tolerance_deg = 0.05f;
     rotate_measured_zero = false;
+    rotate_map_precision = false;
     float start_heading = path_heading_active() ? route_heading : state.yaw_rad;
     path_target = path_yaw.continuous + Angle_Wrap(start_heading - state.yaw_rad) + degrees * RAD;
     if (path_heading_active()) route_heading = Angle_Wrap(path_target);
@@ -506,6 +510,7 @@ static bool align_map_heading(float degrees, float tolerance)
     path_target = path_yaw.continuous + error;
     route_heading = heading = target;
     rotate_tolerance_deg = tolerance;
+    rotate_map_precision = true;
     return true;
 }
 bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, STAIR_HEADING_STOP_TOLERANCE_DEG); }
@@ -975,10 +980,16 @@ void Chassis_Update(void)
             rotate_limit = fminf(limit, chassis_config.wz_limit * 0.6f);
         else
             rotate_limit = fminf(limit, 0.25f * chassis_config.wz_limit);
-        wz = Heading_Update(error, gyro_rad_s, dt,
-                            rotate_measured_zero ? STAIR_HEADING_KP : chassis_config.kp, chassis_config.ki,
-                            chassis_config.gyro_damping, rotate_limit,
-                            &integral);
+        if (rotate_map_precision && abs_error <= 3.0f * RAD) {
+            /* Fine alignment: no integral kick, modest gain and bounded slew. */
+            integral = 0;
+            wz = clamp(2.0f * error - 0.08f * gyro_rad_s, 2.0f * RAD);
+        } else {
+            wz = Heading_Update(error, gyro_rad_s, dt,
+                                rotate_measured_zero ? STAIR_HEADING_KP : chassis_config.kp,
+                                chassis_config.ki, chassis_config.gyro_damping,
+                                rotate_limit, &integral);
+        }
         if (abs_error < rotate_tolerance_deg * RAD && fabsf(imu->gz_dps - state.gyro_bias_dps) < 2)
             rotate_stable_count++;
         else
@@ -1048,7 +1059,8 @@ void Chassis_Update(void)
     else
     {
         /* Preserve the planner's distance braking envelope; smooth yaw only. */
-        wz = body_output[2] + clamp(wz - body_output[2], YAW_ACCEL_RAD_S2 * dt);
+        wz = body_output[2] + clamp(wz - body_output[2],
+            (path_rotation && rotate_map_precision ? 5.0f * RAD : YAW_ACCEL_RAD_S2) * dt);
     }
     float t[4], r[4], out[4];
     /* Reserve wheel authority during fixed-heading travel; restore speed as yaw recovers. */

@@ -1,0 +1,12 @@
+# Set to the number camera's stable /dev/v4l/by-id or by-path capture node.
+# Empty device intentionally keeps default 123 until hardware is configured.
+device: /dev/v4l/by-id/usb-RYS_RGB_RGB_Camera_200901010001-video-index0
+width: 640
+height: 480
+fps: 30
+roi: [0, 0, 640, 480]
+timeout_s: 8.0
+min_score: 0.62
+min_margin: 0.10
+confirm_frames: 3
+stale_s: 0.25

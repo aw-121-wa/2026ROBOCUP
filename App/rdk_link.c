@@ -36,6 +36,14 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
 {
     if (!strcmp(v, "STOP"))
     {
+        bool number_active=r->warehouse_active;
+        r->warehouse_active=false; r->warehouse_reply=PATH_NONE;
+        if (number_active && !r->locked) {
+            strcpy(r->aux_request,"DISC_CANCEL\r\n");
+            r->aux_length=strlen(r->aux_request);
+            r->aux_pending=r->cancel_after_aux=true;
+            return true;
+        }
         if (!r->locked)
         {
             if (r->active && r->stage != 1)
@@ -51,7 +59,7 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
         }
         return true;
     }
-    if (r->active || r->locked || !t)
+    if (r->active || r->locked || r->warehouse_active || !t)
         return false;
     if (!strcmp(v, "HELLO"))
     {
@@ -110,6 +118,18 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
     r->error = 0;
     return true;
 }
+bool Rdk_WarehouseBegin(RdkLink *r, uint8_t excluded, uint32_t now, uint32_t timeout)
+{
+    if (r->active || r->locked || r->warehouse_active || !timeout || (excluded & ~14U)) return false;
+    if (++r->sequence==0) ++r->sequence;
+    r->warehouse_token = r->sequence;
+    snprintf(r->warehouse_request,sizeof(r->warehouse_request),"WAREHOUSE_CHECK %lu %u\r\n",
+             (unsigned long)r->warehouse_token,excluded);
+    r->warehouse_started=now; r->warehouse_timeout=timeout;
+    r->warehouse_active=true; r->warehouse_sent=false; r->warehouse_ready=false;
+    r->warehouse_digit=0; r->warehouse_reply=PATH_WAIT;
+    return true;
+}
 void Rdk_Feed(RdkLink *r, uint8_t b)
 {
     if (b == '\r')
@@ -133,6 +153,27 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
         r->overflow = false;
         fail(r, 3);
         return;
+    }
+    if (!strncmp(r->line,"WAREHOUSE_READY ",16)) {
+        char *end;
+        unsigned long token=strtoul(r->line+16,&end,10);
+        if (*end=='\0' && end!=r->line+16 &&
+            r->warehouse_active && r->warehouse_sent && !r->locked && token==r->warehouse_token)
+            r->warehouse_ready=true;
+        return;
+    }
+    if (!strncmp(r->line,"WAREHOUSE_DIGIT ",16)) {
+        if (r->line[16]>='0' && r->line[16]<='9') {
+            char *end;
+            unsigned long token=strtoul(r->line+16,&end,10);
+            if (*end==' ' && end[1]>='0' && end[1]<='3' && !end[2] &&
+                r->warehouse_active && r->warehouse_sent && !r->locked && token==r->warehouse_token) {
+                r->warehouse_digit=(uint8_t)(end[1]-'0');
+                r->warehouse_reply=r->warehouse_digit ? PATH_OK : PATH_NONE;
+                r->warehouse_active=false;
+            }
+        }
+        return; /* Optional/stale digit replies never enter the ball/action protocol. */
     }
     if (!r->line[0] || r->locked)
         return;
@@ -237,6 +278,12 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
 }
 void Rdk_Tick(RdkLink *r, uint32_t n)
 {
+    if (r->warehouse_active) {
+        if (r->locked || (uint32_t)(n-r->warehouse_started)>=r->warehouse_timeout) {
+            r->warehouse_active=false; r->warehouse_reply=PATH_NONE; r->warehouse_digit=0;
+        } else if (!r->warehouse_sent && r->transmit(r->context,r->warehouse_request,strlen(r->warehouse_request)))
+            r->warehouse_sent=true;
+    }
     if (r->aux_pending && r->cancel_after_aux)
     {
         if (r->transmit(r->context, r->aux_request, r->aux_length))

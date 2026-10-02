@@ -342,6 +342,9 @@ static bool send(void *ctx, const PathCommand *c)
         motion_pending = false;
         motion_continuous = false;
         return true;
+    case PC_WAREHOUSE_DIGIT:
+        return mission.step==13 && c->argument<=14 &&
+               Rdk_WarehouseBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
     case PC_HELLO:
         return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
     case PC_TURN:
@@ -354,7 +357,8 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_GROUP:
         return (mission.step != 13 || (!turn.pending && turn_purpose == TURN_IDLE &&
                 turn_issued == mission.id_count)) &&
-               (Chassis_IsSettled() || (c->argument == 2 && mission.step == 8 && mission.phase == 3) ||
+               (Chassis_IsSettled() || ((c->argument == 2 || c->argument == 105) && mission.step == 8) ||
+                (c->argument == 105 && mission.step == 9 && mission.phase == 0) ||
                 (c->argument == 100 && mission.step == 3 && mission.phase == 2) ||
                 (c->argument == 1 && mission.disc_depart_pending &&
                  (mission.step == 5 || mission.step == 6))) &&
@@ -697,6 +701,10 @@ void PathPorts_Tick(void)
                     .map_yaw_deg = Chassis_MapYaw(),
                     .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,
+                    .warehouse_vision = PATH_VISION_ENABLE != 0,
+                    .warehouse_ready = rdk.warehouse_ready,
+                    .warehouse_digit = rdk.warehouse_digit,
+                    .warehouse_digit_reply = rdk.warehouse_reply,
                     .vision_ready = rdk.pillar_ready,
                     .ball_index = rdk.ball_index,
                     .resume_index = rdk.resume_index,

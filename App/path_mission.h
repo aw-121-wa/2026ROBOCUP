@@ -46,7 +46,8 @@ typedef enum
     PC_MAP_HEADING,
     PC_HOME_ALIGN,
     PC_MAP_SEARCH,
-    PC_STAIR_SCAN
+    PC_STAIR_SCAN,
+    PC_WAREHOUSE_DIGIT
 } PathCommandKind;
 typedef struct
 {
@@ -68,6 +69,10 @@ typedef struct
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
+    bool warehouse_vision;
+    bool warehouse_ready;
+    uint8_t warehouse_digit;
+    PathReply warehouse_digit_reply;
     bool vision_ready;
     uint8_t ball_index, resume_index;
 } PathInput;
@@ -83,6 +88,11 @@ typedef struct
     BallInventory inventory;
     bool warehouse_plan_ready;
     uint8_t warehouse_order[9];
+    uint8_t warehouse_mode; /* WarehouseMode values; see path_warehouse.h. */
+    uint8_t warehouse_columns[3], warehouse_used;
+    bool warehouse_query;
+    bool warehouse_ignore_line; /* Latched only after the first acknowledged unload. */
+    bool stair_prep_started, stair_ready_started;
     bool id_overflow;
     float orbit_yaw;
     float stair_origin_x, stair_origin_y, stair_axis, stair_distance;

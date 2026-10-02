@@ -29,6 +29,27 @@ static int begin_disc(RdkLink *r, uint32_t started, uint32_t timeout) {
 int main(void) {
     RdkLink r;
     CHECK(connect(&r)==0);
+    CHECK(Rdk_WarehouseBegin(&r,0,100,5000)); Rdk_Tick(&r,100);
+    CHECK(strstr(wire,"WAREHOUSE_CHECK ")==wire);
+    char number[80];
+    snprintf(number,sizeof(number),"WAREHOUSE_READY %lu\r\n",(unsigned long)r.warehouse_token+1);
+    feed(&r,number); CHECK(!r.warehouse_ready);
+    snprintf(number,sizeof(number),"WAREHOUSE_READY %lu\r\n",(unsigned long)r.warehouse_token);
+    feed(&r,number); CHECK(r.warehouse_ready && r.warehouse_active);
+    snprintf(number,sizeof(number),"WAREHOUSE_DIGIT %lu 3\r\n",(unsigned long)r.warehouse_token+1);
+    feed(&r,number); CHECK(r.warehouse_active && !r.locked);
+    CHECK(!Rdk_Begin(&r,"GROUP",109,105,30000));
+    snprintf(number,sizeof(number),"WAREHOUSE_DIGIT %lu 3\r\n",(unsigned long)r.warehouse_token);
+    feed(&r,number); CHECK(!r.warehouse_active && r.warehouse_reply==PATH_OK && r.warehouse_digit==3 && !r.locked);
+    CHECK(Rdk_WarehouseBegin(&r,8,200,5000)); CHECK(!r.warehouse_ready); Rdk_Tick(&r,200);
+    Rdk_Tick(&r,5200); CHECK(!r.locked && !r.warehouse_active && r.warehouse_reply==PATH_NONE);
+    feed(&r,number); CHECK(!r.locked && r.warehouse_reply==PATH_NONE);
+    CHECK(Rdk_WarehouseBegin(&r,0,5300,5000)); Rdk_Tick(&r,5300);
+    CHECK(Rdk_Begin(&r,"STOP",0,5305,1)); Rdk_Tick(&r,5305);
+    CHECK(!strcmp(wire,"DISC_CANCEL\r\n") && !r.warehouse_active && r.locked);
+
+
+    CHECK(connect(&r)==0);
     for (unsigned g=109;g<=111;g++) {
         char line[48];
         CHECK(Rdk_Begin(&r,"GROUP",g,100,30000)); Rdk_Tick(&r,100);

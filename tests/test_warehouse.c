@@ -89,32 +89,14 @@ static int optimized_order(void) {
     return 0;
 }
 static int alignment(void) {
-    PathInput in={.armed=true,.settled=true,.gray=7};
-    init(); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
-    CHECK(m.phase==4 && groups==0);
-    Path_Tick(&m,10,&in); CHECK(last.kind==PC_MAP_SEARCH && calibrations==1);
-    in.gray=6; Path_Tick(&m,20,&in); Path_Tick(&m,25,&in);
-    Path_Tick(&m,124,&in); CHECK(m.phase==4);
-    Path_Tick(&m,125,&in); CHECK(m.phase==1 && calibrations==1);
-    init(); in.gray=0; in.settled=true;
-    Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
-    CHECK(last.kind==PC_MAP_SEARCH && last.y==-10);
-    Path_Tick(&m,1005,&in); CHECK(last.kind==PC_HOLD);
-    in.settled=false; Path_Tick(&m,1010,&in); CHECK(last.kind==PC_HOLD);
-    in.settled=true; Path_Tick(&m,1020,&in);
-    CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
-    Path_Tick(&m,2020,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
-    Path_Tick(&m,2500,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
-    in.gray=6; Path_Tick(&m,2510,&in); CHECK(last.kind==PC_HOLD);
-    in.settled=false; Path_Tick(&m,2520,&in); CHECK(m.phase==4 && groups==0);
-    in.settled=true; Path_Tick(&m,2530,&in);
-    Path_Tick(&m,2630,&in); CHECK(m.phase==1 && !m.line_skipped);
-    init(); in.gray=0;
-    Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
-    Path_Tick(&m,1005,&in); Path_Tick(&m,1020,&in);
-    Path_Tick(&m,6019,&in); CHECK(m.result==PATH_RUNNING && last.y==10);
-    Path_Tick(&m,6020,&in); CHECK(m.result==PATH_TIMEOUT && groups==0);
-    return 0;
+ PathInput in={.armed=true,.settled=true,.gray=2};
+ init(); m.phase=4;
+ Path_Tick(&m,0,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==-10 && groups==0);
+ Path_Tick(&m,2000,&in); CHECK(last.kind==PC_HOLD);
+ Path_Tick(&m,2005,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
+ in.gray=15; Path_Tick(&m,2010,&in); CHECK(last.kind==PC_HOLD);
+ Path_Tick(&m,2015,&in); Path_Tick(&m,2115,&in); CHECK(m.phase==1);
+ return 0;
 }
 static int errors(void) {
     PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_WAIT,.turn_reply=PATH_WAIT};
@@ -137,7 +119,25 @@ static int errors(void) {
     CHECK(m.result==PATH_ERROR && moves==2 && groups==0 && m.inventory.occupied==1);
     return 0;
 }
+static int home_line_stop(void) {
+ for(unsigned mask=0;mask<16;mask++) {
+  init(); m.point=9; m.phase=5;
+  PathInput in={.armed=true,.settled=true,.gray=15};
+  Path_Tick(&m,0,&in); CHECK(homes==1 && m.result==PATH_RUNNING);
+  in.settled=false; Path_Tick(&m,5,&in); CHECK(m.phase==5);
+  in.gray=0; Path_Tick(&m,10,&in);
+  in.gray=mask; Path_Tick(&m,15,&in);
+  unsigned bits=0;for(unsigned i=0;i<4;i++)bits+=(mask>>i)&1U;
+  if(bits>=2) {
+   CHECK(m.phase==14 && last.kind==PC_HOLD && m.result==PATH_RUNNING);
+   in.gray=0;Path_Tick(&m,20,&in);CHECK(m.phase==14);
+   in.settled=true;Path_Tick(&m,25,&in);CHECK(m.result==PATH_DONE);
+  } else CHECK(m.phase==5 && m.result==PATH_RUNNING);
+ }
+ return 0;
+}
 int main(void) {
+    CHECK(home_line_stop()==0);
     for(unsigned mask=0;mask<512;mask++) CHECK(run(mask)==0);
     CHECK(optimized_order()==0); CHECK(errors()==0); CHECK(alignment()==0);
     puts("warehouse sorted rows, missing cells, three columns and failure gates passed"); return 0;

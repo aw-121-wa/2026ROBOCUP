@@ -63,8 +63,10 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
     if(path_diagnostics.step==13 && x==200 && y==0) {
-        if(a!=850 || d!=850) return false;
-    } else if(a!=650 || d!=650) return false;
+        if(a==150) { if(d!=650) return false; }
+        else if(a!=850 || d!=850) return false;
+    } else if(a!=650 && !(path_diagnostics.step==9 && a==850)) return false;
+    else if(d!=650) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }
@@ -198,7 +200,7 @@ int main(int argc, char **argv) {
             CHECK(wire[0]==0 && !path_diagnostics.fault);
         }
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==0 && map_headings==8 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==0 && map_headings==9 && zero_aligns==0 && path_diagnostics.rfid_count==0);
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());
@@ -322,16 +324,16 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(wire,"GROUP 2\r\n"));
         gray_line=false; tick(); CHECK(moving); /* G2 completion does not block approach. */
         reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
+        for(unsigned i=0;i<30 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"GROUP 105\r\n"));
+        reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();
         for(unsigned i=0;i<20 && path_diagnostics.step!=9;i++) {moving=false; tick();}
         CHECK(path_diagnostics.step==9);
         gray_line=false; tick(); CHECK(moving);
         now+=10000; tick(); CHECK(moving && !path_diagnostics.fault);
         CHECK(path_diagnostics.result==PATH_RUNNING); /* Body watchdog also exceeds 5s. */
         gray_line=true;
-        for(unsigned i=0;i<40 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"GROUP 105\r\n") && !moving);
         measured_yaw=5;
-        reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();
         for(unsigned i=0;i<60 && strcmp(wire,"STAIR_SCAN 1\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"STAIR_SCAN 1\r\n") && !moving);
         reply("PILLAR_ACK\r\nPILLAR_READY\r\n"); tick(); tick();CHECK(moving);

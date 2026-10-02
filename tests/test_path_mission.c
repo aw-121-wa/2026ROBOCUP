@@ -199,17 +199,18 @@ static int chassis_only(void) {
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==4 && count(&p,PC_TURN)==0);
-    const float expected[]={120,380,20,340,110,200,200};
+    const float expected[]={5,120,380,20,340,110,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
-        CHECK(n<7 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
+        CHECK(n<8 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
     }
-    CHECK(n==7);
+    CHECK(n==8);
+    CHECK(count(&p,PC_MAP_LATERAL)==1);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
     for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
-    CHECK(count(&p,PC_MOVE)==2 && count(&p,PC_ROTATE)==0);
+    CHECK(count(&p,PC_MAP_LATERAL)==1 && count(&p,PC_MOVE)==2 && count(&p,PC_ROTATE)==0);
     return 0;
 }
 static int chassis_errors(void) {

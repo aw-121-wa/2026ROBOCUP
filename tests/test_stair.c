@@ -68,7 +68,7 @@ static int exit_route(void) {
 int main(void) {
     CHECK(exit_route()==0);
     PathMission m; Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=9;
-    PathInput in={.armed=true,.settled=true};
+    PathInput in={.armed=true,.settled=true,.reply=PATH_OK};
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.timeout_ms==50000);
     CHECK(last.x==0 && last.y==80 && last.speed==0);
     in.y_mm=1079; Path_Tick(&m,95,&in); CHECK(last.y==80);
@@ -77,7 +77,7 @@ int main(void) {
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
     Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=9;
-    in=(PathInput){.armed=true,.settled=true,.gray=1};
+    in=(PathInput){.armed=true,.settled=true,.gray=1,.reply=PATH_OK};
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.y==25);
     in.gray=0; Path_Tick(&m,5,&in); CHECK(last.y==25);
     in.gray=6; Path_Tick(&m,10,&in); CHECK(last.kind==PC_HOLD);

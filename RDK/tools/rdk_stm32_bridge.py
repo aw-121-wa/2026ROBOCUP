@@ -29,6 +29,7 @@ from stair_task import run_stair_point
 from vision_servo_direct_test import build_parser as build_disc_parser, run_disc_task
 from rdk_vision.config import load_config
 from shared_task_camera import SharedTaskCamera
+from rdk_vision.warehouse_digits import load_number_config, recognize_number, NumberCameraSession
 from stair_scan import run_stair_scan
 
 DEFAULT_DISC_TIMEOUT_S = 60.0
@@ -125,6 +126,9 @@ class BridgeCore:
         run_stair=None,
         close_camera=lambda: None,
         run_scan=None,
+        run_number=None,
+        prepare_number=lambda: None,
+        close_number=lambda: None,
     ):
         self._send_line = send_line
         self._run_disc = run_disc
@@ -138,7 +142,11 @@ class BridgeCore:
         self._run_pillar = run_pillar
         self._run_stair = run_stair
         self._run_scan = run_scan
+        self._prepare_number = prepare_number
+        self._close_number = close_number
+        self._run_number = run_number
         self._close_camera = close_camera
+        self._scan_level = None
         self._stair_point = 0
         self._mode = None
         self._cancel = threading.Event()
@@ -147,10 +155,33 @@ class BridgeCore:
         self._ball = 0
         self._waiting_stop = False
 
+    def _number_main(self, token, excluded):
+        digit=0
+        try:
+            self._close_camera()  # Ball stage finished; release its USB bandwidth.
+            if self._run_number is not None:
+                result=self._run_number(excluded=excluded,cancel=self._cancel,
+                    on_ready=lambda: self._send_number_ready(token))
+                if result in (1,2,3) and not excluded & (1<<result): digit=result
+        except Exception as exc:
+            print(f'WAREHOUSE number camera unavailable: {exc!r}',flush=True)
+        with self._lock:
+            self._worker=self._mode=None
+            if not self._cancel.is_set(): self._send_line(f'WAREHOUSE_DIGIT {token} {digit}')
+
+    def _send_number_ready(self, token):
+        with self._lock:
+            if not self._cancel.is_set():
+                self._send_line(f'WAREHOUSE_READY {token}')
+
     def _group_main(self, group):
         try:
             if group in (0, 3):
                 self._close_camera()
+            if group == 0:
+                self._close_number()  # New mission must free USB for ball vision.
+            elif group == 3:
+                self._prepare_number()  # Stair exit: capture warms during G3/travel.
             self._run_group(group)
             success = not self._cancel.is_set()
         except Exception as exc:
@@ -170,7 +201,7 @@ class BridgeCore:
             self._waiting_stop = True
             self._stopped.clear()
             self._send_line(f'PILLAR_BALL {index}')
-        deadline = self._clock() + 5.0
+        deadline = self._clock() + (15.0 if self._scan_level is not None else 5.0)
         while not self._stopped.wait(.01):
             if self._cancel.is_set() or self._finish.is_set() or self._clock() >= deadline:
                 return False
@@ -265,6 +296,16 @@ class BridgeCore:
         if command == "PING":
             self._send_line("PONG")
             return
+        match=re.fullmatch(r'WAREHOUSE_CHECK ([1-9][0-9]{0,9}) ([0-9]{1,2})',command)
+        if match:
+            token,excluded=map(int,match.groups())
+            if token>0xffffffff or excluded & ~14: return
+            with self._lock:
+                if self._worker is not None: return
+                self._cancel.clear(); self._mode='number'
+                self._worker=threading.Thread(target=self._number_main,args=(token,excluded),daemon=True)
+                self._worker.start()
+            return
         match = re.fullmatch(r'GROUP (0|1|2|3|4|100|105|109|110|111)', command)
         if match:
             with self._lock:
@@ -308,6 +349,7 @@ class BridgeCore:
                 if (self._run_pillar if level is None else self._run_scan) is None:
                     self._send_line('PILLAR_ERROR'); return
                 self._mode = 'pillar'
+                self._scan_level = level
                 self._cancel.clear(); self._finish.clear(); self._stopped.clear()
                 self._ball = 0
                 self._waiting_stop = False
@@ -439,6 +481,7 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
         ser = None
         core = None
         camera_session = SharedTaskCamera()
+        number_session = NumberCameraSession(load_number_config(project_root/"rdk_vision"/"warehouse_number.yaml"))
         def run_shared_stair(point, **kwargs):
             level = 'low' if point <= 2 else 'high' if point <= 6 else 'mid'
             config = load_config(project_root / 'rdk_vision' / f'stair_{level}.yaml')
@@ -459,6 +502,9 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
                 run_scan=lambda level, **kwargs: run_stair_scan(project_root,level,
                     camera_session=camera_session,**kwargs),
                 close_camera=camera_session.close,
+                run_number=number_session.recognize,
+                prepare_number=number_session.start,
+                close_number=number_session.close,
             )
             rx = bytearray()
             while True:
@@ -483,6 +529,7 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
             if core is not None:
                 core.shutdown()
             camera_session.close()
+            number_session.close()
             if ser is not None:
                 try:
                     ser.close()
