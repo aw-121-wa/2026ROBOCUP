@@ -533,7 +533,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1735 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
                              .angle = 180, .speed = 185, .end_speed = PILLAR_ENTRY_SPEED_RPM,
                              .continuous = true, .timeout_ms = 30000};
-            if (PATH_BLUE_PILLAR_TEST) { c.x=-c.x+65.0f; c.angle=-c.angle; }
+            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x+65.0f; c.angle=-c.angle; }
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
         else if (in->motion_done) {
@@ -543,7 +543,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 PathCommand c = {.kind=PC_ARC,.x=PILLAR_ENTRY_RADIUS_MM,.y=0,.angle=90,
                                  .speed=PILLAR_ENTRY_SPEED_RPM,.start_speed=PILLAR_ENTRY_SPEED_RPM,
                                  .end_speed=PILLAR_SEARCH_SPEED_RPM,.continuous=true,.timeout_ms=10000};
-                if (PATH_BLUE_PILLAR_TEST) { c.y=180.0f-c.y; c.angle=-c.angle; }
+                if (m->blue || PATH_BLUE_PILLAR_TEST) { c.y=180.0f-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) fail(m,PATH_ERROR);
                 else { m->phase=1; m->entered=now; }
             }
@@ -616,12 +616,11 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->approach_slow=false;
                 PathCommand c={.kind=PC_MOVE_ROTATE,.y=-1425,.angle=180,.speed=155,
                                .end_speed=45,.continuous=true,.timeout_ms=30000};
-                if (PATH_BLUE_WAREHOUSE_TEST) c.angle=-c.angle;
+                if (m->blue || PATH_BLUE_WAREHOUSE_TEST) c.angle=-c.angle;
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
                 PathCommand c={.kind=PC_ARC,.x=50,.y=90,.angle=-90,.speed=45,
                                .start_speed=45,.end_speed=45,.continuous=true,.timeout_ms=10000};
-                if (PATH_BLUE_WAREHOUSE_TEST) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=2;
             }
@@ -631,12 +630,10 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!m->waiting) {
                 PathCommand c={.kind=PC_MOVE,.x=110,.speed=125,.start_speed=45,
                                .end_speed=40,.continuous=true,.timeout_ms=10000};
-                if (PATH_BLUE_WAREHOUSE_TEST) c.x=-c.x;
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
                 PathCommand c={.kind=PC_ARC,.x=25,.y=0,.angle=90,.speed=40,
                                .start_speed=40,.end_speed=40,.continuous=true,.timeout_ms=10000};
-                if (PATH_BLUE_WAREHOUSE_TEST) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=3; m->stable=false;
             }

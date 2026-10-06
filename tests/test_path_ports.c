@@ -19,6 +19,7 @@ static char wire[80];
 static unsigned wire_sequence;
 static unsigned holds, turn_positions;
 static bool moving, rfid_init_failure;
+static bool test_blue;
 static bool gray_line = true;
 static bool outer_line;
 static float yaw, measured_yaw, map_yaw_test;
@@ -63,12 +64,14 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
     if(path_diagnostics.step==9 && (path_diagnostics.phase==22 || path_diagnostics.phase==30) && fabsf(x)>2) assert(x>0 && y==0);
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
+    if (test_blue && path_diagnostics.step==0 && fabsf(x)>100) assert(x<0);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1700);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    if(path_diagnostics.step==13 && x==200 && y==0) {
+    if(path_diagnostics.step==13 && fabsf(x)==200 && y==0) {
         if(a==150) { if(d!=650) return false; }
         else if(a!=850 || d!=850) return false;
     } else if(a!=650 && !(path_diagnostics.step==9 && a==850)) return false;
@@ -141,12 +144,14 @@ static void finish_store(void) { for(unsigned i=0;i<195;i++) tick(); }
 
 static int start_disc(bool full) {
     PathPorts_Init();
+    if(test_blue) CHECK(PathPorts_SelectSide(true));
     CHECK(PathPorts_Busy()); tick(); CHECK(!strcmp(wire, "PING\r\n"));
     reply("PONG\r\n"); tick(); CHECK(path_diagnostics.accepted_ids == 0);
     CHECK(PathPorts_Busy()); tick(); CHECK(!strcmp(wire,"GROUP 0\r\n"));
     reply("GROUP_ACK 0\r\n"); tick(); CHECK(PathPorts_Busy());
-    reply("GROUP_DONE 0\r\n"); tick(); CHECK(path_diagnostics.accepted_ids == 1);
+    reply("GROUP_DONE 0\r\n"); tick(); tick(); CHECK(!strcmp(wire,test_blue?"COLOR BLUE\r\n":"COLOR RED\r\n")); CHECK(PathPorts_Busy() && !PathPorts_Start()); reply(test_blue?"COLOR_OK BLUE\r\n":"COLOR_OK RED\r\n"); tick(); CHECK(path_diagnostics.accepted_ids == 1);
     state.armed = true;
+    CHECK(!PathPorts_SelectSide(!test_blue));
     id(0x01020304); tick(); /* Capture is closed before a disc action gate. */
     CHECK(full ? PathPorts_Start() : PathPorts_Disc()); tick(); reply("PONG\r\n"); tick(); tick();
     if (full) {
@@ -235,6 +240,30 @@ int main(int argc, char **argv) {
         puts("no-vision continuous stair route, restart, STOP and fault passed");
         return 0;
     }
+    if (!strncmp(argv[1],"side_",5)) {
+        PathPorts_Init(); CHECK(PathPorts_SelectSide(true));
+        tick(); reply("PONG\r\n"); tick(); tick();
+        reply("GROUP_ACK 0\r\nGROUP_DONE 0\r\n"); tick(); tick();
+        CHECK(!strcmp(wire,"COLOR BLUE\r\n") && PathPorts_Busy());
+        CHECK(!PathPorts_Start());
+        if(!strcmp(argv[1],"side_timeout")) {
+            now+=2100;tick();CHECK(PathPorts_Busy() && !path_diagnostics.accepted_ids);
+            CHECK(!PathPorts_SelectSide(false));
+        } else {
+            CHECK(PathPorts_SelectSide(false)); /* Selection changed while the earlier ACK is in flight. */
+            reply("COLOR_OK BLUE\r\n"); tick();tick();
+            CHECK(!strcmp(wire,"COLOR RED\r\n") && PathPorts_Busy());
+            reply("COLOR_OK RED\r\n");tick(); CHECK(!PathPorts_Busy());
+            CHECK(PathPorts_SelectSide(true));tick();tick();reply("COLOR_OK BLUE\r\n");tick();
+            CHECK(!PathPorts_Busy());
+        }
+        CHECK(PathPorts_Reset());tick();reply("PONG\r\n");tick();tick();
+        reply("GROUP_ACK 0\r\nGROUP_DONE 0\r\n");tick();tick();
+        CHECK(!strcmp(wire,"COLOR RED\r\n"));reply("COLOR_OK RED\r\n");tick();
+        CHECK(!PathPorts_Busy() && path_diagnostics.accepted_ids);
+        state.armed=true;CHECK(!PathPorts_SelectSide(true));
+        puts("side synchronization passed");return 0;
+    }
     if (!strncmp(argv[1],"boot_",5)) {
         PathPorts_Init(); tick(); CHECK(!strcmp(wire,"PING\r\n"));
         CHECK(PathPorts_Busy() && !PathPorts_Start());
@@ -245,7 +274,7 @@ int main(int argc, char **argv) {
         reply("PONG\r\n"); tick(); tick(); CHECK(!strcmp(wire,"GROUP 0\r\n"));
         reply("GROUP_ACK 0\r\n"); tick(); CHECK(PathPorts_Busy());
         if (!strcmp(argv[1],"boot_retry")) {
-            reply("GROUP_DONE 0\r\n"); tick(); CHECK(!PathPorts_Busy());
+            reply("GROUP_DONE 0\r\n"); tick(); tick(); reply("COLOR_OK RED\r\n"); tick(); CHECK(!PathPorts_Busy());
             CHECK(path_diagnostics.accepted_ids==1);
             CHECK(PathPorts_Ping()); tick(); reply("PONG\r\n"); tick(); tick();
             CHECK(!strcmp(wire,"PING\r\n")); /* No second G0. */
@@ -260,8 +289,45 @@ int main(int argc, char **argv) {
         } else CHECK(0);
         puts("boot test passed"); return 0;
     }
+    test_blue = !strcmp(argv[1], "full_path_blue") || !strcmp(argv[1],"blue_bypass");
     rfid_init_failure = !strcmp(argv[1], "rfid_init");
-    CHECK(start_disc(!strncmp(argv[1], "full_path",9)) == 0);
+    CHECK(start_disc(test_blue || !strncmp(argv[1], "full_path",9)) == 0);
+    if(!strcmp(argv[1],"blue_bypass")) {
+        for(unsigned i=1;i<=5;i++) {
+            char response[60];snprintf(response,sizeof(response),"DISC_ACTION_DONE %u\r\n",i);
+            reply(response);tick();tick();
+            snprintf(response,sizeof(response),"DISC_RFID_OK %u\r\n",i);
+            CHECK(!strcmp(wire,response));
+            id(i);tick();CHECK(path_diagnostics.rfid_count==0 && turn_positions==0);
+            CHECK(path_diagnostics.step==3);
+        }
+        reply("DISC_DONE\r\n");tick();
+        unsigned seen=0,columns=0,actions=0;
+        for(unsigned i=0;i<60000 && path_diagnostics.result==PATH_RUNNING;i++) {
+            moving=false;
+            if(path_diagnostics.step==6 && path_diagnostics.phase==2) yaw-=.03f;
+            if(wire_sequence!=seen) {
+                seen=wire_sequence;unsigned group,level,token,excluded,index;char response[80];
+                if(sscanf(wire,"GROUP %u",&group)==1) {
+                    CHECK(group<109);snprintf(response,sizeof(response),"GROUP_ACK %u\r\nGROUP_DONE %u\r\n",group,group);reply(response);
+                } else if(!strcmp(wire,"PILLAR_START\r\n") || sscanf(wire,"STAIR_SCAN %u",&level)==1) {
+                    reply("PILLAR_ACK\r\nPILLAR_READY\r\nPILLAR_BALL 1\r\n");
+                } else if(sscanf(wire,"PILLAR_STOPPED %u",&index)==1) {
+                    snprintf(response,sizeof(response),"PILLAR_ACTION_DONE %u\r\n",index);reply(response);actions++;
+                } else if(sscanf(wire,"PILLAR_RFID_OK %u",&index)==1) {
+                    snprintf(response,sizeof(response),"PILLAR_RESUME %u\r\n",index);reply(response);
+                } else if(!strcmp(wire,"PILLAR_END\r\n")) reply("PILLAR_DONE\r\n");
+                else if(sscanf(wire,"WAREHOUSE_CHECK %u %u",&token,&excluded)==2) {
+                    CHECK(columns<3);columns++;
+                    snprintf(response,sizeof(response),"WAREHOUSE_READY %u\r\nWAREHOUSE_DIGIT %u %u\r\n",token,token,columns);reply(response);
+                }
+            }
+            tick();
+        }
+        CHECK(path_diagnostics.result==PATH_DONE && columns==3 && actions>=2);
+        CHECK(turn_positions==0 && path_diagnostics.rfid_count==0 && path_diagnostics.inventory_occupied==0);
+        puts("blue bypass: five disc actions, pillar/stair actions, three digits, home passed");return 0;
+    }
 
     if (!strcmp(argv[1], "uid_only")) {
         CHECK(action_done(1)==0); uid_only(); tick(); tick();
@@ -314,7 +380,7 @@ int main(int argc, char **argv) {
         CHECK(path_diagnostics.result==PATH_ERROR && path_diagnostics.inventory_uncertain);
         CHECK(strcmp(wire,"DISC_RFID_OK 1\r\n"));
     } else if (!strncmp(argv[1], "full_path",9)) {
-        const unsigned extra=!strcmp(argv[1],"full_path9");
+        const unsigned extra=!strcmp(argv[1],"full_path9") || test_blue;
         for (uint8_t i=1;i<=5;i++) CHECK(complete_gate(i,i)==0);
         CHECK(moving && strcmp(wire,"GROUP 1\r\n"));
         reply("DISC_DONE\r\n"); tick(); tick(); tick();

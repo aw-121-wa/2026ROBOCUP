@@ -27,6 +27,7 @@ bool PathPorts_Start(void) { return false; }
 bool PathPorts_Disc(void) { return false; }
 bool PathPorts_Reset(void) { return false; }
 bool PathPorts_Ping(void) { return false; }
+bool PathPorts_SelectSide(bool blue) { (void)blue; return false; }
 void PathPorts_Error(UART_HandleTypeDef *u) { (void)u; }
 void PathPorts_RxComplete(UART_HandleTypeDef *u) { (void)u; }
 static void tick(void) {

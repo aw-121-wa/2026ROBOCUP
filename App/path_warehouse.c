@@ -51,7 +51,6 @@ static void fail(PathMission *m, PathResult result)
 }
 static bool emit(PathMission *m, PathCommand command)
 {
-    if (PATH_BLUE_WAREHOUSE_TEST && (command.kind==PC_MOVE || command.kind==PC_BODY)) command.x=-command.x;
     if (m->send(m->context,&command)) return true;
     fail(m,PATH_ERROR);
     return false;
@@ -244,7 +243,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_SELECT_BALL:
     {
-        if (PATH_BLUE_WAREHOUSE_TEST) {
+        if (PATH_BLUE_WAREHOUSE_TEST || PATH_SKIP_MATERIAL(m)) {
             if (!in->settled) { fail(m,PATH_ERROR); break; }
             m->point=(uint8_t)((m->point/3)*3+2);
             advance(m,now);

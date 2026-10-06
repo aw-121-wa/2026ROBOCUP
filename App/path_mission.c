@@ -24,7 +24,7 @@ static bool emit_move(PathMission *m, float x, float y, float speed,
     PathCommand c = {.kind = PC_MOVE, .x = x, .y = y, .speed = speed,
                      .start_speed = start_speed, .end_speed = end_speed,
                      .continuous = continuous, .timeout_ms = 30000};
-    if (PATH_BLUE_DISC_TEST) c.x = -c.x;
+    if (m->blue || PATH_BLUE_DISC_TEST) c.x = -c.x;
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -39,7 +39,7 @@ static bool emit_arc(PathMission *m)
                      .speed = 155.0f, .start_speed = START_BLEND_SPEED_RPM,
                      .end_speed = START_BLEND_SPEED_RPM, .continuous = true,
                      .timeout_ms = 30000};
-    if (PATH_BLUE_DISC_TEST) { c.y = 180.0f - c.y; c.angle = -c.angle; }
+    if (m->blue || PATH_BLUE_DISC_TEST) { c.y = 180.0f - c.y; c.angle = -c.angle; }
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -60,10 +60,11 @@ bool Path_Start(PathMission *m, uint32_t now, const PathInput *in)
     if (m->result == PATH_RUNNING || !in->armed || in->fault || !in->settled ||
         m->inventory.occupied || m->inventory.uncertain)
         return false;
+    bool blue = m->blue;
     PathSend s = m->send;
     void *c = m->context;
     *m =
-        (PathMission){.send = s, .context = c, .result = PATH_RUNNING, .phase = 99, .entered = now};
+        (PathMission){.blue = blue, .send = s, .context = c, .result = PATH_RUNNING, .phase = 99, .entered = now};
     if (!PATH_VISION_ENABLE)
     {
         m->phase = 0;
@@ -171,7 +172,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             PathCommand c = {.kind=PC_ARC,.x=DISC_ENTRY_RADIUS_MM,.y=0,.angle=90,
                              .speed=DISC_ENTRY_SPEED_RPM,.start_speed=DISC_ENTRY_SPEED_RPM,
                              .end_speed=DISC_ENTRY_SPEED_RPM,.continuous=true,.timeout_ms=30000};
-            if (PATH_BLUE_DISC_TEST) { c.y=180.0f-c.y; c.angle=-c.angle; }
+            if (m->blue || PATH_BLUE_DISC_TEST) { c.y=180.0f-c.y; c.angle=-c.angle; }
             if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); return; }
             m->part=1; m->entered=now;
         }
@@ -230,7 +231,8 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_ERROR);
         else if (m->id_count >= DISC_REQUIRED_RFID_COUNT || in->reply == PATH_OK)
         {
-            if (m->id_count < DISC_REQUIRED_RFID_COUNT)
+            if (PATH_SKIP_MATERIAL(m) ? in->disc_completed != DISC_REQUIRED_RFID_COUNT
+                                      : m->id_count < DISC_REQUIRED_RFID_COUNT)
                 fail(m, PATH_ERROR);
             else
             {

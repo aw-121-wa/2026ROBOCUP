@@ -35,6 +35,7 @@ void PathPorts_Init(void);
 bool PathPorts_Start(void);
 bool PathPorts_Ping(void);
 bool PathPorts_Reset(void);
+bool PathPorts_SelectSide(bool blue);
 bool PathPorts_Disc(void);
 bool PathPorts_Busy(void);
 void PathPorts_Cancel(void);

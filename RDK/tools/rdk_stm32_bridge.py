@@ -132,7 +132,9 @@ class BridgeCore:
         run_number=None,
         prepare_number=lambda: None,
         close_number=lambda: None,
+        select_color=None,
     ):
+        self._select_color = select_color
         self._send_line = send_line
         self._run_disc = run_disc
         self._clock = clock
@@ -296,6 +298,20 @@ class BridgeCore:
 
     def handle(self, command: str) -> None:
         command = normalize_command(command)
+        if command in ("COLOR RED", "COLOR BLUE"):
+            selected = command.split()[1]
+            with self._lock:
+                if self._worker is not None or self._select_color is None:
+                    self._send_line("COLOR_ERROR")
+                    return
+                try:
+                    self._select_color(selected.lower())
+                except Exception as exc:
+                    print(f"Color selection failed: {exc!r}", flush=True)
+                    self._send_line("COLOR_ERROR")
+                    return
+                self._send_line(f"COLOR_OK {selected}")
+            return
         if command == "PING":
             self._send_line("PONG")
             return
@@ -481,7 +497,6 @@ def open_serial(port: str, baudrate: int, timeout: float):
 
 def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s: float, *, color: str = 'red') -> None:
     if color not in ('red','blue'): raise ValueError('invalid ball color')
-    suffix = '_blue' if color=='blue' else ''
     while True:
         ser = None
         core = None
@@ -489,9 +504,23 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
         number_session = NumberCameraSession(load_number_config(project_root/"rdk_vision"/"warehouse_number.yaml"))
         def run_shared_stair(point, **kwargs):
             level = 'low' if point <= 2 else 'high' if point <= 6 else 'mid'
+            suffix = '_blue' if color=='blue' else ''
             config = load_config(project_root / 'rdk_vision' / f'stair_{level}{suffix}.yaml')
             return run_stair_point(project_root, point,
                                    camera=camera_session.borrow(config.camera), color=color, **kwargs)
+        def select_color(selected):
+            nonlocal color
+            # Validate all task files before committing a side change.
+            names = (["disc_blue.yaml", "pillar_blue.yaml", "stair_low_blue.yaml",
+                      "stair_high_blue.yaml", "stair_mid_blue.yaml"] if selected == "blue"
+                     else ["config.yaml", "pillar_runtime.yaml", "stair_low.yaml",
+                           "stair_high.yaml", "stair_mid.yaml"])
+            for name in names:
+                load_config(project_root / 'rdk_vision' / name)
+            camera_session.close()
+            number_session.close()
+            color = selected
+            print(f"Mission color selected: {color}", flush=True)
         try:
             print(f"Opening STM32 link {port} @ {baudrate}...", flush=True)
             ser = open_serial(port, baudrate, timeout=0.1)
@@ -510,6 +539,7 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
                 run_number=number_session.recognize,
                 prepare_number=number_session.start,
                 close_number=number_session.close,
+                select_color=select_color,
             )
             rx = bytearray()
             while True:

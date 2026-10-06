@@ -66,6 +66,12 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
         strcpy(r->request, "PING\r\n");
         r->stage = 1;
     }
+    else if (!strcmp(v, "COLOR") && a <= 1)
+    {
+        strcpy(r->request, a ? "COLOR BLUE\r\n" : "COLOR RED\r\n");
+        r->group = a;
+        r->stage = 13;
+    }
     else if (!strcmp(v, "GROUP") && (r->stage == 2 || r->stage == 5) &&
              (a == 0 || a == 1 || a == 2 || a == 3 || a == 4 || a == 100 || a == 105 ||
               a == 109 || a == 110 || a == 111))
@@ -184,6 +190,12 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
         return;
     }
     if (!strcmp(r->line, "PONG") && r->stage == 1)
+    {
+        r->stage = 2;
+        r->active = false;
+        r->reply = PATH_OK;
+    }
+    else if (r->stage == 13 && !strcmp(r->line, r->group ? "COLOR_OK BLUE" : "COLOR_OK RED"))
     {
         r->stage = 2;
         r->active = false;

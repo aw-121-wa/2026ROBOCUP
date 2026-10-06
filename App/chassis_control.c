@@ -724,7 +724,7 @@ static void service_host_commands(uint32_t now)
             continue;
         host_result = HostCommand_Check(&command, state.armed,
                                         Chassis_MotionBusy() ||
-                                            (command.kind != HOST_RDK_RESET && PathPorts_Busy()));
+                                            (command.kind != HOST_RDK_RESET && command.kind != HOST_RED && command.kind != HOST_BLUE && PathPorts_Busy()));
         if (host_result != HOST_OK)
             continue;
         if (command.kind == HOST_STOP)
@@ -738,6 +738,10 @@ static void service_host_commands(uint32_t now)
         {
             if (!state.armed && !Chassis_Arm())
                 host_result = HOST_NOT_READY;
+        }
+        else if (command.kind == HOST_RED || command.kind == HOST_BLUE)
+        {
+            if (!PathPorts_SelectSide(command.kind == HOST_BLUE)) host_result = HOST_NOT_READY;
         }
         else if (command.kind == HOST_PING)
         {

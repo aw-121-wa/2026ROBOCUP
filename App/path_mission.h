@@ -75,10 +75,12 @@ typedef struct
     PathReply warehouse_digit_reply;
     bool vision_ready;
     uint8_t ball_index, resume_index;
+    uint8_t disc_completed; /* Actual action-complete events, independent of RFID. */
 } PathInput;
 typedef bool (*PathSend)(void *context, const PathCommand *command);
 typedef struct
 {
+    bool blue; /* Runtime side; fixed for an entire mission. */
     PathResult result;
     unsigned step, phase, part, point, grabs;
     uint32_t entered, started, stable_since, orbit_ms, previous;

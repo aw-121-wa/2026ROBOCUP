@@ -25,6 +25,11 @@ int main(void)
 {
     HostParser p = {0};
     HostCommand c = {0};
+    CHECK(feed(&p,"BLUE\r\n",&c)==HOST_OK && c.kind==HOST_BLUE);
+    CHECK(HostCommand_Check(&c,false,false)==HOST_OK);
+    CHECK(HostCommand_Check(&c,true,false)==HOST_BUSY);
+    CHECK(feed(&p,"RED\n",&c)==HOST_OK && c.kind==HOST_RED);
+    CHECK(HostCommand_Check(&c,false,true)==HOST_BUSY);
     CHECK(feed(&p, "PATH\n", &c) == HOST_OK);
     CHECK(HostCommand_Check(&c, false, false) == HOST_NOT_READY);
     CHECK(HostCommand_Check(&c, true, true) == HOST_BUSY);

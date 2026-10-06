@@ -29,6 +29,17 @@ static int begin_disc(RdkLink *r, uint32_t started, uint32_t timeout) {
 int main(void) {
     RdkLink r;
     CHECK(connect(&r)==0);
+    CHECK(Rdk_Begin(&r,"COLOR",1,100,2000)); Rdk_Tick(&r,100);
+    CHECK(!strcmp(wire,"COLOR BLUE\r\n"));
+    CHECK(!Rdk_Begin(&r,"DISC",0,101,30000));
+    feed(&r,"COLOR_OK BLUE\r\n"); CHECK(!r.active && !r.locked && r.stage==2);
+    CHECK(Rdk_Begin(&r,"COLOR",0,200,2000)); Rdk_Tick(&r,200);
+    feed(&r,"COLOR_OK BLUE\r\n"); CHECK(r.locked);
+    CHECK(connect(&r)==0);
+    CHECK(Rdk_Begin(&r,"COLOR",1,100,2000)); Rdk_Tick(&r,2100);
+    CHECK(r.locked && r.reply==PATH_FAILED);
+
+    CHECK(connect(&r)==0);
     CHECK(Rdk_WarehouseBegin(&r,0,100,5000)); Rdk_Tick(&r,100);
     CHECK(strstr(wire,"WAREHOUSE_CHECK ")==wire);
     char number[80];

@@ -15,6 +15,11 @@ static int parse(char *line, HostCommand *command)
     if (!n)
         return HOST_IDLE;
     *command = (HostCommand){HOST_NONE, 0};
+    if (!strcmp(line, "RED") || !strcmp(line, "BLUE"))
+    {
+        command->kind = !strcmp(line,"BLUE") ? HOST_BLUE : HOST_RED;
+        return HOST_OK;
+    }
     if (!strcmp(line, "ARM"))
     {
         command->kind = HOST_ARM;
@@ -125,6 +130,8 @@ int HostCommand_Check(const HostCommand *command, bool armed, bool busy)
         return HOST_OK;
     if (command->kind == HOST_PING || command->kind == HOST_RDK_RESET)
         return busy ? HOST_BUSY : HOST_OK;
+    if (command->kind == HOST_RED || command->kind == HOST_BLUE)
+        return armed || busy ? HOST_BUSY : HOST_OK;
     if (command->kind == HOST_ARM)
         return busy ? HOST_BUSY : HOST_OK;
     if (command->kind != HOST_FORWARD && command->kind != HOST_SHIFT &&

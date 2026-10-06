@@ -12,7 +12,7 @@ typedef enum
     HOST_SHIFT,
     HOST_STOP,
     HOST_PATH,
-    HOST_PING, HOST_RDK_RESET, HOST_DISC
+    HOST_PING, HOST_RDK_RESET, HOST_DISC, HOST_RED, HOST_BLUE
 } HostCommandKind;
 typedef struct
 {

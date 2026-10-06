@@ -29,9 +29,9 @@ static bool turn_transmit(void *ctx, const uint8_t *data, size_t size)
 }
 static void cancel_turn(void)
 {
-    if (mission.inventory.occupied || turn_purpose != TURN_IDLE ||
+    if (!PATH_SKIP_MATERIAL(&mission) && (mission.inventory.occupied || turn_purpose != TURN_IDLE ||
         (mission.result == PATH_RUNNING && rdk.active &&
-         (rdk.stage == 4 || rdk.stage == 10 || rdk.stage == 12)))
+         (rdk.stage == 4 || rdk.stage == 10 || rdk.stage == 12))))
         mission.inventory.uncertain = true;
     turn_enabled = false;
     turn_issued = mission.id_count;
@@ -94,6 +94,7 @@ volatile PathDiagnostics path_diagnostics;
 static bool ready, initialized, motion_pending, motion_continuous, verified, test_ping, stationary;
 /* 0 wait/retry PING, 1 handshake, 2 G0 pending, 3 ready, 4 stopped/failed. */
 static unsigned boot;
+static bool requested_blue, side_pending = PATH_VISION_ENABLE != 0, side_inflight;
 static uint32_t boot_retry;
 static uint32_t motion_since, motion_timeout, last_rx;
 static volatile uint32_t rfid_fault;
@@ -439,7 +440,7 @@ void PathPorts_Init(void)
 bool PathPorts_Busy(void)
 {
     if (!PATH_RDK_ENABLE) return initialized && mission.result == PATH_RUNNING;
-    return initialized && (boot != 3 || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
+    return initialized && (boot != 3 || side_pending || side_inflight || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
                            (turn_enabled && turn_issued < mission.id_count));
 }
 bool PathPorts_Ping(void)
@@ -451,6 +452,14 @@ bool PathPorts_Ping(void)
     test_ping = true;
     if (boot == 0) boot = 1;
     return Rdk_Begin(&rdk, "HELLO", 0, HAL_GetTick(), 2000);
+}
+bool PathPorts_SelectSide(bool blue)
+{
+    if (!PATH_VISION_ENABLE || !initialized || !ready || io_fault || rdk.locked ||
+        Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
+        rdk.warehouse_active || turn.pending) return false;
+    requested_blue=blue; side_pending=true; verified=false;
+    return true;
 }
 bool PathPorts_Reset(void)
 {
@@ -492,6 +501,7 @@ bool PathPorts_Reset(void)
     turn_issued = mission.id_count;
     verified = test_ping = stationary = motion_pending = motion_continuous = false;
     boot = 0;
+    requested_blue=false; side_pending=PATH_VISION_ENABLE != 0; side_inflight=false;
     boot_retry = HAL_GetTick();
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
     if (PATH_VISION_ENABLE && HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
@@ -507,13 +517,14 @@ static bool start(bool disc_only)
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = Chassis_GetState()->fault != 0,
                     .settled = true};
+    mission.blue = requested_blue;
     stationary = disc_only;
     test_ping = false;
     if (!Path_Start(&mission, HAL_GetTick(), &in)) return false;
     Chassis_BeginPath();
     Turn_Init(&turn, turn_transmit, 0);
     turn_purpose = TURN_IDLE;
-    turn_enabled = PATH_VISION_ENABLE != 0;
+    turn_enabled = PATH_VISION_ENABLE && !PATH_SKIP_MATERIAL(&mission);
     turn_issued = 0;
     inventory_fault = 0;
     return true;
@@ -626,8 +637,16 @@ void PathPorts_Tick(void)
     if (Rdk_TakeDiscActionDone(&rdk, &action_index))
     {
         disc_action_done_index = action_index;
-        open_rfid_gate(action_index);
+        if (PATH_SKIP_MATERIAL(&mission)) close_rfid_gate();
+        else open_rfid_gate(action_index);
     }
+    /* Reuse the existing action permission handshake without inventing RFID records.
+     * Retry if the auxiliary TX slot is occupied. Never release permission after a fault. */
+    if (PATH_SKIP_MATERIAL(&mission) && mission.result==PATH_RUNNING &&
+        Chassis_GetState()->armed && !Chassis_GetState()->fault && !io_fault &&
+        disc_action_done_index > disc_rfid_confirmed_index &&
+        Rdk_SendDiscRfidOk(&rdk,disc_action_done_index))
+        disc_rfid_confirmed_index=disc_action_done_index;
     record_pending_ids();
     if (io_fault)
     {
@@ -660,7 +679,16 @@ void PathPorts_Tick(void)
         verified = true;
         test_ping = false;
     }
-    if (PATH_RDK_ENABLE && rdk.locked)
+    if (side_inflight && !rdk.active && !rdk.locked && rdk.reply==PATH_OK) {
+        side_inflight=false;
+        side_pending=(requested_blue != (rdk.group != 0));
+        verified=!side_pending;
+    }
+    if (boot==3 && side_pending && !side_inflight && !rdk.active && !rdk.locked) {
+        verified=false;
+        if (Rdk_Begin(&rdk,"COLOR",requested_blue,now,2000)) side_inflight=true;
+    }
+    if (side_pending || side_inflight || (PATH_RDK_ENABLE && rdk.locked))
         verified = false;
     bool motion_done = false;
     if (motion_pending)
@@ -710,6 +738,7 @@ void PathPorts_Tick(void)
                     .warehouse_digit = rdk.warehouse_digit,
                     .warehouse_digit_reply = rdk.warehouse_reply,
                     .vision_ready = rdk.pillar_ready,
+                    .disc_completed = disc_action_done_index,
                     .ball_index = rdk.ball_index,
                     .resume_index = rdk.resume_index,
                     .reply = rdk.reply,

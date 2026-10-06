@@ -121,7 +121,7 @@ add_test(NAME forward_comp COMMAND test_forward_comp)
 
 # Keep the original vision path covered while firmware defaults to temporary bypass.
 foreach(target test_stair_heading test_stair test_action_sequence test_path_ports test_path_mission)
-    target_compile_definitions(${target} PRIVATE PATH_VISION_ENABLE=1)
+    target_compile_definitions(${target} PRIVATE PATH_VISION_ENABLE=1 PATH_BLUE_MATERIAL_ENABLE=1)
 endforeach()
 add_executable(test_path_no_vision test_path_ports.c ../App/path_ports.c ../App/path_mission.c
     ../App/path_chassis.c ../App/rdk_link.c ../App/turntable_link.c)
@@ -201,3 +201,15 @@ target_compile_definitions(test_blue_warehouse PRIVATE PATH_VISION_ENABLE=0 PATH
 target_compile_options(test_blue_warehouse PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_blue_warehouse PRIVATE m)
 add_test(NAME blue_warehouse COMMAND test_blue_warehouse)
+
+add_test(NAME path_ports_full_blue COMMAND test_path_ports full_path_blue)
+
+add_test(NAME side_timeout COMMAND test_path_ports side_timeout)
+add_test(NAME side_pending COMMAND test_path_ports side_pending)
+
+add_executable(test_blue_material_bypass test_path_ports.c ../App/path_ports.c ../App/path_mission.c ../App/path_chassis.c ../App/rdk_link.c ../App/turntable_link.c ../App/path_warehouse.c ../App/ball_inventory.c)
+target_include_directories(test_blue_material_bypass PRIVATE path_ports_stubs ../App ../DRIVER/inc)
+target_compile_options(test_blue_material_bypass PRIVATE -Wall -Wextra -Werror)
+target_compile_definitions(test_blue_material_bypass PRIVATE PATH_VISION_ENABLE=1 PATH_BLUE_MATERIAL_ENABLE=0)
+target_link_libraries(test_blue_material_bypass PRIVATE m)
+add_test(NAME blue_material_bypass COMMAND test_blue_material_bypass blue_bypass)
