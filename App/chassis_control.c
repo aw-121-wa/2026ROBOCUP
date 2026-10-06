@@ -336,9 +336,9 @@ bool Chassis_ReturnHome(void)
     /* Extend map Y only; retain the previously validated diagonal extension. */
     float map_y = -sinf(map_yaw) * x + cosf(map_yaw) * y;
     float map_x = cosf(map_yaw)*x + sinf(map_yaw)*y;
-    float trim_x = -copysignf(fminf(30.0f, fabsf(map_x)), map_x);
+    float trim_x = -copysignf(fminf(40.0f, fabsf(map_x)), map_x);
     x += cosf(map_yaw)*trim_x; y += sinf(map_yaw)*trim_x;
-    float extra_y = map_y > 0 ? 30.0f : map_y < 0 ? -30.0f : 0.0f;
+    float extra_y = map_y > 0 ? 40.0f : map_y < 0 ? -40.0f : 0.0f;
     x -= sinf(map_yaw) * extra_y;
     y += cosf(map_yaw) * extra_y;
     float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);

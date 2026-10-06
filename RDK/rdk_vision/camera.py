@@ -44,6 +44,22 @@ class LatestFrameCamera:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
+        self._io_lock = threading.RLock()
+        self._aborted = threading.Event()
+
+    def _check_cancelled(self):
+        if self._stop_event.is_set() or self._aborted.is_set():
+            raise RuntimeError('camera startup cancelled')
+
+    def abort_start(self):
+        # A failed startup instance must never be revived by a late helper.
+        self._aborted.set()
+        self.stop()
+
+    def _release_capture(self):
+        capture, self._capture = self._capture, None
+        if capture is not None:
+            capture.release()
 
     @property
     def is_running(self) -> bool:
@@ -63,6 +79,7 @@ class LatestFrameCamera:
             check=True,
             capture_output=True,
             text=True,
+            timeout=2.0,
         )
 
     def _read_v4l2_controls(self) -> str:
@@ -82,6 +99,7 @@ class LatestFrameCamera:
             check=False,
             capture_output=True,
             text=True,
+            timeout=2.0,
         )
         if result.returncode != 0:
             return ""
@@ -101,7 +119,9 @@ class LatestFrameCamera:
 
         valid_frames = 0
         for _ in range(_AWB_WARMUP_FRAMES):
+            self._check_cancelled()
             ok, frame = capture.read()
+            self._check_cancelled()
             if ok and frame is not None:
                 valid_frames += 1
             else:
@@ -126,59 +146,78 @@ class LatestFrameCamera:
         if self._capture is not None:
             return
         capture = self._capture_factory(self.config.device)
-        if capture is None or not capture.isOpened():
+        try:
+            self._check_cancelled()
+            if capture is None or not capture.isOpened():
+                raise RuntimeError(f"failed to open camera {self.config.device}")
+            # Keep the validated stream settings and their order unchanged.
+            capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
+            capture.set(cv2.CAP_PROP_FPS, self.config.fps)
+            capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self._prime_auto_white_balance(capture)
+            self._check_cancelled()
+        except BaseException:
             if capture is not None:
                 capture.release()
-            raise RuntimeError(f"failed to open camera {self.config.device}")
-        # Verified on the RDK X5 + Sonix USB camera: force YUYV.
-        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
-        capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
-        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
-        capture.set(cv2.CAP_PROP_FPS, self.config.fps)
-        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        try:
-            self._prime_auto_white_balance(capture)
-        except Exception:
-            capture.release()
             raise
         self._capture = capture
 
     def capture_once(self) -> bool:
-        if self._capture is None:
-            self._open_capture()
-        ok, frame = self._capture.read()
-        if not ok or frame is None:
-            return False
-        timestamp = self._clock()
-        with self._lock:
-            self._frame_id += 1
-            self._latest = FrameSnapshot(frame=frame, frame_id=self._frame_id, timestamp=timestamp)
-        return True
+        with self._io_lock:
+            if self._stop_event.is_set():
+                return False
+            if self._capture is None:
+                self._open_capture()
+            ok, frame = self._capture.read()
+            if self._stop_event.is_set() or not ok or frame is None:
+                return False
+            timestamp = self._clock()
+            with self._lock:
+                self._frame_id += 1
+                self._latest = FrameSnapshot(frame=frame, frame_id=self._frame_id, timestamp=timestamp)
+            return True
 
     def get_latest(self) -> Optional[FrameSnapshot]:
         with self._lock:
             return self._latest
 
     def _capture_loop(self) -> None:
-        while not self._stop_event.is_set():
-            if not self.capture_once():
-                time.sleep(0.01)
+        try:
+            while not self._stop_event.is_set():
+                if not self.capture_once():
+                    self._stop_event.wait(0.01)
+        finally:
+            with self._io_lock:
+                self._release_capture()
+            with self._lock:
+                self._latest = None
 
     def start(self) -> None:
-        if self.is_running:
-            return
-        self._open_capture()
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._capture_loop,
-            name="rdk-camera",
-            daemon=True,
-        )
-        self._thread.start()
+        with self._io_lock:
+            if self._aborted.is_set():
+                raise RuntimeError('camera startup cancelled')
+            if self.is_running:
+                if self._stop_event.is_set():
+                    raise RuntimeError('camera is still stopping')
+                return
+            self._stop_event.clear()
+            try:
+                self._open_capture()
+                self._check_cancelled()
+                self._thread = threading.Thread(
+                    target=self._capture_loop, name="rdk-camera", daemon=True)
+                self._thread.start()
+            except BaseException:
+                self._release_capture()
+                raise
 
     def wait_until_ready(self, timeout_ms: int) -> bool:
         deadline = time.monotonic() + timeout_ms / 1000.0
         while time.monotonic() < deadline:
+            if self._stop_event.is_set():
+                return False
             if self.get_latest() is not None:
                 return True
             time.sleep(0.005)
@@ -186,9 +225,16 @@ class LatestFrameCamera:
 
     def stop(self) -> None:
         self._stop_event.set()
-        thread, self._thread = self._thread, None
-        if thread is not None and thread.is_alive():
+        thread = self._thread
+        if thread is not None and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=1.0)
-        capture, self._capture = self._capture, None
-        if capture is not None:
-            capture.release()
+        # Never release concurrently with an OpenCV read/open. The owner will
+        # observe cancellation and release when the driver call returns.
+        if self._io_lock.acquire(blocking=False):
+            try:
+                if thread is None or not thread.is_alive():
+                    self._release_capture()
+            finally:
+                self._io_lock.release()
+        with self._lock:
+            self._latest = None

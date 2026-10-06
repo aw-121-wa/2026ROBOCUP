@@ -42,9 +42,21 @@ class SharedTaskCamera:
 class _CameraLease:
     def __init__(self, owner, config):
         self.owner, self.config = owner, config
+        self._aborted = False
 
     def start(self):
+        if self._aborted:
+            raise RuntimeError('camera startup cancelled')
         self.owner._start(self.config)
+        if self._aborted:
+            self.owner.close()
+            raise RuntimeError('camera startup cancelled')
+
+    def abort_start(self):
+        self._aborted = True
+        camera = self.owner._camera
+        if camera is not None:
+            camera.abort_start()
 
     def wait_until_ready(self, timeout_ms):
         return self.owner._camera.wait_until_ready(timeout_ms)

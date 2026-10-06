@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "stair_heading.h"
 #include "disc_task_config.h"
 #include "path_ports.h"
@@ -6,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 
 UART_HandleTypeDef huart4 = {0, 4}, huart6 = {0, 6}, huart7 = {0, 7};
 ChassisConfig chassis_config = {
@@ -56,6 +58,10 @@ float Chassis_LineYaw(void) { return measured_yaw; }
 bool Chassis_SetLineReference(void) { return !moving; }
 void Chassis_Hold(void) { moving = false; pending_x=pending_y=0; ++holds; }
 bool Chassis_Move(float x, float y, float v, float a, float d) {
+#if PATH_BLUE_STAIR_TEST
+    if(path_diagnostics.step==8 && fabsf(x)>2) assert(x==-300 && y==0);
+    if(path_diagnostics.step==9 && (path_diagnostics.phase==22 || path_diagnostics.phase==30) && fabsf(x)>2) assert(x>0 && y==0);
+#endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
@@ -72,6 +78,9 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
 }
 bool Chassis_MoveArc(float radius, float start_angle, float turn, float v, float a, float d,
                      float start_speed, float end_speed) {
+#if PATH_BLUE_STAIR_TEST
+    if(path_diagnostics.step==8) assert(radius==50 && start_angle==180 && turn==-90);
+#endif
     (void)radius; (void)start_angle; (void)turn; (void)end_speed;
     ++arc_moves; arc_begin=start_speed;
     return Chassis_Move(1, 0, v, a, d);
@@ -199,8 +208,25 @@ int main(int argc, char **argv) {
             tick();
             CHECK(wire[0]==0 && !path_diagnostics.fault);
         }
+#if PATH_BLUE_STAIR_TEST
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9);
+        CHECK(!moving && blend_moves==1 && wire[0]==0);
+        for(unsigned i=0;i<100;i++) tick();
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9 && !moving);
+#elif PATH_BLUE_PILLAR_TEST
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==6);
+        CHECK(!moving && blend_moves==1 && wire[0]==0);
+        for(unsigned i=0;i<100;i++) tick();
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==6 && !moving && blend_moves==1);
+#elif PATH_BLUE_DISC_TEST
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3);
+        CHECK(!moving && blend_moves==0 && wire[0]==0);
+        for(unsigned i=0;i<100;i++) tick();
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3 && !moving && blend_moves==0);
+#else
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
         CHECK(line_calibrations==0 && map_headings==9 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+#endif
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
         CHECK(path_diagnostics.result==PATH_CANCELED && !PathPorts_Busy());

@@ -1,4 +1,5 @@
 import unittest
+import threading
 from unittest.mock import patch
 
 import numpy as np
@@ -32,6 +33,81 @@ class FakeCapture:
 
 
 class CameraTests(unittest.TestCase):
+    def test_cancel_before_start_does_not_open_device(self):
+        opened = []
+        camera = LatestFrameCamera(self.config(), capture_factory=lambda _: opened.append(True))
+        camera.abort_start()
+        with self.assertRaisesRegex(RuntimeError, 'cancelled'):
+            camera.start()
+        self.assertEqual(opened, [])
+
+    def test_stop_during_stream_read_does_not_release_until_read_returns(self):
+        entered, resume = threading.Event(), threading.Event()
+        capture = FakeCapture([])
+        def read():
+            entered.set()
+            resume.wait(4)
+            self.assertFalse(capture.released)
+            return True, np.zeros((2, 2, 3), dtype=np.uint8)
+        capture.read = read
+        camera = LatestFrameCamera(self.config(), capture_factory=lambda _: capture)
+        camera.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            camera.stop()
+            self.assertFalse(capture.released)
+            self.assertIsNone(camera.get_latest())
+        finally:
+            resume.set()
+            camera._thread.join(2)
+            camera.stop()
+        self.assertFalse(camera.is_running)
+        self.assertTrue(capture.released)
+        self.assertIsNone(camera.get_latest())
+
+    def test_abort_during_warmup_releases_after_read_without_starting_stream(self):
+        entered, resume = threading.Event(), threading.Event()
+        capture = FakeCapture([np.zeros((2, 2, 3), dtype=np.uint8)])
+        original_read = capture.read
+        def read():
+            entered.set()
+            resume.wait(3)
+            self.assertFalse(capture.released, 'release raced with read')
+            return original_read()
+        capture.read = read
+        camera = LatestFrameCamera(CameraConfig('/dev/video0', 640, 480, 30, 250, 5000),
+                                   capture_factory=lambda _: capture)
+        errors = []
+        def start():
+            try:
+                camera.start()
+            except RuntimeError as exc:
+                errors.append(exc)
+        with patch('subprocess.run'):
+            worker = threading.Thread(target=start)
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(1))
+                camera.abort_start()
+                self.assertFalse(capture.released)
+            finally:
+                resume.set()
+                worker.join(3)
+                camera.stop()
+        self.assertFalse(worker.is_alive())
+        self.assertTrue(capture.released)
+        self.assertFalse(camera.is_running)
+        self.assertIsNone(camera.get_latest())
+        self.assertTrue(errors)
+
+    def test_property_failure_releases_capture(self):
+        capture = FakeCapture([])
+        capture.set = lambda *args: (_ for _ in ()).throw(RuntimeError('property failed'))
+        camera = LatestFrameCamera(self.config(), capture_factory=lambda _: capture)
+        with self.assertRaisesRegex(RuntimeError, 'property failed'):
+            camera.start()
+        self.assertTrue(capture.released)
+
     def config(self):
         return CameraConfig("/dev/fake", 640, 480, 30, 250, 5000)
 

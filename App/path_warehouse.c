@@ -51,6 +51,7 @@ static void fail(PathMission *m, PathResult result)
 }
 static bool emit(PathMission *m, PathCommand command)
 {
+    if (PATH_BLUE_WAREHOUSE_TEST && (command.kind==PC_MOVE || command.kind==PC_BODY)) command.x=-command.x;
     if (m->send(m->context,&command)) return true;
     fail(m,PATH_ERROR);
     return false;
@@ -243,7 +244,13 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_SELECT_BALL:
     {
-        if (!PathHeading_Ready(m,now,in)) break;
+        if (PATH_BLUE_WAREHOUSE_TEST) {
+            if (!in->settled) { fail(m,PATH_ERROR); break; }
+            m->point=(uint8_t)((m->point/3)*3+2);
+            advance(m,now);
+            break;
+        }
+        /* Column alignment is complete; do not rotate between balls. */
         if (!in->settled) { fail(m,PATH_ERROR); break; }
         int slot=BallInventory_Find(&m->inventory,code);
         if (slot<0) advance(m,now); /* Missing ball: no arm action, still visit all columns. */
@@ -274,11 +281,6 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (in->turn_reply==PATH_OK) m->phase=WAREHOUSE_SELECT_BALL;
         break;
     case WAREHOUSE_UNLOAD:
-        if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
-        if (!m->waiting && !PathLine_Aligned(m,in->gray)) {
-            begin_lateral_alignment(m,now);
-            break;
-        }
         if (!in->settled) { fail(m,PATH_ERROR); break; }
         if (!m->waiting)
         {
@@ -295,8 +297,8 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             }
         }
         break;
-    case WAREHOUSE_CHECK_HEADING: /* Arm completion acknowledged; now it is safe to correct yaw. */
-        if (PathHeading_Ready(m,now,in)) advance(m,now);
+    case WAREHOUSE_CHECK_HEADING: /* Next column/return phases own heading correction. */
+        if (in->settled) advance(m,now);
         break;
     default:
         fail(m,PATH_ERROR);

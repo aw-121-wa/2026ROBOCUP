@@ -38,12 +38,12 @@ def run_action_group(group: int) -> None:
     with HiwonderActionBoard('/dev/ttyS1', 9600) as board:
         board.run_group(group, timeout_s=30.0)
 
-def run_pillar_in_process(project_root: Path, *, camera_session=None, **kwargs) -> int:
-    args = build_disc_arguments(project_root)
+def run_pillar_in_process(project_root: Path, *, camera_session=None, color='red', **kwargs) -> int:
+    args = build_disc_arguments(project_root, color)
     args.prep_group = 103
     args.trigger_group = 104
     args.max_actions = 59  # Remaining entries in the STM32 64-UID result buffer.
-    config = load_config(project_root / 'rdk_vision' / 'pillar_runtime.yaml')
+    config = load_config(project_root / 'rdk_vision' / ('pillar_blue.yaml' if color=='blue' else 'pillar_runtime.yaml'))
     if camera_session is not None:
         kwargs['camera'] = camera_session.borrow(config.camera)
     # Shared detector/ROI/HSV; pillar stops on any normally valid fresh ball.
@@ -56,11 +56,14 @@ def normalize_command(raw: bytes | str) -> str:
     return raw.strip().upper()
 
 
-def build_disc_arguments(project_root: Path):
+def build_disc_arguments(project_root: Path, color: str = "red"):
+    if color not in ("red", "blue"):
+        raise ValueError("disc color must be red or blue")
+    config_name = "config.yaml" if color == "red" else "disc_blue.yaml"
     return build_disc_parser().parse_args(
         [
-            "--config", str(project_root / "rdk_vision" / "config.yaml"),
-            "--color", "red",
+            "--config", str(project_root / "rdk_vision" / config_name),
+            "--color", color,
             "--servo-port", "/dev/ttyS1",
             "--servo-baud", "9600",
             "--prep-group", "101",
@@ -73,9 +76,9 @@ def build_disc_arguments(project_root: Path):
     )
 
 
-def run_disc_in_process(project_root: Path, *, rfid_gate, on_action_complete) -> int:
-    args = build_disc_arguments(project_root)
-    config = load_task_config(args.config, 'disc')
+def run_disc_in_process(project_root: Path, *, rfid_gate, on_action_complete, color: str = "red") -> int:
+    args = build_disc_arguments(project_root, color)
+    config = load_task_config(args.config, 'disc') if color == "red" else load_config(args.config)
     return run_disc_task(
         args,
         config=config,
@@ -476,7 +479,9 @@ def open_serial(port: str, baudrate: int, timeout: float):
     )
 
 
-def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s: float) -> None:
+def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s: float, *, color: str = 'red') -> None:
+    if color not in ('red','blue'): raise ValueError('invalid ball color')
+    suffix = '_blue' if color=='blue' else ''
     while True:
         ser = None
         core = None
@@ -484,9 +489,9 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
         number_session = NumberCameraSession(load_number_config(project_root/"rdk_vision"/"warehouse_number.yaml"))
         def run_shared_stair(point, **kwargs):
             level = 'low' if point <= 2 else 'high' if point <= 6 else 'mid'
-            config = load_config(project_root / 'rdk_vision' / f'stair_{level}.yaml')
+            config = load_config(project_root / 'rdk_vision' / f'stair_{level}{suffix}.yaml')
             return run_stair_point(project_root, point,
-                                   camera=camera_session.borrow(config.camera), **kwargs)
+                                   camera=camera_session.borrow(config.camera), color=color, **kwargs)
         try:
             print(f"Opening STM32 link {port} @ {baudrate}...", flush=True)
             ser = open_serial(port, baudrate, timeout=0.1)
@@ -496,11 +501,11 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
             send_line = SerialLineWriter(ser, log=lambda text: print(text, flush=True))
             core = BridgeCore(
                 send_line=send_line,
-                run_disc=lambda **kwargs: run_disc_in_process(project_root, **kwargs),
-                run_pillar=lambda **kwargs: run_pillar_in_process(project_root, camera_session=camera_session, **kwargs),
+                run_disc=lambda **kwargs: run_disc_in_process(project_root, color=color, **kwargs),
+                run_pillar=lambda **kwargs: run_pillar_in_process(project_root, camera_session=camera_session, color=color, **kwargs),
                 run_stair=run_shared_stair,
                 run_scan=lambda level, **kwargs: run_stair_scan(project_root,level,
-                    camera_session=camera_session,**kwargs),
+                    camera_session=camera_session,color=color,**kwargs),
                 close_camera=camera_session.close,
                 run_number=number_session.recognize,
                 prepare_number=number_session.start,

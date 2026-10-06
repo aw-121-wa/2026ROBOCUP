@@ -47,7 +47,7 @@ static int startup(void) {
     CHECK(p.commands[p.n-1].speed==155 && p.commands[p.n-1].end_speed==155);
     in.settled=false; in.motion_done=true; Path_Tick(&m,15,&in);
     CHECK(m.step==1 && m.part==0 && m.waiting && p.commands[p.n-1].kind==PC_MOVE);
-    CHECK(fabsf(p.commands[p.n-1].x-1958.9384f)<0.02f);
+    CHECK(fabsf(p.commands[p.n-1].x-1978.9384f)<0.02f);
     CHECK(p.commands[p.n-1].start_speed==155 && p.commands[p.n-1].continuous && p.commands[p.n-1].end_speed==25);
     in.motion_done=true; in.settled=false; in.gray=0; Path_Tick(&m,20,&in);
     CHECK(m.step==1 && m.part==1 && p.commands[p.n-1].kind==PC_ARC);

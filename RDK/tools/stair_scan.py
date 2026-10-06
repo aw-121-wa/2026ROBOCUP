@@ -6,7 +6,7 @@ from hiwonder_action import HiwonderActionBoard
 
 
 def scan_loop(camera, detector, board, group, gate, on_action_complete,
-              before_action, should_finish, *, stale_ms, clock=time.monotonic,
+              before_action, should_finish, *, stale_ms, color='red', clock=time.monotonic,
               sleep=time.sleep):
     requested=last_fresh=clock()
     last_id=None
@@ -24,7 +24,7 @@ def scan_loop(camera, detector, board, group, gate, on_action_complete,
                 now-snapshot.timestamp>stale_ms/1000.0):
             sleep(.005); continue
         last_id=snapshot.frame_id;last_fresh=snapshot.timestamp
-        result=detector.detect(snapshot.frame,'red')
+        result=detector.detect(snapshot.frame,color)
         if clear_required:
             clear_required=clear_required-1 if not result.valid else 3
             continue
@@ -51,10 +51,12 @@ def scan_loop(camera, detector, board, group, gate, on_action_complete,
 
 
 def run_stair_scan(project_root, level, *, camera_session, rfid_gate,
-                   on_action_complete, on_ready, before_action, should_finish):
+                   on_action_complete, on_ready, before_action, should_finish, color='red'):
     if level not in (1,2,3): raise ValueError('STAIR_SCAN level must be 1..3')
+    if color not in ('red','blue'): raise ValueError('invalid ball color')
     name=('low','high','mid')[level-1]
-    config=load_config(project_root/'rdk_vision'/f'stair_{name}.yaml')
+    suffix='_blue' if color=='blue' else ''
+    config=load_config(project_root/'rdk_vision'/f'stair_{name}{suffix}.yaml')
     camera=camera_session.borrow(config.camera)
     camera.start()
     if not camera.wait_until_ready(config.camera.startup_timeout_ms):
@@ -64,4 +66,4 @@ def run_stair_scan(project_root, level, *, camera_session, rfid_gate,
         on_ready()
         return scan_loop(camera,BallDetector(config),board,105+level,rfid_gate,
                          on_action_complete,before_action,should_finish,
-                         stale_ms=config.camera.stale_ms)
+                         stale_ms=config.camera.stale_ms, color=color)

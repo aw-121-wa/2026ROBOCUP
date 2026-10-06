@@ -16,6 +16,20 @@ from types import SimpleNamespace
 
 
 class SharedCameraTests(unittest.TestCase):
+    def test_failed_lease_aborts_owner_but_normal_stop_still_retains_stream(self):
+        factory = Mock()
+        session = SharedTaskCamera(factory)
+        config = load_config(ROOT / 'rdk_vision/stair_low.yaml').camera
+        lease = session.borrow(config)
+        lease.start()
+        lease.stop()
+        factory.return_value.stop.assert_not_called()
+        lease.abort_start()
+        factory.return_value.abort_start.assert_called_once()
+        with self.assertRaisesRegex(RuntimeError, 'cancelled'):
+            lease.start()
+        session.close()
+
     def test_group3_closes_stream_before_arm_action(self):
         events = []
         core = BridgeCore(lambda _: None, lambda **kw: 0,

@@ -11,6 +11,8 @@ static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, u
 {
     PathCommand c = {.kind = k, .x = x, .y = y, .speed = v,
                      .argument = arg, .timeout_ms = timeout};
+    /* Blue field test uses negative body X and negative orbit rotation too;
+     * only its approach is mirrored. Keep IR search along positive body Y. */
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -144,7 +146,10 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         if (!PATH_VISION_ENABLE)
         {
             /* Let the post-orbit angle settle before capturing the retreat heading. */
-            if (in->settled && (uint32_t)(now - m->entered) >= 300U) next(m, now);
+            if (in->settled && (uint32_t)(now - m->entered) >= 300U) {
+                if (PATH_BLUE_PILLAR_TEST && !PATH_BLUE_STAIR_TEST) { hold(m); m->result=PATH_DONE; }
+                else next(m, now);
+            }
             break;
         }
         if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
@@ -228,6 +233,16 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Absolute heading is checked only at safe boundaries, never during an arm task. */
 bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
 {
+    /* During warehouse columns, the two inner white probes admit alignment.
+     * Preserve absolute heading alignment for the final return-home stage. */
+    if (m->step == 13 && m->point < 9 && (in->gray & 6U) == 6U) {
+        if (!in->settled) {
+            if (m->heading_align_active) hold(m);
+            return false;
+        }
+        m->heading_align_active=false;
+        return true;
+    }
     float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f;
     float target = m->step <= 9 ? STAIR_MAP_TARGET_DEG : 0.0f;
     float error = remainderf(target - in->map_yaw_deg, 360.0f);
@@ -461,7 +476,11 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         if (!in->settled) break;
         if (!m->waiting && !PathHeading_Ready(m,now,in)) break;
         if (m->point==0 && !group(m,now,in,4)) break;
-        if (m->point==3) { next(m,now); break; } /* G3, no extra retreat. */
+        if (m->point==3) {
+            if (PATH_BLUE_STAIR_TEST && !PATH_BLUE_WAREHOUSE_TEST) { hold(m); m->result=PATH_DONE; }
+            else next(m,now);
+            break;
+        } /* G3 in formal mode, no extra retreat. */
         /* Each intermediate boundary must reacquire the line, even after a skip. */
         m->stair_heading_locked=false;
         m->line_active=m->line_stopping=m->stable=m->line_skipped=false;
@@ -514,6 +533,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1735 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
                              .angle = 180, .speed = 185, .end_speed = PILLAR_ENTRY_SPEED_RPM,
                              .continuous = true, .timeout_ms = 30000};
+            if (PATH_BLUE_PILLAR_TEST) { c.x=-c.x+65.0f; c.angle=-c.angle; }
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
         else if (in->motion_done) {
@@ -523,6 +543,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 PathCommand c = {.kind=PC_ARC,.x=PILLAR_ENTRY_RADIUS_MM,.y=0,.angle=90,
                                  .speed=PILLAR_ENTRY_SPEED_RPM,.start_speed=PILLAR_ENTRY_SPEED_RPM,
                                  .end_speed=PILLAR_SEARCH_SPEED_RPM,.continuous=true,.timeout_ms=10000};
+                if (PATH_BLUE_PILLAR_TEST) { c.y=180.0f-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) fail(m,PATH_ERROR);
                 else { m->phase=1; m->entered=now; }
             }
@@ -595,10 +616,12 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->approach_slow=false;
                 PathCommand c={.kind=PC_MOVE_ROTATE,.y=-1425,.angle=180,.speed=155,
                                .end_speed=45,.continuous=true,.timeout_ms=30000};
+                if (PATH_BLUE_WAREHOUSE_TEST) c.angle=-c.angle;
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
                 PathCommand c={.kind=PC_ARC,.x=50,.y=90,.angle=-90,.speed=45,
                                .start_speed=45,.end_speed=45,.continuous=true,.timeout_ms=10000};
+                if (PATH_BLUE_WAREHOUSE_TEST) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=2;
             }
@@ -608,10 +631,12 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!m->waiting) {
                 PathCommand c={.kind=PC_MOVE,.x=110,.speed=125,.start_speed=45,
                                .end_speed=40,.continuous=true,.timeout_ms=10000};
+                if (PATH_BLUE_WAREHOUSE_TEST) c.x=-c.x;
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
                 PathCommand c={.kind=PC_ARC,.x=25,.y=0,.angle=90,.speed=40,
                                .start_speed=40,.end_speed=40,.continuous=true,.timeout_ms=10000};
+                if (PATH_BLUE_WAREHOUSE_TEST) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=3; m->stable=false;
             }

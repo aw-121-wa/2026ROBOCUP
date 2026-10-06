@@ -15,6 +15,26 @@ from rdk_stm32_bridge import run_disc_in_process, run_pillar_in_process
 
 
 class TaskConfigTests(unittest.TestCase):
+    def test_blue_disc_keeps_independent_config_and_formal_handshake(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            directory = root / 'rdk_vision'
+            directory.mkdir()
+            blue = directory / 'disc_blue.yaml'
+            blue.write_bytes((ROOT / 'rdk_vision/config.yaml').read_bytes())
+            gate, callback = object(), object()
+            with patch('rdk_stm32_bridge.run_disc_task', return_value=0) as run:
+                run_disc_in_process(root, color='blue', rfid_gate=gate,
+                                    on_action_complete=callback)
+                args = run.call_args.args[0]
+                self.assertEqual(args.color, 'blue')
+                self.assertEqual(args.config, str(blue))
+                self.assertEqual((args.prep_group, args.trigger_group, args.max_actions,
+                                  args.repeat, args.trigger_x), (101, 102, 5, 1, 380))
+                self.assertEqual(run.call_args.kwargs['config'], load_config(blue))
+                self.assertIs(run.call_args.kwargs['rfid_gate'], gate)
+                self.assertIs(run.call_args.kwargs['on_action_complete'], callback)
+
     def test_defaults_preserve_calibration_and_separate_stair_size(self):
         path = ROOT / 'rdk_vision/config.yaml'
         base = load_config(path)

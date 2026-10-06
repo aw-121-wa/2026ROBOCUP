@@ -62,6 +62,39 @@ class SimpleBoard:
 
 
 class ParallelCameraPrepTests(unittest.TestCase):
+    def test_servo_failure_cancels_parallel_startup(self):
+        camera = BlockingCamera()
+        camera.exited = threading.Event()
+        def start():
+            camera.start_entered.set()
+            camera.allow_start_finish.wait(3)
+            camera.exited.set()
+        camera.start = start
+        camera.abort_start = camera.allow_start_finish.set
+        class FailedBoard:
+            def run_group(self, *args, **kwargs):
+                raise RuntimeError('servo failed')
+        with self.assertRaisesRegex(RuntimeError, 'servo failed'):
+            run_preparation_with_camera_warmup(board=FailedBoard(), camera=camera,
+                prep_group=101, repeat_count=1, servo_timeout_s=30,
+                camera_ready_timeout_ms=10)
+        self.assertTrue(camera.exited.is_set())
+
+    def test_startup_timeout_cancels_and_joins_startup(self):
+        camera = BlockingCamera()
+        camera.exited = threading.Event()
+        def start():
+            camera.start_entered.set()
+            camera.allow_start_finish.wait(3)
+            camera.exited.set()
+        camera.start = start
+        camera.abort_start = camera.allow_start_finish.set
+        with self.assertRaisesRegex(RuntimeError, 'startup timeout'):
+            run_preparation_with_camera_warmup(board=SimpleBoard(), camera=camera,
+                prep_group=101, repeat_count=1, servo_timeout_s=30,
+                camera_ready_timeout_ms=10)
+        self.assertTrue(camera.exited.is_set())
+
     def test_camera_awb_startup_overlaps_g101_and_is_ready_after_prep(self):
         camera = BlockingCamera()
         board = PrepBoard(camera)

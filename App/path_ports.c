@@ -236,6 +236,9 @@ static bool transmit(void *ctx, const char *s, size_t n)
 }
 static bool send(void *ctx, const PathCommand *c)
 {
+    if (PATH_BLUE_WAREHOUSE_TEST &&
+        (c->kind==PC_GROUP || c->kind==PC_TURN || c->kind==PC_DISC ||
+         c->kind==PC_VISION || c->kind==PC_STAIR || c->kind==PC_STAIR_SCAN)) return false;
     (void)ctx;
     uint32_t now = HAL_GetTick();
     float scale = 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
@@ -408,7 +411,7 @@ static bool send(void *ctx, const PathCommand *c)
         record_pending_ids();
         Chassis_HoldImmediate();
         motion_pending = false;
-        if (!PATH_VISION_ENABLE) return true;
+        if (!PATH_RDK_ENABLE) return true;
         verified = false;
         return Rdk_Begin(&rdk, "STOP", 0, now, 1);
     default:
@@ -421,27 +424,27 @@ void PathPorts_Init(void)
     Rdk_Init(&rdk, 0, transmit, 0);
     Path_Init(&mission, send, 0);
     initialized = true;
-    if (!PATH_VISION_ENABLE)
+    if (!PATH_RDK_ENABLE)
     {
         boot = 3;
         ready = verified = true;
         return;
     }
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
-    if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
+    if (PATH_VISION_ENABLE && HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
         rfid_fault |= 1;
     if (!ready)
         io_fault |= 1;
 }
 bool PathPorts_Busy(void)
 {
-    if (!PATH_VISION_ENABLE) return initialized && mission.result == PATH_RUNNING;
+    if (!PATH_RDK_ENABLE) return initialized && mission.result == PATH_RUNNING;
     return initialized && (boot != 3 || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
                            (turn_enabled && turn_issued < mission.id_count));
 }
 bool PathPorts_Ping(void)
 {
-    if (!PATH_VISION_ENABLE) return false;
+    if (!PATH_RDK_ENABLE) return false;
     if (!ready || io_fault || rdk.active || rdk.locked || mission.result == PATH_RUNNING || !Chassis_IsSettled())
         return false;
     verified = false;
@@ -451,13 +454,13 @@ bool PathPorts_Ping(void)
 }
 bool PathPorts_Reset(void)
 {
-    if (!PATH_VISION_ENABLE) return false;
+    if (!PATH_RDK_ENABLE) return false;
     if (PINCFG_RDK_UART->gState != HAL_UART_STATE_READY || Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
         rdk.active || turn.pending)
         return false;
     if (HAL_UART_AbortReceive(PINCFG_RDK_UART) != HAL_OK)
         return false;
-    bool rfid_abort_ok = HAL_UART_AbortReceive(PINCFG_RFID_UART) == HAL_OK;
+    bool rfid_abort_ok = !PATH_VISION_ENABLE || HAL_UART_AbortReceive(PINCFG_RFID_UART) == HAL_OK;
     uint32_t mask = __get_PRIMASK();
     __disable_irq();
     head = tail = rfid_head = rfid_tail = 0;
@@ -491,7 +494,7 @@ bool PathPorts_Reset(void)
     boot = 0;
     boot_retry = HAL_GetTick();
     ready = HAL_UART_Receive_IT(PINCFG_RDK_UART, &rx_byte, 1) == HAL_OK;
-    if (HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
+    if (PATH_VISION_ENABLE && HAL_UART_Receive_IT(PINCFG_RFID_UART, &rfid_byte, 1) != HAL_OK)
         rfid_fault |= 1;
     if (!ready)
         io_fault = 1;
@@ -510,7 +513,7 @@ static bool start(bool disc_only)
     Chassis_BeginPath();
     Turn_Init(&turn, turn_transmit, 0);
     turn_purpose = TURN_IDLE;
-    turn_enabled = true;
+    turn_enabled = PATH_VISION_ENABLE != 0;
     turn_issued = 0;
     inventory_fault = 0;
     return true;
@@ -528,7 +531,7 @@ void PathPorts_Cancel(void)
 {
     if (!initialized)
         return;
-    if (!PATH_VISION_ENABLE)
+    if (!PATH_RDK_ENABLE)
     {
         Path_Cancel(&mission);
         return;
@@ -542,7 +545,7 @@ void PathPorts_Cancel(void)
     }
     if (mission.result == PATH_RUNNING)
         Path_Cancel(&mission);
-    else if (rdk.active && rdk.stage != 1)
+    else if ((rdk.active && rdk.stage != 1) || rdk.warehouse_active)
     {
         (void)Rdk_Begin(&rdk, "STOP", 0, HAL_GetTick(), 1);
         verified = false;
@@ -550,7 +553,7 @@ void PathPorts_Cancel(void)
 }
 void PathPorts_RxComplete(UART_HandleTypeDef *u)
 {
-    if (!PATH_VISION_ENABLE) return;
+    if (!PATH_RDK_ENABLE) return;
     if (u == PINCFG_RFID_UART)
     {
         if (rfid_capture)
@@ -583,7 +586,7 @@ void PathPorts_RxComplete(UART_HandleTypeDef *u)
 }
 void PathPorts_Error(UART_HandleTypeDef *u)
 {
-    if (!PATH_VISION_ENABLE) return;
+    if (!PATH_RDK_ENABLE) return;
     if (u == PINCFG_RDK_UART)
         io_fault |= 16;
     else if (u == PINCFG_RFID_UART)
@@ -642,7 +645,8 @@ void PathPorts_Tick(void)
     }
     if (boot == 1 && !rdk.active && rdk.stage == 2 && !rdk.locked)
     {
-        if (!Chassis_GetState()->fault && Chassis_IsSettled() &&
+        if (PATH_BLUE_WAREHOUSE_TEST) { boot=3; verified=true; test_ping=false; }
+        else if (!Chassis_GetState()->fault && Chassis_IsSettled() &&
             Rdk_Begin(&rdk, "GROUP", 0, now, 30000)) boot = 2;
     }
     else if (boot == 2 && !rdk.active && rdk.reply == PATH_OK && !rdk.locked)
@@ -656,7 +660,7 @@ void PathPorts_Tick(void)
         verified = true;
         test_ping = false;
     }
-    if (PATH_VISION_ENABLE && rdk.locked)
+    if (PATH_RDK_ENABLE && rdk.locked)
         verified = false;
     bool motion_done = false;
     if (motion_pending)
@@ -691,7 +695,7 @@ void PathPorts_Tick(void)
     uint32_t ir_raw = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_SET;
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = io_fault || Chassis_GetState()->fault ||
-                             (PATH_VISION_ENABLE && rdk.locked && !(rdk.error == 1 && disc_deadline)),
+                             (PATH_RDK_ENABLE && rdk.locked && !(rdk.error == 1 && disc_deadline)),
                     .settled = Chassis_IsSettled(),
                     .motion_done = motion_done,
                     .gray = gray,
@@ -701,7 +705,7 @@ void PathPorts_Tick(void)
                     .map_yaw_deg = Chassis_MapYaw(),
                     .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,
-                    .warehouse_vision = PATH_VISION_ENABLE != 0,
+                    .warehouse_vision = PATH_RDK_ENABLE != 0,
                     .warehouse_ready = rdk.warehouse_ready,
                     .warehouse_digit = rdk.warehouse_digit,
                     .warehouse_digit_reply = rdk.warehouse_reply,
@@ -722,7 +726,7 @@ void PathPorts_Tick(void)
         if (!send(0, &c))
             mission.result = PATH_ERROR;
     }
-    if (!stationary && previous == PATH_RUNNING && mission.result == PATH_DONE && mission.step == 3)
+    if ((!PATH_BLUE_DISC_TEST || PATH_BLUE_PILLAR_TEST) && !stationary && previous == PATH_RUNNING && mission.result == PATH_DONE && mission.step == 3)
     {
         mission.result = PATH_RUNNING;
         mission.step = 4;
@@ -738,8 +742,8 @@ void PathPorts_Tick(void)
     {
         Chassis_HoldImmediate();
         motion_pending = false;
-        if (PATH_VISION_ENABLE) verified = false;
-        if (PATH_VISION_ENABLE && !rdk.locked)
+        if (PATH_RDK_ENABLE) verified = false;
+        if (PATH_RDK_ENABLE && !rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
     service_turn(now);

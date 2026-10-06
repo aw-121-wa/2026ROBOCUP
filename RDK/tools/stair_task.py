@@ -8,7 +8,7 @@ from hiwonder_action import HiwonderActionBoard
 
 
 def recognize_point(camera, detector, gate, grab, on_action_complete, *,
-                    stale_ms, wait_complete=lambda: None,
+                    stale_ms, color='red', wait_complete=lambda: None,
                     clock=time.monotonic, sleep=time.sleep):
     # Count the observation second only after the first post-request fresh frame.
     requested = clock()
@@ -32,7 +32,7 @@ def recognize_point(camera, detector, gate, grab, on_action_complete, *,
             last_fresh = snapshot.timestamp
             if first is None:
                 first = now
-            result = detector.detect(snapshot.frame, 'red')
+            result = detector.detect(snapshot.frame, color)
             if result.valid:
                 def dispatch():
                     if clock() - snapshot.timestamp > stale_ms / 1000.0:
@@ -55,7 +55,7 @@ def recognize_point(camera, detector, gate, grab, on_action_complete, *,
         sleep(.005)
 
 
-def run_stair_point(project_root, point, *, rfid_gate, on_action_complete, camera=None):
+def run_stair_point(project_root, point, *, rfid_gate, on_action_complete, camera=None, color='red'):
     if not 1 <= point <= 8:
         raise ValueError('STAIR point must be 1..8')
 
@@ -69,7 +69,9 @@ def run_stair_point(project_root, point, *, rfid_gate, on_action_complete, camer
         level = 'mid'
         group = 108
 
-    config_path = project_root / 'rdk_vision' / f'stair_{level}.yaml'
+    if color not in ('red','blue'): raise ValueError('invalid ball color')
+    suffix='_blue' if color=='blue' else ''
+    config_path = project_root / 'rdk_vision' / f'stair_{level}{suffix}.yaml'
     config = load_config(config_path)
     print(
         f'STAIR CONFIG: point={point} level={level} group={group} '
@@ -87,7 +89,7 @@ def run_stair_point(project_root, point, *, rfid_gate, on_action_complete, camer
                 camera, BallDetector(config), rfid_gate,
                 lambda: board.start_group(group), on_action_complete,
                 wait_complete=lambda: board.wait_group_complete(group, timeout_s=30.0),
-                stale_ms=config.camera.stale_ms,
+                stale_ms=config.camera.stale_ms, color=color,
             )
     finally:
         camera.stop()

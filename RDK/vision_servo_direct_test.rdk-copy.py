@@ -78,43 +78,26 @@ def run_preparation_with_camera_warmup(
     )
     camera_thread.start()
 
-    try:
-        prep = board.run_group(
-            prep_group,
-            repeat_count=repeat_count,
-            timeout_s=servo_timeout_s,
+    prep = board.run_group(
+        prep_group,
+        repeat_count=repeat_count,
+        timeout_s=servo_timeout_s,
+    )
+
+    # Most of this wait is normally hidden by G101.  The timeout only covers
+    # the remaining camera startup time after G101 has completed.
+    camera_thread.join(timeout=max(0.1, camera_ready_timeout_ms / 1000.0))
+    if camera_thread.is_alive():
+        raise RuntimeError(
+            "camera/AWB startup did not finish before startup timeout"
         )
+    if camera_error:
+        raise camera_error[0]
 
-        # Most of this wait is normally hidden by G101.  The timeout only covers
-        # the remaining camera startup time after G101 has completed.
-        camera_thread.join(timeout=max(0.1, camera_ready_timeout_ms / 1000.0))
-        if camera_thread.is_alive():
-            raise RuntimeError(
-                "camera/AWB startup did not finish before startup timeout"
-            )
-        if camera_error:
-            raise camera_error[0]
+    if not camera.wait_until_ready(camera_ready_timeout_ms):
+        raise RuntimeError("camera produced no frame before startup timeout")
 
-        if not camera.wait_until_ready(camera_ready_timeout_ms):
-            raise RuntimeError("camera produced no frame before startup timeout")
-
-        return prep
-    except BaseException:
-        abort = getattr(camera, "abort_start", None)
-        if abort is not None:
-            abort()
-        else:
-            stop = getattr(camera, "stop", None)
-            if stop is not None:
-                stop()
-        camera_thread.join(timeout=1.0)
-        if camera_thread.is_alive():
-            print("CAMERA: startup cancelled; waiting for driver call to return before release", flush=True)
-            # Keep this task occupied: a new task must not open the same device
-            # while its previous startup still owns a local capture handle.
-            camera_thread.join()
-        raise
-
+    return prep
 
 
 def build_parser():

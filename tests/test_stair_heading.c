@@ -22,6 +22,17 @@ static void init(PathMission *m,PathInput *in,unsigned step) {
 }
 int main(void) {
  PathMission m;PathInput in; unsigned patterns[]={6,15,9};
+ /* Fast approach switches permanently to slow search at 1080 mm or early gray. */
+ init(&m,&in,9);in.gray=0;
+ assert(!PathLine_Align(&m,0,&in,50000,25));assert(last.y==80);
+ in.y_mm=1079;
+ assert(!PathLine_Align(&m,5,&in,50000,25));assert(last.y==80);
+ in.y_mm=1080;
+ assert(!PathLine_Align(&m,10,&in,50000,25));assert(last.y==25);
+ in.y_mm=1079;
+ assert(!PathLine_Align(&m,15,&in,50000,25));assert(last.y==25);
+ init(&m,&in,9);in.gray=1;
+ assert(!PathLine_Align(&m,0,&in,50000,25));assert(last.y==25);
  for (unsigned step=8;step<=13;step++) {
   init(&m,&in,step);
   for(unsigned gray=0;gray<16;gray++)
@@ -43,7 +54,7 @@ int main(void) {
  init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.09f;
  assert(!PathHeading_Ready(&m,0,&in) && turns==1);
  /* Warehouse rejects the same 0.15-degree residual as stairs. */
- init(&m,&in,13);in.map_yaw_deg=0.15f;
+ init(&m,&in,13);in.gray=0;in.map_yaw_deg=0.15f;
  assert(!PathHeading_Ready(&m,0,&in) && turns==1 && last.kind==PC_HOME_ALIGN);
  in.map_yaw_deg=0.05f; assert(PathHeading_Ready(&m,5,&in));
 
@@ -54,6 +65,19 @@ int main(void) {
    assert(!PathLine_AlignFour(&m,0,&in));
    assert(!PathLine_AlignFour(&m,5,&in));
    assert(PathLine_AlignFour(&m,105,&in));assert(!turns && !searches);
+  }
+  if(step==13) {
+   unsigned accepted[]={6,7,14,15};
+   for(unsigned j=0;j<4;j++) {
+    init(&m,&in,step);in.gray=accepted[j];in.map_yaw_deg=7;
+    assert(PathHeading_Ready(&m,0,&in));assert(turns==0);
+    assert(!PathLine_AlignFour(&m,1,&in));
+    assert(!PathLine_AlignFour(&m,5,&in));
+    assert(PathLine_AlignFour(&m,105,&in));assert(turns==0);
+   }
+   init(&m,&in,step);m.point=9;in.map_yaw_deg=7;
+   assert(!PathHeading_Ready(&m,0,&in));assert(turns==1);
+   continue;
   }
   init(&m,&in,step);in.map_yaw_deg-=7;
   assert(!PathLine_AlignFour(&m,0,&in));
@@ -96,13 +120,19 @@ int main(void) {
  assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
  Path_Tick(&m,5,&in);assert(!turns);
  in.reply=PATH_OK;Path_Tick(&m,10,&in);assert(m.phase==7 && !turns);
- Path_Tick(&m,15,&in);assert(turns==1 && m.point==0);
+ Path_Tick(&m,15,&in);assert(turns==0 && m.point==1);
  init(&m,&in,13);m.phase=3;in.gray=5;
  assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
- Path_Tick(&m,0,&in);assert(m.phase==4 && actions==0);
+ Path_Tick(&m,0,&in);assert(m.phase==3 && actions==1 && turns==0);
  init(&m,&in,13);m.phase=3;m.line_skipped=true;in.gray=0;
  assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
- Path_Tick(&m,0,&in);assert(m.phase==4 && actions==0);
+ Path_Tick(&m,0,&in);assert(m.phase==3 && actions==1 && turns==0);
+ /* Selection within a column ignores angle drift; next-column entry still corrects. */
+ init(&m,&in,13);m.phase=1;in.map_yaw_deg=5;in.gray=0;
+ assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
+ Path_Tick(&m,0,&in);assert(m.phase==3 && turns==0);
+ init(&m,&in,13);m.phase=0;m.point=3;in.map_yaw_deg=5;in.gray=0;
+ Path_Tick(&m,0,&in);assert(turns==1 && last.kind==PC_HOME_ALIGN);
  init(&m,&in,7);m.phase=0;in.map_yaw_deg=STAIR_MAP_TARGET_DEG;
  Path_Tick(&m,0,&in);assert(m.step==8 && turns==0);
  Path_Tick(&m,5,&in);assert(last.kind==PC_MOVE && last.x==-300 && turns==0);
