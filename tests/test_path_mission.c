@@ -97,7 +97,7 @@ static int post_disc_turn(void) {
     m.result=PATH_RUNNING; m.step=5; in.ir=false;
     Path_Tick(&m,0,&in);
     CHECK(p.n==1 && p.commands[0].kind==PC_MOVE_ROTATE);
-    CHECK(p.commands[0].x==-1635 && p.commands[0].y==0);
+    CHECK(p.commands[0].x==-1645 && p.commands[0].y==0);
     CHECK(p.commands[0].angle==180 && p.commands[0].speed==185);
     CHECK(p.commands[0].continuous && p.commands[0].end_speed==45);
     in.settled=false; in.motion_done=true; Path_Tick(&m,5,&in);
@@ -105,8 +105,8 @@ static int post_disc_turn(void) {
     PathCommand arc=p.commands[p.n-1];
     CHECK(arc.x==100 && arc.y==0 && arc.angle==90 && arc.continuous);
     CHECK(arc.speed==45 && arc.start_speed==45 && arc.end_speed==30);
-    /* In the original map frame the arc adds (-100,-100), retaining X=-1735. */
-    CHECK(p.commands[0].x-arc.x==-1735);
+    /* In the original map frame the arc adds (-100,-100), retaining X=-1745. */
+    CHECK(p.commands[0].x-arc.x==-1745);
     Path_Tick(&m,10,&in); CHECK(m.step==6 && p.commands[p.n-1].kind==PC_BODY);
     CHECK(p.commands[p.n-1].x==0 && p.commands[p.n-1].y==30 && count(&p,PC_HOLD)==0);
     in.motion_done=false; in.ir=true; Path_Tick(&m,15,&in);

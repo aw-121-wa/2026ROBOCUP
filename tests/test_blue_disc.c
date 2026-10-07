@@ -31,7 +31,7 @@ int main(void) {
 #if PATH_BLUE_PILLAR_TEST
     m.result=PATH_RUNNING;m.step=4;m.phase=0;m.waiting=false;
     Path_Tick(&m,55,&in);Path_Tick(&m,60,&in);
-    assert(last.kind==PC_MOVE_ROTATE && last.x==1700 && last.angle==-180);
+    assert(last.kind==PC_MOVE_ROTATE && last.x==1715 && last.angle==-180);
     Path_Tick(&m,65,&in);
     assert(last.kind==PC_ARC && last.x==100 && last.y==180 && last.angle==-90);
     Path_Tick(&m,70,&in);assert(last.kind==PC_BODY && last.x==0 && last.y==30);

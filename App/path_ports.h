@@ -24,6 +24,7 @@ typedef struct
     uint32_t point, phase_elapsed_ms; /* Read-only diagnostics. */
     uint32_t inventory_fault, inventory_occupied, inventory_slot, inventory_uncertain;
     uint32_t warehouse_code, warehouse_placed;
+    uint32_t blue;
 } PathDiagnostics;
 extern volatile PathDiagnostics path_diagnostics;
 /* RAM first-seen list of up to 64 distinct full four-byte UIDs.

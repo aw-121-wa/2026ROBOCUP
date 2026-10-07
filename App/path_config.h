@@ -1,8 +1,8 @@
 #ifndef PATH_CONFIG_H
 #define PATH_CONFIG_H
-/* Set to 1 when blue RFID, storage and warehouse unloading are commissioned. */
+/* Full blue material flow; set to 0 only for collection-without-storage tests. */
 #ifndef PATH_BLUE_MATERIAL_ENABLE
-#define PATH_BLUE_MATERIAL_ENABLE 0
+#define PATH_BLUE_MATERIAL_ENABLE 1
 #endif
 #define PATH_SKIP_MATERIAL(m) ((m)->blue && !PATH_BLUE_MATERIAL_ENABLE)
 #ifndef PATH_BLUE_WAREHOUSE_TEST

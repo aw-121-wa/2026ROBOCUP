@@ -195,6 +195,14 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
     case WAREHOUSE_BRAKE: /* Digit was confirmed during motion: brake before any gray/arm action. */
         if ((uint32_t)(now-m->entered)>=30000) { fail(m,PATH_TIMEOUT); break; }
         if (in->settled) {
+            if (m->warehouse_mode==WAREHOUSE_DIGIT_ORDER && !m->waiting) {
+                /* Advance each recognized column before line alignment/unloading. */
+                m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.x=15.0f,
+                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,
+                    .acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
+                    .deceleration=650,.timeout_ms=10000});
+                break;
+            }
             begin_lateral_alignment(m,now);
         }
         break;
@@ -284,7 +292,8 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting)
         {
             m->entered=now;
-            m->waiting=emit(m,(PathCommand){.kind=PC_GROUP,.argument=108+(code>>4),.timeout_ms=30000});
+            /* Rule rows run bottom to top: 1 -> G111, 2 -> G110, 3 -> G109. */
+            m->waiting=emit(m,(PathCommand){.kind=PC_GROUP,.argument=112-(code>>4),.timeout_ms=30000});
         }
         else if (in->reply==PATH_FAILED) fail(m,PATH_ERROR);
         else if ((uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);

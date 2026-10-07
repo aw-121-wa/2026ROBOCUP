@@ -70,7 +70,7 @@ def build_disc_arguments(project_root: Path, color: str = "red"):
             "--trigger-group", "102",
             "--repeat", "1",
             "--max-actions", "5",
-            "--trigger-x", "400" if color == "blue" else "380",
+            "--trigger-x", "380",
             "--servo-timeout", "30",
         ]
     )

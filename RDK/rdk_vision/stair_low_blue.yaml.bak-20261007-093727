@@ -11,10 +11,10 @@ serial:
   reconnect_attempts: 3
   reconnect_delay_ms: 250
 roi:
-  x: 184
-  y: 165
-  width: 327
-  height: 124
+  x: 174
+  y: 136
+  width: 348
+  height: 166
   edge_margin: 4
 colors:
   red:
@@ -46,8 +46,8 @@ ball:
   min_height: 20
   max_width: 260
   max_height: 260
-  reference_width: 88
-  reference_height: 88
+  reference_width: 90
+  reference_height: 92
   aspect_ratio_min: 0.75
   aspect_ratio_max: 1.3
   size_min_scale: 0.65

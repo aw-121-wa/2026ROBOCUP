@@ -66,7 +66,7 @@ static int run(unsigned mask) {
     unsigned seen=0, previous_col=0;
     for(unsigned n=0;n<groups;n++) {
         unsigned code=ball_codes[n], col=code&15, row=code>>4;
-        CHECK(col>=previous_col && group_ids[n]==108+row);
+        CHECK(col>=previous_col && group_ids[n]==112-row);
         previous_col=col;
         for(unsigned i=0;i<9;i++) if(order[i]==code) {
             CHECK((mask&(1U<<i)) && !(seen&(1U<<i))); seen|=1U<<i;
@@ -85,7 +85,7 @@ static int optimized_order(void) {
     m.inventory.current=0; m.phase=1;
     PathInput in={.armed=true,.settled=true,.gray=6};
     Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
-    CHECK(last.kind==PC_GROUP && last.argument==111 && turns==0);
+    CHECK(last.kind==PC_GROUP && last.argument==109 && turns==0);
     return 0;
 }
 static int alignment(void) {

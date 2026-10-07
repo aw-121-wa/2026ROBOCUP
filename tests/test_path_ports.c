@@ -65,13 +65,13 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (test_blue && path_diagnostics.step==0 && fabsf(x)>100) assert(x<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1700);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1715);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    if(path_diagnostics.step==13 && fabsf(x)==200 && y==0) {
+    if(path_diagnostics.step==13 && (fabsf(x)==200 || x==15) && y==0) {
         if(a==150) { if(d!=650) return false; }
         else if(a!=850 || d!=850) return false;
     } else if(a!=650 && !(path_diagnostics.step==9 && a==850)) return false;
@@ -466,7 +466,7 @@ int main(int argc, char **argv) {
                     BallInventory stock; PathPorts_CopyInventory(&stock);
                     CHECK(!stock.uncertain && (stock.occupied&(1U<<stock.current)));
                     CHECK(stock.code[stock.current]==path_diagnostics.warehouse_code);
-                    CHECK(group==108U+(stock.code[stock.current]>>4));
+                    CHECK(group==112U-(stock.code[stock.current]>>4));
                     char response[60]; snprintf(response,sizeof(response),"GROUP_ACK %u\r\nGROUP_DONE %u\r\n",group,group);
                     reply(response); warehouse_done++; group_sequence=wire_sequence;
                 }

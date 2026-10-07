@@ -784,6 +784,7 @@ void PathPorts_Tick(void)
                                          .warehouse_placed = mission.inventory.placed,
                                          .warehouse_code = mission.step == 13 && mission.point < 9 ?
                                               PathWarehouse_Code(&mission) : 0,
+                                         .blue = mission.blue,
                                          .step = mission.step,
                                          .phase = mission.phase,
                                          .point = mission.step == 9 ? mission.point + 1U : 0U,

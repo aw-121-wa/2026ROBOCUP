@@ -513,8 +513,8 @@ static bool align_map_heading(float degrees, float tolerance)
     rotate_map_precision = true;
     return true;
 }
-bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, STAIR_HEADING_STOP_TOLERANCE_DEG); }
-bool Chassis_AlignHome(void) { return align_map_heading(0, 0.1f); }
+bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, path_diagnostics.blue ? 0.3f : STAIR_HEADING_STOP_TOLERANCE_DEG); }
+bool Chassis_AlignHome(void) { return align_map_heading(0, path_diagnostics.blue ? 0.3f : 0.1f); }
 bool Chassis_MapSearch(float mm_s)
 {
     if (!path_heading_enabled) return false;
@@ -1037,7 +1037,10 @@ void Chassis_Update(void)
     }
     ForwardCompResult forward_comp =
         ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
-                          chassis_config.right_gain, chassis_config.forward_lateral_comp);
+                          chassis_config.right_gain,
+                          (path_heading_active() && path_diagnostics.blue &&
+                           path_diagnostics.step>=8 && path_diagnostics.step<=13)
+                              ? 0.0f : chassis_config.forward_lateral_comp);
     if (!blending_this_cycle) vy = forward_comp.vy_final;
     if (!config_valid())
     {

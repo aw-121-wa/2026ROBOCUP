@@ -243,7 +243,7 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
         m->heading_align_active=false;
         return true;
     }
-    float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f;
+    float tolerance = m->blue ? 0.5f : (m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f);
     float target = m->step <= 9 ? STAIR_MAP_TARGET_DEG : 0.0f;
     float error = remainderf(target - in->map_yaw_deg, 360.0f);
     if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
@@ -359,7 +359,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    static const float ends[] = {120, 500, 520, 860};
+    const float ends[] = {m->blue ? 100.0f : 120.0f, 500, 520, 860};
     if (m->phase >= 20) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;
@@ -522,7 +522,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_TIMEOUT);
         else if (m->phase == 1) {
             /* Body heading is now 180 degrees. The arc turns translation from
-             * body +X to +Y, reaching the original -1735 mm approach axis. */
+             * body +X to +Y, reaching the -1745 mm approach axis. */
             if (in->ir || in->motion_done) {
                 next(m,now);
                 pillar(m,now,in); /* IR wins; otherwise carry the arc exit speed. */
@@ -530,10 +530,10 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (!m->waiting)
         {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1735 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
+            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1745 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
                              .angle = 180, .speed = 185, .end_speed = PILLAR_ENTRY_SPEED_RPM,
                              .continuous = true, .timeout_ms = 30000};
-            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x+65.0f; c.angle=-c.angle; }
+            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x+70.0f; c.angle=-c.angle; }
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
         }
         else if (in->motion_done) {
@@ -616,14 +616,19 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->approach_slow=false;
                 PathCommand c={.kind=PC_MOVE_ROTATE,.y=-1425,.angle=180,.speed=155,
                                .end_speed=45,.continuous=true,.timeout_ms=30000};
-                if (m->blue || PATH_BLUE_WAREHOUSE_TEST) c.angle=-c.angle;
+                if (m->blue || PATH_BLUE_WAREHOUSE_TEST) { c.y += 50.0f; c.angle=-c.angle; }
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
+                if (m->blue) { hold(m); m->phase=4; m->waiting=false; break; }
                 PathCommand c={.kind=PC_ARC,.x=50,.y=90,.angle=-90,.speed=45,
                                .start_speed=45,.end_speed=45,.continuous=true,.timeout_ms=10000};
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=2;
             }
+        } else if (m->phase == 4 && m->blue) {
+            if (!PathHeading_Ready(m,now,in)) break;
+            /* Blue enters warehouse line search directly after heading settles. */
+            next(m,now);
         } else if (m->phase == 2) {
             if (in->motion_done) { m->phase=1; m->waiting=false; }
         } else if (m->phase == 1) {
