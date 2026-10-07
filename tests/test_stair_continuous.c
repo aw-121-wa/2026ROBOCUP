@@ -1,4 +1,5 @@
 #include "stair_heading.h"
+#include "path_config.h"
 #include "path_mission.h"
 #include "path_chassis.h"
 #include "rdk_link.h"
@@ -29,7 +30,7 @@ static void run(unsigned balls) {
   if(last.kind==PC_STAIR_SCAN) { in.ball_index=in.resume_index=0; }
   if(last.kind==PC_MOVE) {
    if(last.x==5 && last.speed==20) { in.x_mm+=5; continue; }
-   assert(last.speed==(m.grabs>=2 && !m.stair_scanning ? 110 : 35) && last.x>0);
+   assert(last.speed==(m.grabs>=2 && !m.stair_scanning ? PATH_STAIR_FAST_SPEED_RPM : PATH_STAIR_SCAN_SPEED_RPM) && last.x>0);
    if(got<balls) { in.x_mm+=40;in.settled=false;in.ball_index++;event=true; }
    else { in.x_mm+=last.x;in.settled=true; }
   }

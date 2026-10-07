@@ -45,6 +45,7 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
+    if(path_diagnostics.step==13 && path_diagnostics.phase==5 && pin!=GPIO_PIN_10) return GPIO_PIN_SET;
     return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
             (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
             (port == GPIOD && pin == GPIO_PIN_10)) ? GPIO_PIN_RESET : GPIO_PIN_SET;
@@ -71,7 +72,8 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    if(path_diagnostics.step==13 && (fabsf(x)==200 || x==15) && y==0) {
+    if(path_diagnostics.step==13 && fabsf(hypotf(x,y)-10)<0.01f && a==300 && d==300) { }
+    else if(path_diagnostics.step==13 && (fabsf(x)==200 || x==15) && y==0) {
         if(a==150) { if(d!=650) return false; }
         else if(a!=850 || d!=850) return false;
     } else if(a!=650 && !(path_diagnostics.step==9 && a==850)) return false;
@@ -560,7 +562,8 @@ int main(int argc, char **argv) {
 }
 
 void Chassis_BeginPath(void) { }
-bool Chassis_ReturnHome(void) { moving=true; return true; }
+bool Chassis_ReturnHome(unsigned leg) { (void)leg; moving=true; return true; }
+bool Chassis_FinishForward(float x,float v,float a,float d) { (void)x;(void)v;(void)a;(void)d;moving=true;return true; }
 void Chassis_HoldImmediate(void) { Chassis_Hold(); }
 void Chassis_HoldCapture(void) { Chassis_Hold(); }
 

@@ -48,6 +48,7 @@ typedef enum
     PC_MAP_SEARCH,
     PC_STAIR_SCAN,
     PC_WAREHOUSE_DIGIT,
+    PC_FINISH_FORWARD, /* Retarget current straight motion without stopping. */
 } PathCommandKind;
 typedef struct
 {

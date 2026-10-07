@@ -281,9 +281,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting) {
             if (!in->settled) break;
             /* Fast transit only after two confirmed grabs and scan END acknowledgement. */
-            float speed = m->grabs>=2 && !m->stair_scanning ? 110 : 35;
+            bool fast = m->grabs>=2 && !m->stair_scanning;
+            float speed = fast ? PATH_STAIR_FAST_SPEED_RPM : PATH_STAIR_SCAN_SPEED_RPM;
             PathCommand c={.kind=PC_MOVE,.x=remaining,.speed=speed,
-                .acceleration=(speed==110 ? PATH_STAIR_FAST_ACCEL : 650),.deceleration=650,.timeout_ms=30000};
+                .acceleration=(fast ? PATH_STAIR_FAST_ACCEL : 650),.deceleration=650,.timeout_ms=30000};
             m->waiting=m->send(m->context,&c);
             if (!m->waiting) fail(m,PATH_ERROR);
         }
@@ -375,7 +376,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (!m->waiting)
         {
             PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1745 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
-                             .angle = 180, .speed = 185, .end_speed = PILLAR_ENTRY_SPEED_RPM,
+                             .angle = 180, .speed = 195, .end_speed = PILLAR_ENTRY_SPEED_RPM,
                              .continuous = true, .timeout_ms = 30000};
             if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x+70.0f; c.angle=-c.angle; }
             if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);

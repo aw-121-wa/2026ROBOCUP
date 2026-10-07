@@ -269,7 +269,10 @@ static bool send(void *ctx, const PathCommand *c)
         if (!Chassis_AlignHome(c->x)) return false;
         return motion_started(c,now,false);
     case PC_RETURN_HOME:
-        if (!Chassis_ReturnHome()) return false;
+        if (!Chassis_ReturnHome(c->argument)) return false;
+        return motion_started(c,now,false);
+    case PC_FINISH_FORWARD:
+        if (!Chassis_FinishForward(c->x,c->speed*scale,c->acceleration,c->deceleration)) return false;
         return motion_started(c,now,false);
     case PC_MOVE:
         if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale,

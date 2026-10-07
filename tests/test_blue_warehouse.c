@@ -6,7 +6,7 @@ static bool send(void *ctx,const PathCommand *c) {
  (void)ctx;
  assert(c->kind!=PC_GROUP && c->kind!=PC_TURN && c->kind!=PC_DISC && c->kind!=PC_STAIR);
  if(c->kind==PC_WAREHOUSE_DIGIT) queries++;
- if(c->kind==PC_MOVE) {assert(c->x>0); moves++;}
+ if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {assert(c->x>0 || (c->x==-10 && c->y==0)); if(c->x>0) moves++;}
  return true;
 }
 int main(void) {
@@ -17,7 +17,8 @@ int main(void) {
   PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_OK,.warehouse_vision=true};
   for(unsigned t=0;t<25000 && m.result==PATH_RUNNING;t+=5) {
    if(queries>answered) {in.warehouse_digit_reply=mode==6?PATH_NONE:PATH_OK; in.warehouse_digit=orders[mode%6][answered++];}
-   Path_Tick(&m,t,&in);
+   if(m.point==9) in.gray=m.phase==5?0:6;
+  Path_Tick(&m,t,&in);
   }
   assert(m.result==PATH_DONE && m.point==9);
   assert(queries==(mode==6?1U:3U));

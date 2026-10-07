@@ -319,37 +319,46 @@ bool Chassis_Arm(void)
     integral = 0;
     return true;
 }
-static float home_x, home_y, map_yaw;
+static float home_x, home_y, map_yaw, home_right_target;
+static bool home_return_ready;
 void Chassis_BeginPath(void)
 {
     home_x = state.x_mm; home_y = state.y_mm; map_yaw = state.yaw_rad;
+    home_return_ready=false;
     route_heading = heading = state.yaw_rad;
     path_heading_enabled = true;
     line_yaw_reference = Chassis_MeasuredYaw();
     integral = 0;
 }
-bool Chassis_ReturnHome(void)
+bool Chassis_ReturnHome(unsigned leg)
 {
     if (!path_heading_enabled || !state.armed || !Chassis_IsSettled()) return false;
     if (fabsf(Angle_Wrap(state.yaw_rad-map_yaw)) > 0.5f*RAD) return false;
-    float x = home_x - state.x_mm, y = home_y - state.y_mm;
-    if (!isfinite(x) || !isfinite(y) || !isfinite(state.yaw_rad)) return false;
-    float distance = hypotf(x,y);
-    if (distance < 5.0f) return true;
-    x *= (distance + CHASSIS_HOME_DIAGONAL_EXTEND_MM) / distance;
-    y *= (distance + CHASSIS_HOME_DIAGONAL_EXTEND_MM) / distance;
-    /* Extend map Y only; retain the previously validated diagonal extension. */
-    float map_y = -sinf(map_yaw) * x + cosf(map_yaw) * y;
-    float map_x = cosf(map_yaw)*x + sinf(map_yaw)*y;
-    float trim_x = -copysignf(fminf(CHASSIS_HOME_X_TRIM_MM, fabsf(map_x)), map_x);
-    x += cosf(map_yaw)*trim_x; y += sinf(map_yaw)*trim_x;
-    float extra_y = map_y > 0 ? CHASSIS_HOME_Y_EXTEND_MM : map_y < 0 ? -CHASSIS_HOME_Y_EXTEND_MM : 0.0f;
-    x -= sinf(map_yaw) * extra_y;
-    y += cosf(map_yaw) * extra_y;
-    float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);
+    if (leg>2 || !isfinite(state.x_mm) || !isfinite(state.y_mm) || !isfinite(state.yaw_rad)) return false;
+    float travel;
+    float current_y=-sinf(map_yaw)*state.x_mm+cosf(map_yaw)*state.y_mm;
+    if (leg==0) {
+        float x=home_x-state.x_mm, y=home_y-state.y_mm;
+        float distance=hypotf(x,y);
+        float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
+        float mx=(cosf(map_yaw)*x+sinf(map_yaw)*y)*scale;
+        float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
+        travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM);
+        home_right_target=current_y-(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
+        home_return_ready=true;
+    } else {
+        if (!home_return_ready) return false;
+        float remaining=fmaxf(0,current_y-home_right_target);
+        travel=leg==1 ? fmaxf(0,remaining-CHASSIS_HOME_SEARCH_MM) : remaining+CHASSIS_HOME_SEARCH_MM;
+    }
+    if (travel < 0.5f) return true;
+    float angle=state.yaw_rad-map_yaw, c=cosf(angle), sn=sinf(angle);
+    float bx=leg==0 ? -travel*c : -travel*sn;
+    float by=leg==0 ? travel*sn : -travel*c;
     route_heading = heading = map_yaw;
     integral = 0;
-    return Chassis_Move(x*c+y*s, -x*s+y*c, CHASSIS_HOME_SPEED_MM_S, CHASSIS_HOME_ACCEL_MM_S2, CHASSIS_HOME_ACCEL_MM_S2);
+    return Chassis_Move(bx, by, leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S,
+                        CHASSIS_HOME_ACCEL_MM_S2, CHASSIS_HOME_BRAKE_MM_S2);
 }
 void Chassis_Stop(void)
 {
@@ -392,6 +401,19 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
     if (path_heading_active()) heading = route_heading;
     else if (!path_heading_chain) heading = state.yaw_rad;
     update_path_direction();
+    return true;
+}
+bool Chassis_FinishForward(float distance, float speed, float acceleration, float deceleration)
+{
+    if (!state.armed || !isfinite(distance) || distance<=0) return false;
+    if (!Chassis_MotionBusy()) return Chassis_Move(distance,0,speed,acceleration,deceleration);
+    if (!planner.active || normal_stopping || path_arc || path_blend || path_rotation || path_body ||
+        fabsf(chain_x-1)>0.001f || fabsf(chain_y)>0.001f) return false;
+    float start=fmaxf(0, state.velocity[0]*dx+state.velocity[1]*dy);
+    Planner next;
+    if (!Planner_StartBoundary(&next,distance,fmaxf(speed,start),acceleration,deceleration,start,0)) return false;
+    planner=next;
+    segment_progress=0;
     return true;
 }
 bool Chassis_MoveRotate(float x, float y, float degrees, float v, float a, float d)
