@@ -47,11 +47,15 @@ typedef enum
     PC_HOME_ALIGN,
     PC_MAP_SEARCH,
     PC_STAIR_SCAN,
-    PC_WAREHOUSE_DIGIT
+    PC_WAREHOUSE_DIGIT,
 } PathCommandKind;
 typedef struct
 {
     PathCommandKind kind;
+    /* MOVE: x/y mm, angle degrees, speed/start/end rpm.
+     * BODY: x/y wheel-equivalent rpm; speed rotation-equivalent rpm.
+     * MAP_SEARCH: y mm/s. MAP_HEADING/HOME_ALIGN/MAP_AXIS: x degrees.
+     * Port adapter is the only RPM-to-SI conversion boundary. */
     float x, y, angle, speed;
     float start_speed, end_speed;
     float acceleration, deceleration; /* mm/s^2; zero selects the standard profile. */
@@ -62,10 +66,10 @@ typedef struct
 {
     bool armed, fault, settled, motion_done;
     float yaw_deg;
-    float x_mm, y_mm; /* Existing wheel-command odometry, in world frame. */
+    float x_mm, y_mm; /* Command-integrated open-loop odometry, in world frame. */
     float map_yaw_deg; /* Measured yaw relative to the fixed PATH start direction. */
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
-    uint8_t gray; /* active-low: bit3 PD3, bit2 PD0, bit1 PD1, bit0 PB13; stair/warehouse target 0110 */
+    uint8_t gray; /* Active bits: PD3/PD0/PD1/PB13. Acceptance is station-specific. */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
@@ -78,6 +82,11 @@ typedef struct
     uint8_t disc_completed; /* Actual action-complete events, independent of RFID. */
 } PathInput;
 typedef bool (*PathSend)(void *context, const PathCommand *command);
+typedef enum {
+    LINE_SEARCH_IDLE, LINE_SWEEP_FIRST,
+    LINE_FALLBACK_HEADING, LINE_BRAKE_REVERSE, LINE_SWEEP_REVERSE,
+    LINE_BRAKE_FINAL, LINE_SWEEP_FINAL
+} PathLineSearchState;
 typedef struct
 {
     bool blue; /* Runtime side; fixed for an entire mission. */
@@ -103,14 +112,9 @@ typedef struct
     bool stair_scanning;
     bool approach_started, approach_slow;
     float approach_x, approach_y;
-    float line_scan_yaw;
-    uint32_t line_since, line_shift_since;
-    unsigned line_scan_stage, line_shift_count;
-    unsigned line_best_count;
-    unsigned line_recovery, line_retries, line_reversals;
-    float line_scan_side;
-    uint32_t line_loss_since;
-    bool line_losing;
+    uint32_t line_since;
+    bool line_entry_detected;
+    PathLineSearchState line_search_state;
     bool line_active, line_stopping, line_skipped;
     bool stair_heading_locked, warehouse_heading_locked;
     bool waiting, stable, expired;

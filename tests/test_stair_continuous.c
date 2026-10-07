@@ -1,5 +1,6 @@
 #include "stair_heading.h"
 #include "path_mission.h"
+#include "path_chassis.h"
 #include "rdk_link.h"
 #include <assert.h>
 #include <math.h>
@@ -42,7 +43,27 @@ static void run(unsigned balls) {
 }
 static bool tx(void*p,const char*s,size_t n){(void)p;(void)s;(void)n;return true;}
 static void feed(RdkLink*r,const char*s){while(*s)Rdk_Feed(r,*s++);}
+static void entry_braking_keeps_detection(void) {
+ for (unsigned blue=0;blue<2;blue++) {
+  PathMission m;Path_Init(&m,send,0);m.blue=blue;m.result=PATH_RUNNING;m.step=9;
+  m.stair_ready_started=true;
+  PathInput in={.armed=true,.gray=6,.map_yaw_deg=STAIR_TARGET_DEG(blue)-0.2f};
+  PathChassis_Tick(&m,0,&in);assert(last.kind==PC_HOLD && m.line_entry_detected);
+  in.gray=7;PathChassis_Tick(&m,10,&in);assert(m.phase==0);
+  in.settled=true;PathChassis_Tick(&m,20,&in);assert(last.kind==PC_MAP_SEARCH && m.phase==0);
+  in.gray=6;PathChassis_Tick(&m,30,&in);assert(last.kind==PC_HOLD);
+  PathChassis_Tick(&m,40,&in);PathChassis_Tick(&m,140,&in);assert(m.phase==1);
+  PathChassis_Tick(&m,150,&in);assert(m.phase==4);
+  PathChassis_Tick(&m,160,&in);assert(m.phase==30 && m.stair_heading_calibrated);
+  PathChassis_Tick(&m,170,&in);assert(last.kind==PC_MOVE && last.x==5);
+  in.gray=7;
+  /* Later boundaries still perform lateral reacquisition. */
+  m.phase=28;m.waiting=false;m.line_active=false;
+  PathChassis_Tick(&m,180,&in);assert(last.kind==PC_MAP_SEARCH && m.phase==28);
+ }
+}
 int main(void) {
+ entry_braking_keeps_detection();
  run(0);run(1);run(2);
  /* Boundary detection cannot authorize the previous level's action. */
  PathMission m;Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;

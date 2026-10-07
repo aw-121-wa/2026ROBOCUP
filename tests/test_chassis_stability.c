@@ -2,14 +2,17 @@
 #include <stdio.h>
 #include <string.h>
 #include "../App/chassis_control.c"
+#include "path_policy.h"
 uint32_t fake_cycle;
 UART_HandleTypeDef huart3={0,3}, huart4={0,4}, huart6={0,6}, huart7={0,7};
 static JY60_State_t fake_imu;
 volatile PathDiagnostics path_diagnostics;
 static bool path_busy;
+
 uint32_t HAL_GetTick(void) { return fake_cycle/1000; }
 HAL_StatusTypeDef HAL_UART_Transmit_DMA(UART_HandleTypeDef *u,uint8_t *p,uint16_t n) {
-    (void)p;(void)n; HAL_UART_TxCpltCallback(u); return HAL_OK;
+    (void)p;(void)n;HAL_UART_TxCpltCallback(u);
+    return HAL_OK;
 }
 bool JY60_Init(void) { return true; }
 void JY60_Process(void) { }
@@ -20,7 +23,7 @@ void HostUart_Flush(void) { }
 void HostUart_Error(UART_HandleTypeDef *u) { (void)u; }
 void HostUart_RxComplete(UART_HandleTypeDef *u) { (void)u; }
 void PathPorts_Init(void) { }
-void PathPorts_Tick(void) { }
+void PathPorts_Tick(void) { Chassis_SetRoutePolicy(PathPolicy_Chassis(path_diagnostics.blue, path_diagnostics.result, path_diagnostics.step, path_diagnostics.phase)); }
 void PathPorts_Cancel(void) { path_busy=false; }
 bool PathPorts_Busy(void) { return path_busy; }
 bool PathPorts_Start(void) { return false; }
@@ -45,7 +48,8 @@ static void setup(void) {
     assert(Chassis_Arm());path_busy=true;Chassis_BeginPath();
 }
 int main(int argc,char **argv) {
-    assert(argc==2);setup();
+    assert(argc==2);
+    setup();
     if(!strcmp(argv[1],"heading")) {
         assert(Chassis_Rotate(180));
         fake_imu.yaw_deg=178;tick();Chassis_Hold();wait_stop();
@@ -198,6 +202,20 @@ int main(int argc,char **argv) {
         fake_imu.trust=JY60_TRUST_LOST;tick();
         assert(!state.armed);
         for(int i=0;i<4;i++)assert(state.rpm_requested[i]==0);
+    } else if(!strcmp(argv[1],"policy")) {
+        /* Control uses explicit policy even when diagnostics claim another side/stage. */
+        ChassisRoutePolicy p={.stair_target_deg=180.0f};
+        Chassis_SetRoutePolicy(p); path_diagnostics.blue=false;
+        assert(Chassis_AlignMapAxis());
+        assert(fabsf(Angle_Wrap(path_target-180.0f*RAD))<1e-5f);
+    } else if(!strcmp(argv[1],"open_loop")) {
+        assert(Chassis_Move(100,0,100,650,650));
+        for(unsigned n=0;n<20;n++)tick();
+        float before=state.x_mm;
+        for(unsigned n=0;n<30;n++)tick();
+        assert(state.armed && state.fault==0);
+        assert(state.x_mm!=before); /* Distance remains command-integrated without position feedback. */
+        Chassis_Stop();wait_stop();assert(Chassis_IsSettled());
     } else { assert(0); }
     puts("ok");return 0;
 }

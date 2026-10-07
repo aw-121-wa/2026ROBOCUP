@@ -2,6 +2,10 @@
 #define IMU_HEALTH_H
 #include <stdbool.h>
 #include <stdint.h>
+/* HWT101CT configured for 200 Hz angle + gyro output. */
+#define IMU_SAMPLE_PERIOD_SEC 0.005f
+#define IMU_GOOD_TIMEOUT_MS 25U
+#define IMU_LOST_TIMEOUT_MS 60U
 typedef struct
 {
     float last_yaw;

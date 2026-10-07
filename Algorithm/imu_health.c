@@ -9,12 +9,16 @@ void ImuHealth_ChecksumError(ImuHealth *h)
 }
 bool ImuHealth_Angle(ImuHealth *h, float yaw, float gyro, float dt)
 {
-    bool valid = isfinite(yaw) && isfinite(gyro) && fabsf(gyro) <= 720;
+    bool valid = isfinite(yaw) && isfinite(gyro) && fabsf(gyro) <= 720 &&
+                 isfinite(dt) && dt >= 0 && dt <= IMU_LOST_TIMEOUT_MS * .001f;
+    /* Decode intervals may be near zero for frames received together by DMA.
+     * Use configured cadence for plausibility only; freshness uses real time. */
+    float sample_dt = fmaxf(dt, IMU_SAMPLE_PERIOD_SEC);
     if (h->initialized)
     {
         float delta = remainderf(yaw - h->last_yaw, 360);
-        valid = valid && dt >= 0.015f && dt <= 0.18f &&
-                fabsf(delta - gyro * dt) <= 8.0f + 0.25f * fabsf(gyro * dt);
+        valid = valid &&
+                fabsf(delta - gyro * sample_dt) <= 8.0f + 0.25f * fabsf(gyro * sample_dt);
     }
     if (isfinite(yaw))
     {

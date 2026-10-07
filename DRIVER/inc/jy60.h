@@ -20,9 +20,9 @@
 /*
  * DMA Circular Buffer
  *
- * 9600bps 下：
+ * 115200bps 下（8N1）：
  *
- * 256Byte ≈ 266ms UART 数据
+ * 256Byte ≈ 22ms 满速 UART 数据；仅角度和角速度 200Hz 时约 58ms
  *
  * 对 2~5ms 控制任务来说余量非常大。
  */
@@ -31,12 +31,13 @@
 /* ============================================================
  * Freshness
  *
- * JY60 官方输出频率：20Hz
- * 一个周期理论为 50ms。
+ * HWT101CT 配置输出频率：200Hz；保留 JY60 API 名称兼容现有调用
+ * 一个周期理论为 5ms。
  * ============================================================ */
 
-#define JY60_GOOD_TIMEOUT_MS 80U
-#define JY60_LOST_TIMEOUT_MS 180U
+#include "imu_health.h"
+#define JY60_GOOD_TIMEOUT_MS IMU_GOOD_TIMEOUT_MS
+#define JY60_LOST_TIMEOUT_MS IMU_LOST_TIMEOUT_MS
 
 /* ============================================================
  * IMU 信任状态

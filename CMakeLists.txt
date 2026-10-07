@@ -100,7 +100,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/chassis_control.c
     App/host_command.c
     App/host_uart.c
-    App/path_chassis.c
+    App/path_chassis.c App/path_line.c
     App/path_mission.c
     App/ball_inventory.c
     App/path_warehouse.c

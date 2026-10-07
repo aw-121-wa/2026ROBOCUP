@@ -1,4 +1,5 @@
 #include "path_chassis.h"
+#include "path_policy.h"
 #include "path_config.h"
 #include "path_ports.h"
 #include "path_mission.h"
@@ -235,6 +236,14 @@ static bool transmit(void *ctx, const char *s, size_t n)
     memcpy(tx_buffer, s, n);
     return HAL_UART_Transmit_IT(PINCFG_RDK_UART, tx_buffer, (uint16_t)n) == HAL_OK;
 }
+static bool motion_started(const PathCommand *command, uint32_t now, bool continuous)
+{
+    motion_pending=true;
+    motion_continuous=continuous;
+    motion_since=now;
+    motion_timeout=command->timeout_ms;
+    return true;
+}
 static bool send(void *ctx, const PathCommand *c)
 {
     if (PATH_BLUE_WAREHOUSE_TEST &&
@@ -249,49 +258,31 @@ static bool send(void *ctx, const PathCommand *c)
         if (c->continuous)
         {
             if (c->end_speed <= 0 ||
-                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale, 650, 650,
+                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale, PATH_MOVE_ACCEL_MM_S2, PATH_MOVE_DECEL_MM_S2,
                                             c->start_speed * scale, c->end_speed * scale))
                 return false;
         }
-        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, 650, 650))
+        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, PATH_MOVE_ACCEL_MM_S2, PATH_MOVE_DECEL_MM_S2))
             return false;
-        motion_pending = true;
-        motion_continuous = c->continuous;
-        motion_since = now;
-        motion_timeout = c->timeout_ms;
-        return true;
+        return motion_started(c,now,c->continuous);
     case PC_HOME_ALIGN:
         if (!Chassis_AlignHome(c->x)) return false;
-        motion_pending=true; motion_continuous=false;
-        motion_since=now; motion_timeout=c->timeout_ms;
-        return true;
+        return motion_started(c,now,false);
     case PC_RETURN_HOME:
         if (!Chassis_ReturnHome()) return false;
-        motion_pending = true;
-        motion_continuous = false;
-        motion_since = now;
-        motion_timeout = c->timeout_ms;
-        return true;
+        return motion_started(c,now,false);
     case PC_MOVE:
         if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale,
-                                  c->acceleration > 0 ? c->acceleration : 650,
-                                  c->deceleration > 0 ? c->deceleration : 650,
+                                  c->acceleration > 0 ? c->acceleration : PATH_MOVE_ACCEL_MM_S2,
+                                  c->deceleration > 0 ? c->deceleration : PATH_MOVE_DECEL_MM_S2,
                                   c->start_speed * scale, c->end_speed * scale))
             return false;
-        motion_pending = true;
-        motion_continuous = c->continuous;
-        motion_since = now;
-        motion_timeout = c->timeout_ms;
-        return true;
+        return motion_started(c,now,c->continuous);
     case PC_ARC:
-        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, 650, 650,
+        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, PATH_MOVE_ACCEL_MM_S2, PATH_MOVE_DECEL_MM_S2,
                              c->start_speed * scale, c->end_speed * scale))
             return false;
-        motion_pending = true;
-        motion_continuous = c->continuous;
-        motion_since = now;
-        motion_timeout = c->timeout_ms;
-        return true;
+        return motion_started(c,now,c->continuous);
     case PC_LINE_CALIBRATE:
         return Chassis_CalibrateLine();
     case PC_LINE_SEARCH:
@@ -314,19 +305,12 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_MAP_LATERAL:
         if (!(c->kind == PC_MAP_AXIS ? Chassis_AlignMapAxis() : Chassis_MapLateral(c->y)))
             return false;
-        motion_pending = true;
-        motion_continuous = false;
-        motion_since = now;
-        motion_timeout = c->timeout_ms;
-        return true;
+        return motion_started(c,now,false);
     case PC_ALIGN_ZERO:
     case PC_ROTATE:
         if (!(c->kind == PC_ALIGN_ZERO ? Chassis_AlignZero() : Chassis_Rotate(c->x)))
             return false;
-        motion_pending = true;
-        motion_since = now;
-        motion_timeout = c->timeout_ms;
-        return true;
+        return motion_started(c,now,false);
     case PC_BODY:
         if (!Chassis_Body(c->x * scale, c->y * scale,
                           c->speed * scale /
@@ -752,6 +736,7 @@ void PathPorts_Tick(void)
                     .turn_reply = turn.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;
+    Chassis_SetRoutePolicy(PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase));
     Path_Tick(&mission, now, &in);
     if (stationary && phase == 99 && mission.phase == 0 && mission.result == PATH_RUNNING)
     {
@@ -782,6 +767,7 @@ void PathPorts_Tick(void)
         if (PATH_RDK_ENABLE && !rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
+    Chassis_SetRoutePolicy(PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase));
     service_turn(now);
     path_diagnostics = (PathDiagnostics){.result = mission.result,
                                          .inventory_fault = inventory_fault,

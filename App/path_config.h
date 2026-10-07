@@ -1,5 +1,6 @@
 #ifndef PATH_CONFIG_H
 #define PATH_CONFIG_H
+#include "heading_tuning.h"
 /* Full blue material flow; set to 0 only for collection-without-storage tests. */
 #ifndef PATH_BLUE_MATERIAL_ENABLE
 #define PATH_BLUE_MATERIAL_ENABLE 1
@@ -18,7 +19,7 @@
 #define PATH_BLUE_DISC_TEST 0
 #endif
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
-#define PATH_WAREHOUSE_TARGET_DEG(blue) ((blue) ? 5.3f : 0.0f)
+#define PATH_WAREHOUSE_TARGET_DEG(blue) 0.0f
 #define PATH_WAREHOUSE_FIRST_RIGHT_MM 15.0f
 #define PATH_WAREHOUSE_CREEP_LIMIT_MM 200.0f
 #define PATH_WAREHOUSE_CREEP_SPEED_RPM 10.0f
@@ -28,6 +29,24 @@
 #define PATH_WAREHOUSE_CREEP_TIMEOUT_MS 12000U
 #define PATH_STAIR_ENTRY_ADVANCE_MM 5.0f
 #define PATH_STAIR_FAST_ACCEL 850.0f
+
+/* Line acquisition and admission; lateral speeds are mm/s, approach speed rpm. */
+#define PATH_STAIR_SEARCH_FAST_DISTANCE_MM 1080.0f
+#define PATH_STAIR_SEARCH_FAST_RPM 90.0f
+#define PATH_STAIR_SEARCH_SLOW_RPM 30.0f
+#define PATH_STAIR_LINE_MM_S 40.0f
+#define PATH_WAREHOUSE_LINE_MM_S 10.0f
+#define PATH_LINE_STABLE_MS 100U
+#define PATH_LINE_SWEEP_MS 2000U
+#define PATH_LINE_ENTRY_SWEEP_MS 1000U
+#define PATH_LINE_ENTRY_REVERSE_MS 5000U
+#define PATH_WAREHOUSE_REVERSE_MS 4000U
+#define PATH_LINE_SEARCH_TIMEOUT_MS 3000U
+#define PATH_WAREHOUSE_SEARCH_TIMEOUT_MS 12000U
+#define PATH_HEADING_TIMEOUT_MS 30000U
+#define PATH_WAREHOUSE_HEADING_TOLERANCE_DEG HEADING_STATIC_TOLERANCE_DEG
+#define PATH_MOVE_ACCEL_MM_S2 650.0f
+#define PATH_MOVE_DECEL_MM_S2 650.0f
 
 /* Shared outer/inner deadline for multi-stage disc line alignment. */
 #define PATH_DISC_LINE_TIMEOUT_MS 30000U

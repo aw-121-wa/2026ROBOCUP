@@ -1,0 +1,16 @@
+#ifndef CHASSIS_TUNING_H
+#define CHASSIS_TUNING_H
+/* Existing tuning, unchanged by structural refactoring. */
+#define BODY_ACCEL_MM_S2 650.0f
+#define BODY_BRAKE_MM_S2 800.0f
+#define YAW_ACCEL_RAD_S2 3.0f
+#define YAW_BRAKE_RAD_S2 6.0f
+#define CHASSIS_CAPTURE_BRAKE_SCALE 1.5f
+#define CHASSIS_SETTLED_MS 80U
+#define CHASSIS_WHEEL_RPM_QUANTUM 0.1f
+#define CHASSIS_HOME_DIAGONAL_EXTEND_MM 100.0f
+#define CHASSIS_HOME_X_TRIM_MM 40.0f
+#define CHASSIS_HOME_Y_EXTEND_MM 40.0f
+#define CHASSIS_HOME_SPEED_MM_S 520.0f
+#define CHASSIS_HOME_ACCEL_MM_S2 380.0f
+#endif

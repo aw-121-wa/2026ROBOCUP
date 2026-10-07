@@ -40,3 +40,47 @@ float Heading_Update(float error, float gyro, float dt, float kp, float ki, floa
     *integral = fmaxf(-0.5f, fminf(0.5f, *integral + error * dt));
     return fmaxf(-limit, fminf(limit, kp * error + ki * *integral - kg * gyro));
 }
+
+#include "heading_tuning.h"
+
+
+float HeadingControl_Update(const HeadingRequest *r, const HeadingControlConfig *c,
+                            float dt, float *integral)
+{
+    if (!r || !c || !integral) return 0;
+    if (r->mode == HEADING_OFF || !isfinite(r->error) || !isfinite(r->gyro) ||
+        !isfinite(r->feedforward) || !isfinite(dt) || dt <= 0) {
+        *integral = 0;
+        return 0;
+    }
+    float kp=c->kp, ki=c->ki, damping=c->damping, limit=c->limit;
+    float gyro=r->gyro, feedforward=0;
+    switch (r->mode) {
+    case HEADING_MANUAL:
+        *integral=0;
+        return r->feedforward;
+    case HEADING_TRAVEL:
+        kp *= HEADING_TRAVEL_KP_SCALE;
+        damping *= HEADING_TRAVEL_DAMPING_SCALE;
+        break;
+    case HEADING_DYNAMIC:
+        feedforward=r->feedforward;
+        gyro-=feedforward;
+        break;
+    case HEADING_ROTATE:
+        limit=r->limit;
+        break;
+    case HEADING_PRECISION:
+        *integral=0;
+        return fmaxf(-HEADING_FINE_LIMIT, fminf(HEADING_FINE_LIMIT,
+                     HEADING_FINE_KP*r->error-HEADING_FINE_DAMPING*gyro));
+    case HEADING_HOLD:
+        *integral=0;
+        return fmaxf(-HEADING_HOLD_LIMIT, fminf(HEADING_HOLD_LIMIT,
+                     kp*r->error-damping*gyro));
+    case HEADING_FIXED: break;
+    default: *integral=0; return 0;
+    }
+    float result=feedforward+Heading_Update(r->error,gyro,dt,kp,ki,damping,limit,integral);
+    return fmaxf(-limit, fminf(limit,result));
+}

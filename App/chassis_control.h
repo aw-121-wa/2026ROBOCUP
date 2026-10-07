@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "zdt_x42s.h"
+#include "heading.h"
+#include "chassis_policy.h"
 typedef struct
 {
     float wheel_radius_mm, half_track_mm, half_wheelbase_mm;
@@ -23,6 +25,13 @@ typedef struct
     uint32_t fault, updates;
     bool armed, bias_ready;
 } ChassisState;
+typedef struct {
+    HeadingMode mode;
+    float requested_rad_s, quantized_rad_s, measured_rad_s;
+    float tolerance_deg;
+    bool within_tolerance; /* Tracking metric, not permission to stop correcting. */
+} ChassisHeadingDiagnostics;
+extern volatile ChassisHeadingDiagnostics chassis_heading_diagnostics;
 extern ChassisConfig chassis_config;
 /* Debugger mailbox: fill arguments first, then increment sequence. Task-owned APIs. */
 typedef struct
@@ -52,6 +61,7 @@ bool Chassis_MoveArc(float radius_mm, float start_angle_deg, float turn_degrees,
 /* Sole chassis task owner; PATH uses these without invoking another motor stack. */
 /* Called once after an accepted PATH/DISC start; manual moves keep local headings. */
 void Chassis_BeginPath(void);
+void Chassis_SetRoutePolicy(ChassisRoutePolicy policy);
 bool Chassis_ReturnHome(void);
 bool Chassis_AlignHome(float target_deg);
 bool Chassis_AlignMapAxis(void);

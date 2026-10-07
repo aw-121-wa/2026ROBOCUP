@@ -25,10 +25,10 @@
 #define PINCFG_VOFA_UART (&huart5)
 #define PINCFG_VOFA_BAUDRATE 115200U
 
-/* -------------------- WIT JY60 -------------------- */
+/* -------------------- HWT101CT (legacy JY60 API) -------------------- */
 
 #define PINCFG_JY60_UART (&huart2)
-#define PINCFG_JY60_BAUDRATE 9600U
+#define PINCFG_JY60_BAUDRATE 115200U
 
 /* Mission peripherals: old turntable/RFID wiring, separate RDK link. */
 #define PINCFG_RDK_BAUDRATE 115200U

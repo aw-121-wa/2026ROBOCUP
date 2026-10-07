@@ -94,7 +94,7 @@ static int alignment(void) {
  Path_Tick(&m,0,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==-10 && groups==0);
  Path_Tick(&m,2000,&in); CHECK(last.kind==PC_HOLD);
  Path_Tick(&m,2005,&in); CHECK(last.kind==PC_MAP_SEARCH && last.y==10);
- in.gray=15; Path_Tick(&m,2010,&in); CHECK(last.kind==PC_HOLD);
+ in.gray=6; Path_Tick(&m,2010,&in); CHECK(last.kind==PC_HOLD);
  Path_Tick(&m,2015,&in); Path_Tick(&m,2115,&in); CHECK(m.phase==1);
  return 0;
 }

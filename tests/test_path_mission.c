@@ -122,13 +122,12 @@ static int line_alignment(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
     m.result=PATH_RUNNING; m.step=3; in.gray=2;
     Path_Tick(&m,0,&in);
-    CHECK(p.commands[p.n-1].kind==PC_BODY && p.commands[p.n-1].y==25);
-    in.gray=14; in.settled=false; Path_Tick(&m,5,&in);
-    CHECK(m.stable && p.commands[p.n-1].kind==PC_HOLD);
-    in.gray=0; Path_Tick(&m,10,&in); CHECK(m.phase==0);
-    in.settled=true; Path_Tick(&m,15,&in); Path_Tick(&m,20,&in);
+    CHECK(p.commands[p.n-1].kind==PC_HOLD);
+    in.gray=14; in.settled=false; Path_Tick(&m,5,&in);CHECK(m.phase==0);
+    in.settled=true;Path_Tick(&m,10,&in);CHECK(p.commands[p.n-1].kind==PC_MAP_SEARCH);
+    in.gray=6;Path_Tick(&m,15,&in);Path_Tick(&m,20,&in);Path_Tick(&m,120,&in);Path_Tick(&m,125,&in);
     CHECK(m.phase==1 && p.commands[p.n-1].kind==PC_DISC);
-    CHECK(count(&p,PC_ROTATE)==0 && count(&p,PC_LINE_REFERENCE)==1);
+    CHECK(count(&p,PC_ROTATE)==0 && count(&p,PC_HOME_ALIGN)==0);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=3; in.gray=0;
     Path_Tick(&m,30000,&in); CHECK(m.result==PATH_TIMEOUT);
     return 0;

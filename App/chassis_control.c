@@ -8,6 +8,8 @@
 #include "forward_comp.h"
 #include "motion.h"
 #include "heading.h"
+#include "heading_tuning.h"
+#include "chassis_tuning.h"
 #include "relative_yaw.h"
 #include "chassis_odom.h"
 #include "pin_config.h"
@@ -24,7 +26,7 @@
 #ifndef CHASSIS_TELEMETRY_FULL
 #define CHASSIS_TELEMETRY_FULL 1
 #endif
-ChassisConfig chassis_config = {.wheel_radius_mm = 36.4583f,
+ChassisConfig chassis_config = {.wheel_radius_mm = 37.5f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
                                 .rpm_limit = 200.0f,
@@ -42,6 +44,12 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 36.4583f,
                                 .calibrated = true,
                                 .command_mode = ZDT_MULTI_COMMAND};
 static ChassisState state;
+volatile ChassisHeadingDiagnostics chassis_heading_diagnostics;
+static ChassisRoutePolicy route_policy = {.stair_target_deg=STAIR_MAP_TARGET_DEG};
+void Chassis_SetRoutePolicy(ChassisRoutePolicy policy)
+{
+    if (isfinite(policy.stair_target_deg)) route_policy=policy;
+}
 volatile ChassisDebugCommand chassis_debug;
 static Planner planner;
 static RelativeYaw relative_yaw;
@@ -57,7 +65,7 @@ static float chain_yaw, chain_x, chain_y;
 static float blend_x, blend_y, blend_yaw, blend_turn;
 static float path_target, body_x, body_y, body_w, arc_start, arc_turn;
 static uint8_t rotate_stable_count;
-static float rotate_tolerance_deg = 0.05f;
+static float rotate_tolerance_deg = HEADING_STATIC_TOLERANCE_DEG;
 static bool rotate_measured_zero;
 static bool rotate_map_precision;
 static float line_yaw_reference;
@@ -65,10 +73,6 @@ static float route_heading;
 static bool path_heading_enabled, normal_stopping, line_search;
 static bool capture_braking;
 static float body_output[3]; /* Last wheel-limited body command, not measured velocity. */
-#define BODY_ACCEL_MM_S2 650.0f
-#define BODY_BRAKE_MM_S2 800.0f
-#define YAW_ACCEL_RAD_S2 3.0f
-#define YAW_BRAKE_RAD_S2 6.0f
 static bool path_heading_active(void)
 {
     return path_heading_enabled && PathPorts_Busy();
@@ -257,8 +261,9 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *uart)
 {
     PathPorts_Error(uart);
     HostUart_Error(uart);
-    if (uart == PINCFG_ZDT_UART)
+    if (uart == PINCFG_ZDT_UART) {
         tx_error = true;
+    }
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart)
 {
@@ -331,20 +336,20 @@ bool Chassis_ReturnHome(void)
     if (!isfinite(x) || !isfinite(y) || !isfinite(state.yaw_rad)) return false;
     float distance = hypotf(x,y);
     if (distance < 5.0f) return true;
-    x *= (distance + 100.0f) / distance;
-    y *= (distance + 100.0f) / distance;
+    x *= (distance + CHASSIS_HOME_DIAGONAL_EXTEND_MM) / distance;
+    y *= (distance + CHASSIS_HOME_DIAGONAL_EXTEND_MM) / distance;
     /* Extend map Y only; retain the previously validated diagonal extension. */
     float map_y = -sinf(map_yaw) * x + cosf(map_yaw) * y;
     float map_x = cosf(map_yaw)*x + sinf(map_yaw)*y;
-    float trim_x = -copysignf(fminf(40.0f, fabsf(map_x)), map_x);
+    float trim_x = -copysignf(fminf(CHASSIS_HOME_X_TRIM_MM, fabsf(map_x)), map_x);
     x += cosf(map_yaw)*trim_x; y += sinf(map_yaw)*trim_x;
-    float extra_y = map_y > 0 ? 40.0f : map_y < 0 ? -40.0f : 0.0f;
+    float extra_y = map_y > 0 ? CHASSIS_HOME_Y_EXTEND_MM : map_y < 0 ? -CHASSIS_HOME_Y_EXTEND_MM : 0.0f;
     x -= sinf(map_yaw) * extra_y;
     y += cosf(map_yaw) * extra_y;
     float c = cosf(state.yaw_rad), s = sinf(state.yaw_rad);
     route_heading = heading = map_yaw;
     integral = 0;
-    return Chassis_Move(x*c+y*s, -x*s+y*c, 520, 380, 380);
+    return Chassis_Move(x*c+y*s, -x*s+y*c, CHASSIS_HOME_SPEED_MM_S, CHASSIS_HOME_ACCEL_MM_S2, CHASSIS_HOME_ACCEL_MM_S2);
 }
 void Chassis_Stop(void)
 {
@@ -476,13 +481,13 @@ bool Chassis_IsSettled(void)
         if (state.rpm_applied[i] != 0 || state.rpm_requested[i] != 0 ||
             ((tx_busy || tx_part) && state.rpm_inflight[i] != 0))
             return false;
-    return (uint32_t)(HAL_GetTick() - moving_tick) >= 80;
+    return (uint32_t)(HAL_GetTick() - moving_tick) >= CHASSIS_SETTLED_MS;
 }
 bool Chassis_Rotate(float degrees)
 {
     if (!state.armed || Chassis_MotionBusy() || !isfinite(degrees) || fabsf(degrees) > 360)
         return false;
-    rotate_tolerance_deg = 0.05f;
+    rotate_tolerance_deg = HEADING_STATIC_TOLERANCE_DEG;
     rotate_measured_zero = false;
     rotate_map_precision = false;
     float start_heading = path_heading_active() ? route_heading : state.yaw_rad;
@@ -513,8 +518,9 @@ static bool align_map_heading(float degrees, float tolerance)
     rotate_map_precision = true;
     return true;
 }
-bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_TARGET_DEG(path_diagnostics.blue), STAIR_HEADING_STOP_TOLERANCE_DEG); }
-bool Chassis_AlignHome(float target_deg) { return align_map_heading(target_deg, 0.1f); }
+
+bool Chassis_AlignMapAxis(void) { return align_map_heading(route_policy.stair_target_deg, STAIR_HEADING_STOP_TOLERANCE_DEG); }
+bool Chassis_AlignHome(float target_deg) { return align_map_heading(target_deg, HEADING_STATIC_TOLERANCE_DEG); }
 bool Chassis_MapSearch(float mm_s)
 {
     if (!path_heading_enabled) return false;
@@ -828,10 +834,8 @@ void Chassis_Update(void)
             state.bias_ready = true;
         }
     }
-    /* JY60 angle output is low-rate relative to the 200 Hz control loop.
-     * Keep its accepted angle as the long-term reference, but propagate yaw
-     * between angle frames with bias-corrected gz so the controller does not
-     * see a 50 ms staircase. LOST clears both references. */
+    /* HWT101CT and control loop both run at 200 Hz. Propagate with corrected
+     * gyro between asynchronous angle arrivals; LOST clears both references. */
     bool yaw_was_ready = heading_estimator.ready;
     RelativeYaw_Update(&relative_yaw, imu->yaw_deg, imu->angle_frame_count,
                        imu->trust != JY60_TRUST_LOST, imu->trust == JY60_TRUST_GOOD);
@@ -914,17 +918,12 @@ void Chassis_Update(void)
     float vx = speed * dx, vy = speed * dy, wz = 0;
     float lateral_direction = dy;
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
-    if (state.armed && !path_blend)
-    {
-        /* Extra moving-heading authority; stationary and rotate loops stay unchanged. */
-        bool translating = !zero_output && !path_rotation &&
-                           (planner.active || (path_body && body_w == 0 && !line_search));
-        wz = Heading_Update(state.yaw_error, gyro_rad_s, dt,
-                            translating ? chassis_config.kp * 1.5f : chassis_config.kp,
-                            chassis_config.ki,
-                            translating ? chassis_config.gyro_damping * (7.0f/3.0f) : chassis_config.gyro_damping,
-                            chassis_config.wz_limit, &integral);
-    }
+    bool translating = !zero_output && !path_rotation &&
+                       (planner.active || (path_body && body_w == 0 && !line_search));
+    HeadingControlConfig yaw_config={chassis_config.kp, chassis_config.ki,
+                                     chassis_config.gyro_damping, chassis_config.wz_limit};
+    HeadingRequest yaw_request={.mode=translating ? HEADING_TRAVEL : HEADING_FIXED,
+                                .error=state.yaw_error, .gyro=gyro_rad_s};
     if (state.armed && path_blend)
     {
         float fraction = planner.active ? fmaxf(0, fminf(1, segment_progress / planner.distance)) : 1;
@@ -935,9 +934,9 @@ void Chassis_Update(void)
                               speed, &turn, &feedforward);
         float error = blend_yaw + turn - path_yaw.continuous;
         state.yaw_error = error;
-        wz = clamp(feedforward + Heading_Update(error, gyro_rad_s - feedforward, dt,
-                    chassis_config.kp, chassis_config.ki, chassis_config.gyro_damping,
-                    chassis_config.wz_limit, &integral), chassis_config.wz_limit);
+        yaw_request.mode=HEADING_DYNAMIC;
+        yaw_request.error=error;
+        yaw_request.feedforward=feedforward;
         if (blend_continuous && !planner.active)
         {
             /* Keep this cycle's end speed; next tick emits the arc without Hold.
@@ -954,7 +953,7 @@ void Chassis_Update(void)
                 rotate_stable_count++;
             else
                 rotate_stable_count = 0;
-            if (rotate_stable_count >= 10) Chassis_Hold();
+            if (rotate_stable_count >= HEADING_SETTLE_CYCLES) Chassis_Hold();
         }
     }
     if (state.armed && jog_remaining > 0)
@@ -962,7 +961,8 @@ void Chassis_Update(void)
         vx = jog_x;
         vy = jog_y;
         lateral_direction = jog_y;
-        wz = jog_w;
+        yaw_request.mode=HEADING_MANUAL;
+        yaw_request.feedforward=jog_w;
         jog_remaining = fmaxf(0, jog_remaining - dt);
         heading = state.yaw_rad;
         integral = 0;
@@ -984,21 +984,17 @@ void Chassis_Update(void)
             rotate_limit = fminf(limit, chassis_config.wz_limit * 0.6f);
         else
             rotate_limit = fminf(limit, 0.25f * chassis_config.wz_limit);
-        if (rotate_map_precision && abs_error <= 3.0f * RAD) {
-            /* Fine alignment: no integral kick, modest gain and bounded slew. */
-            integral = 0;
-            wz = clamp(2.0f * error - 0.08f * gyro_rad_s, 2.0f * RAD);
-        } else {
-            wz = Heading_Update(error, gyro_rad_s, dt,
-                                rotate_measured_zero ? STAIR_HEADING_KP : chassis_config.kp,
-                                chassis_config.ki, chassis_config.gyro_damping,
-                                rotate_limit, &integral);
-        }
+        yaw_request.mode=rotate_map_precision && abs_error<=HEADING_FINE_RANGE
+                             ? HEADING_PRECISION : HEADING_ROTATE;
+        yaw_request.error=error;
+        yaw_request.limit=rotate_limit;
+        state.yaw_error=error;
+        if (rotate_measured_zero) yaw_config.kp=STAIR_HEADING_KP;
         if (abs_error < rotate_tolerance_deg * RAD && fabsf(imu->gz_dps - state.gyro_bias_dps) < 2)
             rotate_stable_count++;
         else
             rotate_stable_count = 0;
-        if (rotate_stable_count >= 10)
+        if (rotate_stable_count >= HEADING_SETTLE_CYCLES)
             Chassis_Hold();
     }
     if (state.armed && path_body)
@@ -1008,38 +1004,50 @@ void Chassis_Update(void)
         lateral_direction = body_y;
         if (body_w != 0 || line_search)
         {
-            wz = body_w;
+            yaw_request.mode=HEADING_MANUAL;
+            yaw_request.feedforward=body_w;
             heading = path_heading_active() ? route_heading : state.yaw_rad;
             integral = 0;
         }
     }
     /* Keep stationary yaw active from post-orbit alignment through the stairs.
      * STOP, faults, other stages and motion commands retain their original behavior. */
-    float stair_hold_error = Angle_Wrap(map_yaw + STAIR_TARGET_DEG(path_diagnostics.blue) * RAD - state.yaw_rad);
-    bool stair_arm_active = path_diagnostics.step == 9 &&
-                            path_diagnostics.phase == 24;
+    float stair_hold_error = Angle_Wrap(map_yaw + route_policy.stair_target_deg * RAD - state.yaw_rad);
     bool stair_hold = state.armed && !state.fault && path_heading_enabled &&
-                      zero_output && !normal_stopping &&
-                      path_diagnostics.result == PATH_RUNNING &&
-                      path_diagnostics.step >= 8 && path_diagnostics.step <= 10 &&
-                      (stair_arm_active || fabsf(stair_hold_error) < 0.5f * RAD);
-    if (zero_output || !state.armed)
-        vx = vy = wz = 0;
+                      zero_output && !normal_stopping && route_policy.stationary_hold &&
+                      (route_policy.hold_during_action || fabsf(stair_hold_error)<HEADING_HOLD_ENTRY);
+    if (zero_output || !state.armed) {
+        vx=vy=0;
+        yaw_request.mode=HEADING_OFF;
+    }
     if (stair_hold) {
-        heading = Angle_Wrap(map_yaw + STAIR_TARGET_DEG(path_diagnostics.blue) * RAD);
-        state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
-        /* Proportional + gyro damping only: no stored integral kick near the arm. */
-        wz = clamp(chassis_config.kp * state.yaw_error -
-                   chassis_config.gyro_damping * gyro_rad_s, 1.0f * RAD);
-        wz = body_output[2] + clamp(wz-body_output[2], 5.0f * RAD * dt);
-        if (fabsf(state.yaw_error) < STAIR_HEADING_STOP_TOLERANCE_DEG * RAD &&
-            fabsf(gyro_rad_s) < 0.5f * RAD) wz = 0;
+        heading=Angle_Wrap(map_yaw+route_policy.stair_target_deg*RAD);
+        state.yaw_error=Angle_Wrap(heading-state.yaw_rad);
+        yaw_request.mode=HEADING_HOLD;
+        yaw_request.error=state.yaw_error;
+    }
+    /* Only the final selected mode evaluates the angle loop. */
+    wz=HeadingControl_Update(&yaw_request,&yaw_config,dt,&integral);
+    chassis_heading_diagnostics.mode=yaw_request.mode;
+    chassis_heading_diagnostics.requested_rad_s=wz;
+    chassis_heading_diagnostics.measured_rad_s=gyro_rad_s;
+    bool tracking_translation=fabsf(vx)>0.01f || fabsf(vy)>0.01f ||
+                     fabsf(state.velocity[0])>0.01f || fabsf(state.velocity[1])>0.01f;
+    chassis_heading_diagnostics.tolerance_deg=tracking_translation ? HEADING_MOVING_TOLERANCE_DEG
+                                                         : HEADING_STATIC_TOLERANCE_DEG;
+    chassis_heading_diagnostics.within_tolerance=
+        yaw_request.mode!=HEADING_OFF && yaw_request.mode!=HEADING_MANUAL &&
+        isfinite(yaw_request.error) &&
+        fabsf(yaw_request.error)<chassis_heading_diagnostics.tolerance_deg*RAD;
+    if (stair_hold) {
+        wz=body_output[2]+clamp(wz-body_output[2],HEADING_FINE_SLEW*dt);
+        if (fabsf(state.yaw_error)<STAIR_HEADING_STOP_TOLERANCE_DEG*RAD &&
+            fabsf(gyro_rad_s)<HEADING_HOLD_STOP_RATE) wz=0;
     }
     ForwardCompResult forward_comp =
         ForwardComp_Apply(vx, vy, lateral_direction, chassis_config.left_gain,
                           chassis_config.right_gain,
-                          (path_heading_active() && path_diagnostics.blue &&
-                           path_diagnostics.step>=8 && path_diagnostics.step<=13)
+                          (path_heading_active() && route_policy.suppress_lateral_comp)
                               ? 0.0f : chassis_config.forward_lateral_comp);
     if (!blending_this_cycle) vy = forward_comp.vy_final;
     if (!config_valid())
@@ -1058,8 +1066,8 @@ void Chassis_Update(void)
     {
         float target[3] = {vx, vy, wz};
         Motion_SlewVelocity(body_output, target, dt,
-                            normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? 1.5f : 1.0f) : BODY_ACCEL_MM_S2,
-                            normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? 1.5f : 1.0f) : YAW_ACCEL_RAD_S2);
+                            normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : BODY_ACCEL_MM_S2,
+                            normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : YAW_ACCEL_RAD_S2);
         vx = body_output[0]; vy = body_output[1]; wz = body_output[2];
         if (normal_stopping && vx == 0 && vy == 0 && wz == 0) normal_stopping = false;
     }
@@ -1067,16 +1075,9 @@ void Chassis_Update(void)
     {
         /* Preserve the planner's distance braking envelope; smooth yaw only. */
         wz = body_output[2] + clamp(wz - body_output[2],
-            (path_rotation && rotate_map_precision ? 5.0f * RAD : YAW_ACCEL_RAD_S2) * dt);
+            (path_rotation && rotate_map_precision ? HEADING_FINE_SLEW : YAW_ACCEL_RAD_S2) * dt);
     }
     float t[4], r[4], out[4];
-    /* Reserve wheel authority during fixed-heading travel; restore speed as yaw recovers. */
-    if (!zero_output && !path_rotation && !blending_this_cycle &&
-        (planner.active || (path_body && body_w == 0 && !line_search))) {
-        float excess=fmaxf(0, fabsf(state.yaw_error)/RAD - 0.5f);
-        float reserve=1.0f-fminf(0.2f, excess*0.1f);
-        vx*=reserve; vy*=reserve;
-    }
     Mecanum_Inverse(geometry(), vx, vy, 0, t);
     if (planner.braking && planner.active && jog_remaining <= 0)
     {
@@ -1094,8 +1095,11 @@ void Chassis_Update(void)
     for (int i = 0; i < 4; i++)
     {
         state.rpm_requested[i] = out[i];
-        state.rpm_pending[i] = roundf(state.rpm_requested[i] * 10.0f) * 0.1f;
+        state.rpm_pending[i] = roundf(state.rpm_requested[i] * 10.0f) * CHASSIS_WHEEL_RPM_QUANTUM;
     }
+    float quantized_body[3];
+    Mecanum_Forward(geometry(), state.rpm_pending, quantized_body);
+    chassis_heading_diagnostics.quantized_rad_s=quantized_body[2];
     pending_valid = true;
     service_tx();
     for (int i = 0; i < 4; ++i)

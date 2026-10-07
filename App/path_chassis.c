@@ -36,39 +36,6 @@ static void next(PathMission *m, uint32_t now)
     m->stable = false;
     m->entered = now;
 }
-/* Brake when the station-specific lateral position condition is met. */
-bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
-                    uint32_t timeout, float lateral)
-{
-    if ((uint32_t)(now-m->entered)>=timeout) {
-        fail(m,PATH_TIMEOUT); return false;
-    }
-    if (m->step == 9) {
-        if (!isfinite(in->x_mm) || !isfinite(in->y_mm)) { fail(m,PATH_ERROR); return false; }
-        if (!m->approach_started) {
-            m->approach_started=true;
-            m->approach_x=in->x_mm; m->approach_y=in->y_mm;
-        }
-        float x=in->x_mm-m->approach_x, y=in->y_mm-m->approach_y;
-        /* Command odometry only limits fast travel; gray detection always takes priority. */
-        if (in->gray || x*x+y*y >= 1080.0f*1080.0f) m->approach_slow=true;
-        if (!m->approach_slow) lateral=80;
-    }
-    if (!m->stable) {
-        if (m->step == 3 ? (in->gray & 6U) != 6U : !PathLine_Aligned(m, in->gray)) {
-            (void)emit(m,PC_BODY,0,lateral,0,0,timeout);
-            return false;
-        }
-        hold(m);
-        m->stable=true; /* Latch detection; braking may carry probes past the line. */
-        return false;
-    }
-    if (!in->settled) return false;
-    /* Preserve the current heading for later stair checks; do not turn to calibrate. */
-    if (!emit(m,PC_LINE_REFERENCE,0,0,0,0,0)) return false;
-    m->stable=false;
-    return true;
-}
 /* Orbit translation and rotation both scaled by 1.323, preserving the command radius. */
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
@@ -230,129 +197,6 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
     }
     return false;
 }
-/* Absolute heading is checked only at safe boundaries, never during an arm task. */
-bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
-{
-    /* Each work area calibrates once after line acquisition. Return home is separate. */
-    if ((m->step==9 && m->stair_heading_calibrated) ||
-        ((m->step==12 || (m->step==13 && m->point<9)) && m->warehouse_heading_calibrated))
-        return in->settled;
-    float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f;
-    float target = m->step <= 9 ? STAIR_TARGET_DEG(m->blue) :
-        (m->step == 13 && m->point >= 9 ? 0.0f : PATH_WAREHOUSE_TARGET_DEG(m->blue));
-    float error = remainderf(target - in->map_yaw_deg, 360.0f);
-    if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
-    if (m->heading_align_active) {
-        if ((uint32_t)(now-m->heading_align_since) >= 30000U) {
-            fail(m, PATH_TIMEOUT); return false;
-        }
-        if (!in->settled) return false;
-        if (fabsf(error) >= tolerance) {
-            if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, target,0,0,0,30000)) return false;
-            return false;
-        }
-        m->heading_align_active = false;
-        return true;
-    }
-    if (!in->settled) return false;
-    if (fabsf(error) < tolerance) return true;
-    if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, target, 0, 0, 0, 30000))
-        return false;
-    m->heading_align_active = true;
-    m->heading_align_since = now;
-    return false;
-}
-bool PathLine_Aligned(const PathMission *m, uint8_t gray)
-{
-    /* Gray selects lateral position only; heading is checked separately. */
-    gray &= 15U;
-    if (m->step==13) return (gray & 6U)==6U;
-    return gray == 6U || gray == 15U || gray == 9U;
-}
-static bool line_skip(PathMission *m, uint32_t now, const PathInput *in)
-{
-    if (m->line_recovery != 6) {
-        hold(m); m->line_recovery = 6;
-        return false;
-    }
-    if (!PathHeading_Ready(m, now, in)) return false;
-    if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_TARGET_DEG(m->blue) : PATH_WAREHOUSE_TARGET_DEG(m->blue), 0, 0, 0, 0)) return false;
-    m->line_skipped = true;
-    if (m->step == 9) m->stair_heading_locked = true;
-    else m->warehouse_heading_locked = true;
-    m->line_active = m->line_stopping = m->stable = false;
-    return true;
-}
-bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
-{
-    const bool bidirectional = m->step==9 || m->step==13;
-    if (!isfinite(in->map_yaw_deg)) { fail(m, PATH_ERROR); return false; }
-    if (m->step == 9 ? m->stair_heading_locked : (m->step != 13 && m->warehouse_heading_locked)) {
-        m->line_skipped = true;
-        return PathHeading_Ready(m, now, in);
-    }
-    if (!m->line_active) {
-        if (!in->settled) return false;
-        if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_TARGET_DEG(m->blue) : PATH_WAREHOUSE_TARGET_DEG(m->blue), 0, 0, 0, 0)) return false;
-        m->line_active = true; m->line_skipped = false;
-        m->line_since = now; m->line_recovery = 0;
-        m->line_stopping = m->stable = false;
-    }
-    /* Stop fully before reversing the lateral search. */
-    if (m->line_recovery == 7 || (bidirectional && m->line_recovery == 9)) {
-        if (!in->settled) return false;
-        ++m->line_recovery;
-        m->line_since=now;
-        m->line_stopping=m->stable=false;
-    }
-    if (m->heading_align_active && !PathHeading_Ready(m, now, in)) return false;
-    const uint32_t search_ms = bidirectional ? (m->step==13 && m->line_recovery==8 ? 4000U : 2000U) :
-                               (m->line_recovery == 8 ? 5000U : 1000U);
-    if (m->line_recovery == 6) return line_skip(m,now,in);
-    if ((uint32_t)(now-m->line_since) >= search_ms &&
-        ((!bidirectional && m->line_recovery == 0) || !PathLine_Aligned(m, in->gray))) {
-        if (bidirectional) {
-            if (m->line_recovery == 10) { fail(m,PATH_TIMEOUT); return false; }
-            hold(m);
-            m->line_recovery = m->line_recovery == 8 ? 9 : 7;
-            return false;
-        }
-        if (m->step != 9 && m->line_recovery == 8) {
-            fail(m,PATH_TIMEOUT); return false;
-        }
-        if (m->step != 9 && m->line_recovery == 1) {
-            hold(m);
-            m->line_recovery = 7;
-            return false;
-        }
-        return line_skip(m,now,in);
-    }
-    if (PathLine_Aligned(m, in->gray) || m->heading_align_active) {
-        if (!m->line_stopping) {
-            hold(m); m->line_stopping = true; m->stable = false;
-            return false;
-        }
-        if (!PathHeading_Ready(m, now, in)) { m->stable = false; return false; }
-        /* A rotation may change gray; re-evaluate before admitting vision. */
-        if (!PathLine_Aligned(m, in->gray)) return false;
-        if (!m->stable) { m->stable = true; m->stable_since = now; }
-        if ((uint32_t)(now-m->stable_since) < 100U) return false;
-        m->line_active = m->line_stopping = m->stable = false;
-        if (m->step==9) m->stair_heading_calibrated=true;
-        else if (m->step==12 || m->step==13) m->warehouse_heading_calibrated=true;
-        return true;
-    }
-    m->stable = false;
-    if (m->line_stopping) {
-        if (!in->settled) return false;
-        m->line_stopping = false;
-    }
-    /* Gray controls lateral position; map search retains the gyro heading loop.
-     * Warehouse sweeps right, left across the start, then right again. */
-    if (!bidirectional && m->line_recovery == 0) m->line_recovery=1;
-    (void)emit(m, PC_MAP_SEARCH, 0, m->step == 9 ? (m->line_recovery == 8 ? 40 : -40) : (m->line_recovery == 8 ? 10 : -10), 0, 0, m->step==13 ? 12000 : 3000);
-    return false;
-}
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
@@ -374,7 +218,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             if (!emit(m,PC_GROUP,0,0,0,105,30000)) break;
             m->stair_ready_started=true; m->prep_pending=true; m->prep_since=now;
         }
-        if (PathLine_Align(m,now,in,50000,25)) {
+        if (PathLine_Align(m,now,in,50000,PATH_STAIR_SEARCH_SLOW_RPM)) {
             if (PATH_STOP_AT_STAIR_LINE) {
                 hold(m); m->result=PATH_DONE;
                 break;
@@ -390,7 +234,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 4:
-        if (PathLine_AlignFour(m,now,in)) {
+        /* Recheck strict 0110 after braking, using lateral search only. */
+        if ((!m->line_active && in->settled && PathLine_Aligned(m,in->gray)) || PathLine_AlignFour(m,now,in)) {
+            if (!emit(m,PC_MAP_HEADING,STAIR_TARGET_DEG(m->blue),0,0,0,0)) break;
+            m->stair_heading_calibrated=true;
             m->stair_origin_x=in->x_mm; m->stair_origin_y=in->y_mm;
             m->stair_axis=in->yaw_deg*0.01745329252f;
             m->stair_distance=0; m->stair_started=now;
@@ -481,7 +328,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         /* Each intermediate boundary must reacquire the line, even after a skip. */
         m->stair_heading_locked=false;
         m->line_active=m->line_stopping=m->stable=m->line_skipped=false;
-        m->line_recovery=0;
+        m->line_search_state=LINE_SEARCH_IDLE;
         m->waiting=false;
         m->phase=28;
         break;

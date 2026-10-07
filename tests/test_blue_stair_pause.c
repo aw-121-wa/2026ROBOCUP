@@ -33,10 +33,10 @@ int main(void) {
     PathChassis_Tick(&m,2100,&in);assert(last.kind==PC_HOLD && m.phase==4);
     before=count;PathChassis_Tick(&m,2105,&in);assert(count==before);
     in.settled=true;in.map_yaw_deg=4;
-    PathChassis_Tick(&m,2110,&in);assert(last.kind==PC_HOME_ALIGN);
-    in.map_yaw_deg=5.7f;PathChassis_Tick(&m,2115,&in);
+    PathChassis_Tick(&m,2110,&in);assert(last.kind==PC_HOME_ALIGN && last.x==0);
+    in.map_yaw_deg=0.4f;PathChassis_Tick(&m,2115,&in);
     assert(m.step==11 && last.kind==PC_HOME_ALIGN);
-    in.map_yaw_deg=5.35f;PathChassis_Tick(&m,2120,&in);
+    in.map_yaw_deg=0.05f;PathChassis_Tick(&m,2120,&in);
     assert(m.step==12 && m.phase==0 && !m.waiting);
     in.gray=0;PathChassis_Tick(&m,2125,&in);
     assert(last.kind==PC_BODY && last.x==0 && last.y==40);
@@ -49,10 +49,11 @@ int main(void) {
     /* Blue must meet the same absolute heading gates even with inner probes lit. */
     for (unsigned step=8;step<=13;step++) {
         Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=step;
-        in.settled=true;in.gray=6;in.map_yaw_deg=step<=9?183.16f:5.45f;
+        in.settled=true;in.gray=6;in.map_yaw_deg=step<=9?179.89f:0.15f;
+        if(step==9 || step==12 || step==13) { assert(PathHeading_Ready(&m,4000,&in)); continue; }
         assert(!PathHeading_Ready(&m,4000,&in));
         assert(last.kind==(step<=9?PC_MAP_AXIS:PC_HOME_ALIGN));
-        in.map_yaw_deg=step<=9?183.22f:5.35f;
+        in.map_yaw_deg=step<=9?179.97f:0.05f;
         assert(PathHeading_Ready(&m,4100,&in));
     }
     return 0;
