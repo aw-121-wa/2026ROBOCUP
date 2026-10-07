@@ -513,8 +513,8 @@ static bool align_map_heading(float degrees, float tolerance)
     rotate_map_precision = true;
     return true;
 }
-bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_TARGET_DEG(path_diagnostics.blue), STAIR_HEADING_STOP_TOLERANCE_DEG); }
-bool Chassis_AlignHome(float target_deg) { return align_map_heading(target_deg, 0.1f); }
+bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, STAIR_HEADING_STOP_TOLERANCE_DEG); }
+bool Chassis_AlignHome(void) { return align_map_heading(0, 0.1f); }
 bool Chassis_MapSearch(float mm_s)
 {
     if (!path_heading_enabled) return false;
@@ -1015,7 +1015,7 @@ void Chassis_Update(void)
     }
     /* Keep stationary yaw active from post-orbit alignment through the stairs.
      * STOP, faults, other stages and motion commands retain their original behavior. */
-    float stair_hold_error = Angle_Wrap(map_yaw + STAIR_TARGET_DEG(path_diagnostics.blue) * RAD - state.yaw_rad);
+    float stair_hold_error = Angle_Wrap(map_yaw + STAIR_MAP_TARGET_DEG * RAD - state.yaw_rad);
     bool stair_arm_active = path_diagnostics.step == 9 &&
                             path_diagnostics.phase == 24;
     bool stair_hold = state.armed && !state.fault && path_heading_enabled &&
@@ -1026,7 +1026,7 @@ void Chassis_Update(void)
     if (zero_output || !state.armed)
         vx = vy = wz = 0;
     if (stair_hold) {
-        heading = Angle_Wrap(map_yaw + STAIR_TARGET_DEG(path_diagnostics.blue) * RAD);
+        heading = Angle_Wrap(map_yaw + STAIR_MAP_TARGET_DEG * RAD);
         state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
         /* Proportional + gyro damping only: no stored integral kick near the arm. */
         wz = clamp(chassis_config.kp * state.yaw_error -

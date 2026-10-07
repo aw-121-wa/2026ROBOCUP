@@ -18,7 +18,6 @@
 #define PATH_BLUE_DISC_TEST 0
 #endif
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
-#define PATH_WAREHOUSE_TARGET_DEG(blue) ((blue) ? 5.3f : 0.0f)
 #define PATH_WAREHOUSE_FIRST_RIGHT_MM 15.0f
 #define PATH_WAREHOUSE_CREEP_LIMIT_MM 200.0f
 #define PATH_WAREHOUSE_CREEP_SPEED_RPM 10.0f
@@ -31,9 +30,6 @@
 
 /* Shared outer/inner deadline for multi-stage disc line alignment. */
 #define PATH_DISC_LINE_TIMEOUT_MS 30000U
-#ifndef PATH_STOP_AT_WAREHOUSE_LINE
-#define PATH_STOP_AT_WAREHOUSE_LINE 0
-#endif
 #ifndef PATH_STOP_AT_STAIR_LINE
 #define PATH_STOP_AT_STAIR_LINE 0
 #endif

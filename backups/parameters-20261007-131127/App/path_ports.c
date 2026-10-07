@@ -261,7 +261,7 @@ static bool send(void *ctx, const PathCommand *c)
         motion_timeout = c->timeout_ms;
         return true;
     case PC_HOME_ALIGN:
-        if (!Chassis_AlignHome(c->x)) return false;
+        if (!Chassis_AlignHome()) return false;
         motion_pending=true; motion_continuous=false;
         motion_since=now; motion_timeout=c->timeout_ms;
         return true;
@@ -455,13 +455,6 @@ bool PathPorts_Ping(void)
 }
 bool PathPorts_SelectSide(bool blue)
 {
-    /* Chassis-only runs select the same route without an RDK handshake. */
-    if (!PATH_RDK_ENABLE) {
-        if (!initialized || Chassis_GetState()->armed || !Chassis_IsSettled() ||
-            mission.result == PATH_RUNNING) return false;
-        requested_blue = blue;
-        return true;
-    }
     if (!PATH_VISION_ENABLE || !initialized || !ready || io_fault || rdk.locked ||
         Chassis_GetState()->armed || !Chassis_IsSettled() || mission.result == PATH_RUNNING ||
         rdk.warehouse_active || turn.pending) return false;

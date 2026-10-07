@@ -21,11 +21,22 @@ int main(void) {
     PathChassis_Tick(&m,1000,&in);
     assert(count==before+2 && m.waiting && !m.heading_align_active);
     assert(last.kind==PC_MOVE && last.x==-300);
-    /* Residual yaw is corrected in motion; keep the original continuous arc. */
+    /* Residual yaw at the straight/arc handoff must brake and align first. */
     in.motion_done=true;in.settled=false;
     PathChassis_Tick(&m,1100,&in);
-    assert(last.kind==PC_ARC && last.start_speed==80 && last.end_speed==80);
-    assert(m.phase==2 && !m.heading_align_active);
+    assert(last.kind==PC_HOLD && m.phase==4);
+    before=count;PathChassis_Tick(&m,1105,&in);assert(count==before);
+    in.settled=true;PathChassis_Tick(&m,1110,&in);
+    assert(last.kind==PC_MAP_AXIS && m.phase==4);
+    in.map_yaw_deg=179.9f;PathChassis_Tick(&m,1120,&in);
+    assert(last.kind==PC_MAP_AXIS && m.phase==4);
+    in.map_yaw_deg=179.97f;PathChassis_Tick(&m,1130,&in);
+    assert(last.kind==PC_ARC && last.start_speed==0 && last.end_speed==40 && m.phase==2);
+    /* Already aligned travel retains the continuous arc handoff. */
+    Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=8;m.waiting=true;
+    in.settled=false;in.motion_done=true;
+    PathChassis_Tick(&m,1200,&in);
+    assert(last.kind==PC_ARC && last.start_speed==80 && m.phase==2);
     in.motion_done=false;in.settled=true;
     Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=11;m.entered=2000;
     PathChassis_Tick(&m,2000,&in);assert(last.kind==PC_MOVE_ROTATE && last.angle==-180);
@@ -34,9 +45,9 @@ int main(void) {
     before=count;PathChassis_Tick(&m,2105,&in);assert(count==before);
     in.settled=true;in.map_yaw_deg=4;
     PathChassis_Tick(&m,2110,&in);assert(last.kind==PC_HOME_ALIGN);
-    in.map_yaw_deg=5.7f;PathChassis_Tick(&m,2115,&in);
+    in.map_yaw_deg=.4f;PathChassis_Tick(&m,2115,&in);
     assert(m.step==11 && last.kind==PC_HOME_ALIGN);
-    in.map_yaw_deg=5.35f;PathChassis_Tick(&m,2120,&in);
+    in.map_yaw_deg=.05f;PathChassis_Tick(&m,2120,&in);
     assert(m.step==12 && m.phase==0 && !m.waiting);
     in.gray=0;PathChassis_Tick(&m,2125,&in);
     assert(last.kind==PC_BODY && last.x==0 && last.y==40);
@@ -49,10 +60,10 @@ int main(void) {
     /* Blue must meet the same absolute heading gates even with inner probes lit. */
     for (unsigned step=8;step<=13;step++) {
         Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=step;
-        in.settled=true;in.gray=6;in.map_yaw_deg=step<=9?183.16f:5.45f;
+        in.settled=true;in.gray=6;in.map_yaw_deg=step<=9?179.91f:.15f;
         assert(!PathHeading_Ready(&m,4000,&in));
         assert(last.kind==(step<=9?PC_MAP_AXIS:PC_HOME_ALIGN));
-        in.map_yaw_deg=step<=9?183.22f:5.35f;
+        in.map_yaw_deg=step<=9?179.97f:.05f;
         assert(PathHeading_Ready(&m,4100,&in));
     }
     return 0;

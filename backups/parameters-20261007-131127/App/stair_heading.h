@@ -2,9 +2,6 @@
 #define STAIR_HEADING_H
 #include <math.h>
 #define STAIR_MAP_TARGET_DEG 180.0f
-/* Experimental blue-field offset measured against the stair edge. */
-#define STAIR_BLUE_MAP_TARGET_DEG 183.25f
-#define STAIR_TARGET_DEG(blue) ((blue) ? STAIR_BLUE_MAP_TARGET_DEG : STAIR_MAP_TARGET_DEG)
 #define STAIR_HEADING_KP 4.0f
 #define STAIR_HEADING_TOLERANCE_DEG 0.05f
 #define STAIR_HEADING_STOP_TOLERANCE_DEG 0.05f

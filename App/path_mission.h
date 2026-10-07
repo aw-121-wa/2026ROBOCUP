@@ -118,6 +118,7 @@ typedef struct
     bool disc_depart_pending;
     uint32_t prep_since;
     bool heading_align_active;
+    bool stair_heading_calibrated, warehouse_heading_calibrated;
     uint32_t heading_align_since;
     PathSend send;
     void *context;

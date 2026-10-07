@@ -53,7 +53,7 @@ bool Chassis_MoveArc(float radius_mm, float start_angle_deg, float turn_degrees,
 /* Called once after an accepted PATH/DISC start; manual moves keep local headings. */
 void Chassis_BeginPath(void);
 bool Chassis_ReturnHome(void);
-bool Chassis_AlignHome(float target_deg);
+bool Chassis_AlignHome(void);
 bool Chassis_AlignMapAxis(void);
 bool Chassis_SetMapHeading(float degrees);
 bool Chassis_MapLateral(float mm);

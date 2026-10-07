@@ -567,10 +567,10 @@ void Chassis_HoldCapture(void) { Chassis_Hold(); }
 bool Chassis_LineSearch(float y,float w) { return Chassis_Body(0,y,w); }
 bool Chassis_CalibrateLine(void) { if(moving)return false; line_calibrations++; measured_yaw=0; return true; }
 
-bool Chassis_AlignMapAxis(void) { map_yaw_test=STAIR_MAP_TARGET_DEG; moving=true; return true; }
+bool Chassis_AlignMapAxis(void) { map_yaw_test=STAIR_TARGET_DEG(path_diagnostics.blue); moving=true; return true; }
 bool Chassis_MapSearch(float mm_s) { (void)mm_s; moving=true; return true; }
 bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
-bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=STAIR_MAP_TARGET_DEG))return false; map_headings++; map_yaw_test=degrees; return true; }
+bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=STAIR_TARGET_DEG(path_diagnostics.blue) && degrees!=5.3f))return false; map_headings++; map_yaw_test=degrees; return true; }
 
-bool Chassis_AlignHome(void) { map_yaw_test=0; moving=true; return true; }
+bool Chassis_AlignHome(float target_deg) { map_yaw_test=target_deg; moving=true; return true; }

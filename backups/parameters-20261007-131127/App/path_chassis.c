@@ -233,13 +233,19 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Absolute heading is checked only at safe boundaries, never during an arm task. */
 bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
 {
-    /* Each work area calibrates once after line acquisition. Return home is separate. */
-    if ((m->step==9 && m->stair_heading_calibrated) ||
-        ((m->step==12 || (m->step==13 && m->point<9)) && m->warehouse_heading_calibrated))
-        return in->settled;
+    /* Legacy red warehouse columns admit alignment from the inner probes.
+     * Blue requires the absolute heading gate as well as lateral alignment.
+     * Preserve absolute heading alignment for the final return-home stage. */
+    if (!m->blue && m->step == 13 && m->point < 9 && (in->gray & 6U) == 6U) {
+        if (!in->settled) {
+            if (m->heading_align_active) hold(m);
+            return false;
+        }
+        m->heading_align_active=false;
+        return true;
+    }
     float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f;
-    float target = m->step <= 9 ? STAIR_TARGET_DEG(m->blue) :
-        (m->step == 13 && m->point >= 9 ? 0.0f : PATH_WAREHOUSE_TARGET_DEG(m->blue));
+    float target = m->step <= 9 ? STAIR_MAP_TARGET_DEG : 0.0f;
     float error = remainderf(target - in->map_yaw_deg, 360.0f);
     if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
     if (m->heading_align_active) {
@@ -248,7 +254,7 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
         }
         if (!in->settled) return false;
         if (fabsf(error) >= tolerance) {
-            if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, target,0,0,0,30000)) return false;
+            if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, 0,0,0,0,30000)) return false;
             return false;
         }
         m->heading_align_active = false;
@@ -256,7 +262,7 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
     }
     if (!in->settled) return false;
     if (fabsf(error) < tolerance) return true;
-    if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, target, 0, 0, 0, 30000))
+    if (!emit(m, m->step <= 9 ? PC_MAP_AXIS : PC_HOME_ALIGN, 0, 0, 0, 0, 30000))
         return false;
     m->heading_align_active = true;
     m->heading_align_since = now;
@@ -276,7 +282,7 @@ static bool line_skip(PathMission *m, uint32_t now, const PathInput *in)
         return false;
     }
     if (!PathHeading_Ready(m, now, in)) return false;
-    if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_TARGET_DEG(m->blue) : PATH_WAREHOUSE_TARGET_DEG(m->blue), 0, 0, 0, 0)) return false;
+    if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_MAP_TARGET_DEG : 0, 0, 0, 0, 0)) return false;
     m->line_skipped = true;
     if (m->step == 9) m->stair_heading_locked = true;
     else m->warehouse_heading_locked = true;
@@ -293,7 +299,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
     }
     if (!m->line_active) {
         if (!in->settled) return false;
-        if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_TARGET_DEG(m->blue) : PATH_WAREHOUSE_TARGET_DEG(m->blue), 0, 0, 0, 0)) return false;
+        if (!emit(m, PC_MAP_HEADING, m->step == 9 ? STAIR_MAP_TARGET_DEG : 0, 0, 0, 0, 0)) return false;
         m->line_active = true; m->line_skipped = false;
         m->line_since = now; m->line_recovery = 0;
         m->line_stopping = m->stable = false;
@@ -338,8 +344,6 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->stable) { m->stable = true; m->stable_since = now; }
         if ((uint32_t)(now-m->stable_since) < 100U) return false;
         m->line_active = m->line_stopping = m->stable = false;
-        if (m->step==9) m->stair_heading_calibrated=true;
-        else if (m->step==12 || m->step==13) m->warehouse_heading_calibrated=true;
         return true;
     }
     m->stable = false;
@@ -563,12 +567,19 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         if (m->phase == 0)
         {
-            if (!m->waiting && !emit(m,PC_MAP_HEADING,STAIR_TARGET_DEG(m->blue),0,0,0,0)) break;
+            if (!m->waiting && !emit(m,PC_MAP_HEADING,180,0,0,0,0)) break;
             if (!m->waiting) {
                 PathCommand c={.kind=PC_MOVE,.x=-300,.speed=195,.end_speed=80,
                                .continuous=true,.timeout_ms=30000};
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
+                float error=remainderf(STAIR_MAP_TARGET_DEG-in->map_yaw_deg,360.0f);
+                if (!isfinite(error)) { fail(m,PATH_ERROR); break; }
+                if (fabsf(error)>=STAIR_HEADING_TOLERANCE_DEG) {
+                    /* Finish moving correction before admitting lateral travel. */
+                    hold(m); m->phase=4; m->entered=now;
+                    break;
+                }
                 PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
                                .speed=80,.start_speed=80,.end_speed=80,
                                .continuous=true,.timeout_ms=10000};
@@ -577,6 +588,17 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase=2; m->entered=now;
             }
             if ((uint32_t)(now-m->entered)>=30000U) fail(m,PATH_TIMEOUT);
+        }
+        else if (m->phase == 4) {
+            /* Braking and alignment share a bounded deadline. Restart from rest. */
+            if ((uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
+            if (!PathHeading_Ready(m,now,in)) break;
+            PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
+                           .speed=80,.start_speed=0,.end_speed=40,
+                           .continuous=true,.timeout_ms=10000};
+            if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
+            m->approach_started=true; m->approach_x=in->x_mm; m->approach_y=in->y_mm;
+            m->phase=2; m->entered=now;
         }
         else if (m->phase == 2) {
             if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT); break; }
@@ -661,10 +683,6 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (PathLine_AlignFour(m, now, in))
         {
-            if (PATH_STOP_AT_WAREHOUSE_LINE) {
-                hold(m); m->result=PATH_DONE;
-                break;
-            }
             m->point = 0;
             next(m, now);
         }

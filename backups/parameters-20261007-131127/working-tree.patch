@@ -1,0 +1,157 @@
+diff --git a/App/chassis_control.c b/App/chassis_control.c
+index 0aa3137..77e2dc2 100644
+--- a/App/chassis_control.c
++++ b/App/chassis_control.c
+@@ -513,8 +513,8 @@ static bool align_map_heading(float degrees, float tolerance)
+     rotate_map_precision = true;
+     return true;
+ }
+-bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, path_diagnostics.blue ? 0.3f : STAIR_HEADING_STOP_TOLERANCE_DEG); }
+-bool Chassis_AlignHome(void) { return align_map_heading(0, path_diagnostics.blue ? 0.3f : 0.1f); }
++bool Chassis_AlignMapAxis(void) { return align_map_heading(STAIR_MAP_TARGET_DEG, STAIR_HEADING_STOP_TOLERANCE_DEG); }
++bool Chassis_AlignHome(void) { return align_map_heading(0, 0.1f); }
+ bool Chassis_MapSearch(float mm_s)
+ {
+     if (!path_heading_enabled) return false;
+diff --git a/App/path_chassis.c b/App/path_chassis.c
+index 23a1959..400965d 100644
+--- a/App/path_chassis.c
++++ b/App/path_chassis.c
+@@ -233,9 +233,10 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
+ /* Absolute heading is checked only at safe boundaries, never during an arm task. */
+ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
+ {
+-    /* During warehouse columns, the two inner white probes admit alignment.
++    /* Legacy red warehouse columns admit alignment from the inner probes.
++     * Blue requires the absolute heading gate as well as lateral alignment.
+      * Preserve absolute heading alignment for the final return-home stage. */
+-    if (m->step == 13 && m->point < 9 && (in->gray & 6U) == 6U) {
++    if (!m->blue && m->step == 13 && m->point < 9 && (in->gray & 6U) == 6U) {
+         if (!in->settled) {
+             if (m->heading_align_active) hold(m);
+             return false;
+@@ -243,7 +244,7 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
+         m->heading_align_active=false;
+         return true;
+     }
+-    float tolerance = m->blue ? 0.5f : (m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f);
++    float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : 0.1f;
+     float target = m->step <= 9 ? STAIR_MAP_TARGET_DEG : 0.0f;
+     float error = remainderf(target - in->map_yaw_deg, 360.0f);
+     if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
+@@ -572,6 +573,13 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
+                                .continuous=true,.timeout_ms=30000};
+                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
+             } else if (in->motion_done) {
++                float error=remainderf(STAIR_MAP_TARGET_DEG-in->map_yaw_deg,360.0f);
++                if (!isfinite(error)) { fail(m,PATH_ERROR); break; }
++                if (fabsf(error)>=STAIR_HEADING_TOLERANCE_DEG) {
++                    /* Finish moving correction before admitting lateral travel. */
++                    hold(m); m->phase=4; m->entered=now;
++                    break;
++                }
+                 PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
+                                .speed=80,.start_speed=80,.end_speed=80,
+                                .continuous=true,.timeout_ms=10000};
+@@ -581,6 +589,17 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
+             }
+             if ((uint32_t)(now-m->entered)>=30000U) fail(m,PATH_TIMEOUT);
+         }
++        else if (m->phase == 4) {
++            /* Braking and alignment share a bounded deadline. Restart from rest. */
++            if ((uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
++            if (!PathHeading_Ready(m,now,in)) break;
++            PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
++                           .speed=80,.start_speed=0,.end_speed=40,
++                           .continuous=true,.timeout_ms=10000};
++            if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
++            m->approach_started=true; m->approach_x=in->x_mm; m->approach_y=in->y_mm;
++            m->phase=2; m->entered=now;
++        }
+         else if (m->phase == 2) {
+             if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT); break; }
+             if (in->gray && !m->approach_slow) {
+diff --git a/App/stair_heading.h b/App/stair_heading.h
+index 7096659..f0464f2 100644
+--- a/App/stair_heading.h
++++ b/App/stair_heading.h
+@@ -3,8 +3,8 @@
+ #include <math.h>
+ #define STAIR_MAP_TARGET_DEG 180.0f
+ #define STAIR_HEADING_KP 4.0f
+-#define STAIR_HEADING_TOLERANCE_DEG 0.07f
+-#define STAIR_HEADING_STOP_TOLERANCE_DEG 0.07f
++#define STAIR_HEADING_TOLERANCE_DEG 0.05f
++#define STAIR_HEADING_STOP_TOLERANCE_DEG 0.05f
+ #define STAIR_HEADING_STABLE_MS 100U
+ #define STAIR_HEADING_TIMEOUT_MS 1000U
+ /* Sensor angle zero; wrap the measured error to choose the shortest correction. */
+diff --git a/tests/test_blue_stair_pause.c b/tests/test_blue_stair_pause.c
+index b82b697..420e2ae 100644
+--- a/tests/test_blue_stair_pause.c
++++ b/tests/test_blue_stair_pause.c
+@@ -21,6 +21,23 @@ int main(void) {
+     PathChassis_Tick(&m,1000,&in);
+     assert(count==before+2 && m.waiting && !m.heading_align_active);
+     assert(last.kind==PC_MOVE && last.x==-300);
++    /* Residual yaw at the straight/arc handoff must brake and align first. */
++    in.motion_done=true;in.settled=false;
++    PathChassis_Tick(&m,1100,&in);
++    assert(last.kind==PC_HOLD && m.phase==4);
++    before=count;PathChassis_Tick(&m,1105,&in);assert(count==before);
++    in.settled=true;PathChassis_Tick(&m,1110,&in);
++    assert(last.kind==PC_MAP_AXIS && m.phase==4);
++    in.map_yaw_deg=179.9f;PathChassis_Tick(&m,1120,&in);
++    assert(last.kind==PC_MAP_AXIS && m.phase==4);
++    in.map_yaw_deg=179.97f;PathChassis_Tick(&m,1130,&in);
++    assert(last.kind==PC_ARC && last.start_speed==0 && last.end_speed==40 && m.phase==2);
++    /* Already aligned travel retains the continuous arc handoff. */
++    Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=8;m.waiting=true;
++    in.settled=false;in.motion_done=true;
++    PathChassis_Tick(&m,1200,&in);
++    assert(last.kind==PC_ARC && last.start_speed==80 && m.phase==2);
++    in.motion_done=false;in.settled=true;
+     Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=11;m.entered=2000;
+     PathChassis_Tick(&m,2000,&in);assert(last.kind==PC_MOVE_ROTATE && last.angle==-180);
+     in.motion_done=true;in.settled=false;
+@@ -28,7 +45,9 @@ int main(void) {
+     before=count;PathChassis_Tick(&m,2105,&in);assert(count==before);
+     in.settled=true;in.map_yaw_deg=4;
+     PathChassis_Tick(&m,2110,&in);assert(last.kind==PC_HOME_ALIGN);
+-    in.map_yaw_deg=.4f;PathChassis_Tick(&m,2120,&in);
++    in.map_yaw_deg=.4f;PathChassis_Tick(&m,2115,&in);
++    assert(m.step==11 && last.kind==PC_HOME_ALIGN);
++    in.map_yaw_deg=.05f;PathChassis_Tick(&m,2120,&in);
+     assert(m.step==12 && m.phase==0 && !m.waiting);
+     in.gray=0;PathChassis_Tick(&m,2125,&in);
+     assert(last.kind==PC_BODY && last.x==0 && last.y==40);
+@@ -38,5 +57,14 @@ int main(void) {
+         PathChassis_Tick(&m,3000,&in);
+         assert(last.kind==PC_MOVE && last.x==(blue?100:120));
+     }
++    /* Blue must meet the same absolute heading gates even with inner probes lit. */
++    for (unsigned step=8;step<=13;step++) {
++        Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=step;
++        in.settled=true;in.gray=6;in.map_yaw_deg=step<=9?179.91f:.15f;
++        assert(!PathHeading_Ready(&m,4000,&in));
++        assert(last.kind==(step<=9?PC_MAP_AXIS:PC_HOME_ALIGN));
++        in.map_yaw_deg=step<=9?179.97f:.05f;
++        assert(PathHeading_Ready(&m,4100,&in));
++    }
+     return 0;
+ }
+diff --git a/tests/test_stair_heading.c b/tests/test_stair_heading.c
+index 6dcc7f2..bf7a841 100644
+--- a/tests/test_stair_heading.c
++++ b/tests/test_stair_heading.c
+@@ -48,8 +48,8 @@ int main(void) {
+  assert(PathHeading_Ready(&m,0,&in) && turns==0);
+  init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.2f;
+  assert(!PathHeading_Ready(&m,0,&in) && turns==1);
+- /* Stair 0.07-degree gate accepts 0.06 but rejects 0.09. */
+- init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.06f;
++ /* Stair 0.05-degree gate accepts 0.03 but rejects 0.09. */
++ init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.03f;
+  assert(PathHeading_Ready(&m,0,&in) && turns==0);
+  init(&m,&in,9);in.map_yaw_deg=STAIR_MAP_TARGET_DEG-0.09f;
+  assert(!PathHeading_Ready(&m,0,&in) && turns==1);

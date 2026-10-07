@@ -70,11 +70,10 @@ int main(void) {
    unsigned accepted[]={6,7,14,15};
    for(unsigned j=0;j<4;j++) {
     init(&m,&in,step);in.gray=accepted[j];in.map_yaw_deg=7;
-    assert(!PathHeading_Ready(&m,0,&in));assert(turns==1);
-    in.map_yaw_deg=0;
+    assert(PathHeading_Ready(&m,0,&in));assert(turns==0);
     assert(!PathLine_AlignFour(&m,1,&in));
     assert(!PathLine_AlignFour(&m,5,&in));
-    assert(PathLine_AlignFour(&m,105,&in));assert(turns==1);
+    assert(PathLine_AlignFour(&m,105,&in));assert(turns==0);
    }
    init(&m,&in,step);m.point=9;in.map_yaw_deg=7;
    assert(!PathHeading_Ready(&m,0,&in));assert(turns==1);
@@ -91,9 +90,7 @@ int main(void) {
   assert(!PathLine_AlignFour(&m,2110,&in));
   if(step==9 || step==13) { assert(PathLine_AlignFour(&m,2210,&in));assert(!m.line_skipped); }
   else { assert(PathLine_AlignFour(&m,2120,&in));assert(m.line_skipped); }
-  in.map_yaw_deg+=3;
-  m.stair_heading_calibrated=m.warehouse_heading_calibrated=false;
-  assert(!PathLine_AlignFour(&m,2220,&in));
+  in.map_yaw_deg+=3;assert(!PathLine_AlignFour(&m,2220,&in));
   if(step==9 || step==13) assert(!PathLine_AlignFour(&m,2225,&in));
   assert(turns==2);
  }
@@ -149,21 +146,5 @@ int main(void) {
  in.settled=true;Path_Tick(&m,40,&in);assert(m.phase==1);
  in.reply=PATH_OK;in.map_yaw_deg=179;Path_Tick(&m,45,&in);
  assert(last.kind==PC_MAP_AXIS && turns==1); /* Still align before an arm grant. */
- puts("map heading and arm boundary checks passed");/* First successful line alignment latches admission; later yaw cannot restart rotation. */
- for(unsigned step=9;step<=12;step+=3) {
-  init(&m,&in,step);
-  assert(!PathLine_AlignFour(&m,0,&in));
-  assert(!PathLine_AlignFour(&m,5,&in));
-  assert(PathLine_AlignFour(&m,105,&in));
-  assert(step==9 ? m.stair_heading_calibrated : m.warehouse_heading_calibrated);
-  in.map_yaw_deg+=2;
-  assert(PathHeading_Ready(&m,110,&in) && turns==0);
-  in.settled=false; assert(!PathHeading_Ready(&m,115,&in));
-  in.settled=true;
-  if(step==12) {
-   m.step=13;m.point=3;assert(PathHeading_Ready(&m,120,&in) && turns==0);
-   m.point=9;assert(!PathHeading_Ready(&m,125,&in) && last.kind==PC_HOME_ALIGN);
-  }
- }
- return 0;
+ puts("map heading and arm boundary checks passed");return 0;
 }
