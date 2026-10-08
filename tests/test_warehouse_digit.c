@@ -11,8 +11,8 @@ static bool send(void *ctx,const PathCommand *c) {
  if(c->kind==PC_WAREHOUSE_DIGIT) queries++;
  if(c->kind==PC_MAP_SEARCH) searches++;
  if(c->kind==PC_BODY || c->kind==PC_LINE_SEARCH) return false;
- if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {if(c->x<0) return c->x==-10 && c->y==0; moves++;}
- if(c->kind==PC_MAP_LATERAL) {if(m.point==9) return c->y==-20; offsets++; if(c->y!=-15) return false;}
+ if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {if(c->x<0) return c->x==-25 && c->y==0; moves++;}
+ if(c->kind==PC_MAP_LATERAL) {if(m.point==9) return c->y==-20; offsets++; if(c->y!=-25) return false;}
  if(c->kind==PC_HOLD) holds++;
  if(c->kind==PC_TURN) {turns++; for(unsigned k=0;k<(unsigned)c->x;k++) BallInventory_Step(&m.inventory,c->argument!=0);}
  if(c->kind==PC_GROUP) {if(groups>=9) return false; codes[groups++]=m.inventory.code[m.inventory.current];}
@@ -44,7 +44,7 @@ static int prep_gate(void) {
  init(); m.prep_pending=true;
  PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_WAIT,.warehouse_vision=true};
  Path_Tick(&m,0,&in); CHECK(queries==0 && m.phase==0);
- in.reply=PATH_OK; Path_Tick(&m,4,&in); CHECK(last.kind==PC_MOVE && last.x==-10 && offsets==0 && queries==0);
+ in.reply=PATH_OK; Path_Tick(&m,4,&in); CHECK(last.kind==PC_MOVE && last.x==-25 && offsets==0 && queries==0);
  Path_Tick(&m,5,&in); CHECK(queries==0 && offsets==1 && m.phase==11);
  Path_Tick(&m,10,&in); CHECK(queries==1 && m.phase==10);
  return 0;
@@ -70,7 +70,7 @@ static int moving_stop(void) {
 static int first_column_creep(void) {
  init();
  PathInput in={.armed=true,.settled=true,.gray=6,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
- Path_Tick(&m,0,&in); CHECK(last.kind==PC_MOVE && last.x==-10 && offsets==0 && queries==0);
+ Path_Tick(&m,0,&in); CHECK(last.kind==PC_MOVE && last.x==-25 && offsets==0 && queries==0);
  Path_Tick(&m,1,&in); CHECK(offsets==1 && queries==0 && m.phase==11);
  in.settled=false; Path_Tick(&m,5,&in); CHECK(queries==0);
  in.settled=true; Path_Tick(&m,10,&in); CHECK(queries==1 && m.phase==10);
@@ -86,7 +86,7 @@ static int first_column_creep(void) {
 static int offset_line_check(void) {
  init();
  PathInput in={.armed=true,.settled=true,.gray=0,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
- Path_Tick(&m,0,&in); CHECK(last.kind==PC_MOVE && last.x==-10 && offsets==0 && queries==0);
+ Path_Tick(&m,0,&in); CHECK(last.kind==PC_MOVE && last.x==-25 && offsets==0 && queries==0);
  Path_Tick(&m,1,&in); CHECK(offsets==1 && queries==0);
  Path_Tick(&m,5,&in); CHECK(m.phase==10 && queries==1);
  in.warehouse_ready=true; Path_Tick(&m,10,&in); CHECK(moves==1 && m.phase==8);
@@ -96,14 +96,14 @@ static int entry_back(void) {
  init();
  PathInput in={.armed=true,.settled=true,.gray=6,.warehouse_vision=true,.map_yaw_deg=90};
  Path_Tick(&m,0,&in);
- CHECK(last.kind==PC_MOVE && fabsf(last.x)<0.001f && fabsf(last.y-10)<0.001f);
+ CHECK(last.kind==PC_MOVE && fabsf(last.x)<0.001f && fabsf(last.y-25)<0.001f);
  CHECK(m.phase==WAREHOUSE_ENTRY_BACK && queries==0 && offsets==0);
  in.settled=false;Path_Tick(&m,100,&in);CHECK(queries==0 && offsets==0);
- in.settled=true;Path_Tick(&m,200,&in);CHECK(offsets==1 && queries==0 && last.y==-15);
+ in.settled=true;Path_Tick(&m,200,&in);CHECK(offsets==1 && queries==0 && last.y==-25);
  in.settled=false;Path_Tick(&m,205,&in);CHECK(queries==0);
  in.settled=true;Path_Tick(&m,210,&in);CHECK(queries==1);
  init();in.map_yaw_deg=0;Path_Tick(&m,0,&in);in.settled=false;
- Path_Tick(&m,5000,&in);CHECK(m.result==PATH_TIMEOUT && offsets==0 && queries==0);
+ Path_Tick(&m,5000,&in);CHECK(m.result==PATH_RUNNING && offsets==0 && queries==0);
  return 0;
 }
 int main(void) {

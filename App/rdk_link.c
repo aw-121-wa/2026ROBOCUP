@@ -291,7 +291,7 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
 void Rdk_Tick(RdkLink *r, uint32_t n)
 {
     if (r->warehouse_active) {
-        if (r->locked || (uint32_t)(n-r->warehouse_started)>=r->warehouse_timeout) {
+        if (r->locked || (!r->no_timeout && (uint32_t)(n-r->warehouse_started)>=r->warehouse_timeout)) {
             r->warehouse_active=false; r->warehouse_reply=PATH_NONE; r->warehouse_digit=0;
         } else if (!r->warehouse_sent && r->transmit(r->context,r->warehouse_request,strlen(r->warehouse_request)))
             r->warehouse_sent=true;
@@ -309,7 +309,7 @@ void Rdk_Tick(RdkLink *r, uint32_t n)
     if (!r->active)
         return;
     uint32_t elapsed = n - r->started;
-    if (elapsed >= r->timeout || ((r->stage == 1 || r->stage == 3 || r->stage == 7 || r->stage == 9 || r->stage == 11) && elapsed >= 2000))
+    if (!r->no_timeout && (elapsed >= r->timeout || ((r->stage == 1 || r->stage == 3 || r->stage == 7 || r->stage == 9 || r->stage == 11) && elapsed >= 2000)))
     {
         fail(r, 1);
         return;

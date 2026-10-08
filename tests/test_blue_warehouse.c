@@ -6,7 +6,7 @@ static bool send(void *ctx,const PathCommand *c) {
  (void)ctx;
  assert(c->kind!=PC_GROUP && c->kind!=PC_TURN && c->kind!=PC_DISC && c->kind!=PC_STAIR);
  if(c->kind==PC_WAREHOUSE_DIGIT) queries++;
- if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {assert(c->x>0 || (c->x==-10 && c->y==0)); if(c->x>0) moves++;}
+ if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {assert(c->x>0 || (c->x==-25 && c->y==0)); if(c->x>0) moves++;}
  return true;
 }
 int main(void) {

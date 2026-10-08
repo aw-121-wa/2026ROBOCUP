@@ -39,7 +39,7 @@ void Turn_Tick(TurntableLink *t, uint32_t n, bool idle)
 {
     if (!t->pending)
         return;
-    if ((uint32_t)(n - t->started) >= (t->stopping || t->steps == 1 ? 2000U : 3000U))
+    if (!t->no_timeout && (uint32_t)(n - t->started) >= (t->stopping || t->steps == 1 ? 2000U : 3000U))
     {
         t->reply = PATH_FAILED;
         t->pending = false;

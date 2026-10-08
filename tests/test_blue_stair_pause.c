@@ -38,7 +38,7 @@ int main(void) {
         Path_Init(&m,send,0);m.blue=blue;m.result=PATH_RUNNING;m.step=9;m.phase=22;
         in.settled=true;in.x_mm=in.y_mm=0;
         PathChassis_Tick(&m,3000,&in);
-        assert(last.kind==PC_MOVE && last.x==(blue?100:200));
+        assert(last.kind==PC_MOVE && last.x==(blue?100:190));
     }
     /* Blue must meet the same absolute heading gates even with inner probes lit. */
     for (unsigned step=8;step<=13;step++) {

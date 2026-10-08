@@ -334,7 +334,7 @@ void Chassis_BeginPath(void)
 bool Chassis_ReturnHome(unsigned leg)
 {
     if (!path_heading_enabled || !state.armed || !Chassis_IsSettled()) return false;
-    if (fabsf(Angle_Wrap(state.yaw_rad-map_yaw)) > 0.5f*RAD) return false;
+    /* Return travel keeps heading control active without an angle admission gate. */
     if (leg>2 || !isfinite(state.x_mm) || !isfinite(state.y_mm) || !isfinite(state.yaw_rad)) return false;
     float travel;
     float current_y=-sinf(map_yaw)*state.x_mm+cosf(map_yaw)*state.y_mm;
@@ -358,8 +358,9 @@ bool Chassis_ReturnHome(unsigned leg)
     float by=leg==0 ? travel*sn : -travel*c;
     route_heading = heading = map_yaw;
     integral = 0;
-    return Chassis_Move(bx, by, (leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S)*route_policy.travel_speed_scale,
-                        CHASSIS_HOME_ACCEL_MM_S2*route_policy.travel_speed_scale, CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
+    float boost=leg==2 ? 1.0f : PATH_TRAVEL_BOOST;
+    return Chassis_Move(bx, by, (leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S)*route_policy.travel_speed_scale*boost,
+                        CHASSIS_HOME_ACCEL_MM_S2*route_policy.travel_speed_scale*boost, CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
 }
 void Chassis_Stop(void)
 {
@@ -1130,8 +1131,11 @@ void Chassis_Update(void)
     else if (path_body || normal_stopping)
     {
         float target[3] = {vx, vy, wz};
+        /* Stair capture strengthens translation braking only; orbit/yaw stay unchanged. */
+        float capture_scale = route_policy.stationary_hold ?
+            CHASSIS_STAIR_CAPTURE_BRAKE_SCALE : CHASSIS_CAPTURE_BRAKE_SCALE;
         Motion_SlewVelocity(body_output, target, dt,
-                            (normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : BODY_ACCEL_MM_S2) * route_policy.travel_speed_scale,
+                            (normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? capture_scale : 1.0f) : BODY_ACCEL_MM_S2) * route_policy.travel_speed_scale,
                             normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : YAW_ACCEL_RAD_S2);
         vx = body_output[0]; vy = body_output[1]; wz = body_output[2];
         if (normal_stopping && vx == 0 && vy == 0 && wz == 0) normal_stopping = false;

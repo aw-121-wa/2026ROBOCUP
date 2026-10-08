@@ -1,6 +1,9 @@
 #ifndef PATH_CONFIG_H
 #define PATH_CONFIG_H
 #include "heading_tuning.h"
+/* Extra cruise/acceleration gain; line search and pillar orbit are excluded. */
+#define PATH_TRAVEL_BOOST 1.3f
+#define PATH_WAREHOUSE_UNTIMED(m) ((m)->step==12 || ((m)->step==13 && (m)->point<9))
 /* Full blue material flow; set to 0 only for collection-without-storage tests. */
 #ifndef PATH_BLUE_MATERIAL_ENABLE
 #define PATH_BLUE_MATERIAL_ENABLE 1
@@ -20,9 +23,9 @@
 #endif
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
 #define PATH_WAREHOUSE_TARGET_DEG(blue) 0.0f
-#define PATH_WAREHOUSE_ENTRY_BACK_MM 10.0f
-#define PATH_WAREHOUSE_FIRST_RIGHT_MM 15.0f
-#define PATH_WAREHOUSE_CREEP_LIMIT_MM 200.0f
+#define PATH_WAREHOUSE_ENTRY_BACK_MM 25.0f
+#define PATH_WAREHOUSE_FIRST_RIGHT_MM 25.0f
+#define PATH_WAREHOUSE_CREEP_LIMIT_MM 300.0f
 #define PATH_WAREHOUSE_CREEP_SPEED_RPM 16.0f
 #define PATH_WAREHOUSE_DIGIT_ADVANCE_MM 25.0f
 #define PATH_WAREHOUSE_CREEP_ACCEL 250.0f

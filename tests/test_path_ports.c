@@ -76,9 +76,11 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
     /* Both route scales can occur before diagnostics publishes the new step. */
     bool unscaled=(fabsf(a-650)<.01f || fabsf(a-850)<.01f || fabsf(a-300)<.01f || fabsf(a-250)<.01f);
     bool scaled=(fabsf(a-845)<.01f || fabsf(a-1105)<.01f || fabsf(a-390)<.01f || fabsf(a-325)<.01f);
-    if(!unscaled && !scaled) return false;
+    bool boosted=(fabsf(a-1098.5f)<.02f || fabsf(a-1436.5f)<.02f || fabsf(a-507)<.02f || fabsf(a-422.5f)<.02f);
+    bool retuned=(fabsf(a-714.999f)<.03f || fabsf(a-935)<.03f || fabsf(a-1428.05f)<.03f);
+    if(!unscaled && !scaled && !boosted && !retuned) return false;
     if(!(fabsf(d-650)<.01f || fabsf(d-850)<.01f || fabsf(d-300)<.01f ||
-         fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
+         fabsf(d-715)<.03f || fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }
@@ -463,6 +465,11 @@ int main(int argc, char **argv) {
             moving=false;
             if (!group3_replied && !strcmp(wire,"GROUP 3\r\n")) {
                 reply("GROUP_ACK 3\r\nGROUP_DONE 3\r\n"); group3_replied=true;
+            }
+            if(path_diagnostics.step==13 && !strncmp(wire,"WAREHOUSE_CHECK ",16)) {
+                unsigned token=0;sscanf(wire,"WAREHOUSE_CHECK %u",&token);
+                char response[60];snprintf(response,sizeof(response),"WAREHOUSE_DIGIT %u 0\r\n",token);
+                reply(response);
             }
             if(path_diagnostics.step==13 && path_diagnostics.phase==3 &&
                !strncmp(wire,"GROUP 1",7) && wire_sequence!=group_sequence) {

@@ -67,6 +67,10 @@ int main(void)
     for(unsigned n=0;n<100;n++) Turn_Tick(&t,n,true);
     Turn_Tick(&t,t.at+239,true); CHECK(t.pending);
     Turn_Tick(&t,t.at+240,true); CHECK(!t.pending && t.reply==PATH_OK);
+    p=(Port){0};Turn_Init(&t,tx,&p);t.no_timeout=true;
+    CHECK(Turn_StartSteps(&t,false,1,0));Turn_Tick(&t,60000,false);
+    CHECK(t.pending && t.reply==PATH_WAIT);
+    t.no_timeout=false;Turn_Tick(&t,60001,false);CHECK(t.reply==PATH_FAILED);
     puts("Turntable transport tests passed");
     return 0;
 }

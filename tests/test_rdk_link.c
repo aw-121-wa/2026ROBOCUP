@@ -147,5 +147,13 @@ int main(void) {
     Rdk_Tick(&r, 1100);
     CHECK(sends == n + 1 && !strcmp(wire, "DISC_CANCEL\r\n"));
     CHECK(r.locked && !r.active && r.reply == PATH_FAILED);
+    Rdk_Init(&r,0,tx,0);r.no_timeout=true;
+    CHECK(Rdk_WarehouseBegin(&r,0,0,100));
+    Rdk_Tick(&r,60000);CHECK(r.warehouse_active && r.warehouse_reply==PATH_WAIT);
+    r.no_timeout=false;Rdk_Tick(&r,60001);CHECK(!r.warehouse_active);
+    Rdk_Init(&r,0,tx,0);r.stage=2;r.no_timeout=true;
+    CHECK(Rdk_Begin(&r,"GROUP",110,0,100));Rdk_Tick(&r,60000);
+    CHECK(r.active && !r.locked);
+    r.no_timeout=false;Rdk_Tick(&r,60001);CHECK(r.locked);
     puts("ZHY link tests passed"); return 0;
 }

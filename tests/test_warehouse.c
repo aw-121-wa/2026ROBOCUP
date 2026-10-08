@@ -12,7 +12,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_RETURN_HOME) homes++;
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
-    if(c->kind==PC_MOVE && c->x==-10 && c->y==0) return c->acceleration==300 && c->deceleration==300;
+    if(c->kind==PC_MOVE && c->x==-25 && c->y==0) return c->acceleration==300 && c->deceleration==300;
     if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
     if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
@@ -106,14 +106,14 @@ static int errors(void) {
     BallInventory_Step(&m.inventory,false); m.phase=1;
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_TURN && groups==0);
     Path_Tick(&m,2999,&in); CHECK(m.result==PATH_RUNNING && groups==0);
-    Path_Tick(&m,3000,&in); CHECK(m.result==PATH_TIMEOUT && groups==0 && m.inventory.occupied==1);
+    Path_Tick(&m,3000,&in); CHECK(m.result==PATH_RUNNING && groups==0 && m.inventory.occupied==1);
     init(); CHECK(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED); m.phase=1;
     Path_Tick(&m,0,&in); Path_Tick(&m,5,&in); CHECK(groups==1 && m.inventory.occupied==1);
     Path_Tick(&m,100,&in); CHECK(m.inventory.occupied==1);
     in.reply=PATH_FAILED; Path_Tick(&m,105,&in); CHECK(m.result==PATH_ERROR && m.inventory.occupied==1);
     init(); m.inventory.uncertain=true; Path_Tick(&m,0,&in); CHECK(m.result==PATH_ERROR && moves==0);
     init(); m.point=3; Path_Tick(&m,0,&in); in.settled=false;
-    Path_Tick(&m,30000,&in); CHECK(m.result==PATH_TIMEOUT && groups==0);
+    Path_Tick(&m,30000,&in); CHECK(m.result==PATH_RUNNING && groups==0);
     init(); Path_Cancel(&m); CHECK(m.result==PATH_CANCELED && groups==0);
     init(); m.inventory.occupied=1; m.inventory.uid[0]=123; /* Unknown destination: never guess a row. */
     in.settled=true;
@@ -122,6 +122,12 @@ static int errors(void) {
     return 0;
 }
 static int home_line_stop(void) {
+ init(); m.point=9; m.phase=6;
+ PathInput tilted={.armed=true,.settled=false,.map_yaw_deg=12};
+ Path_Tick(&m,0,&tilted); CHECK(m.phase==6);
+ tilted.settled=true;
+ Path_Tick(&m,20000,&tilted); CHECK(m.phase==5 && m.result==PATH_RUNNING);
+ Path_Tick(&m,20005,&tilted); CHECK(last.kind==PC_RETURN_HOME && last.argument==0);
  for(unsigned mask=0;mask<16;mask++) {
   init(); m.point=9; m.phase=5;
   PathInput in={.armed=true,.settled=true,.gray=15};

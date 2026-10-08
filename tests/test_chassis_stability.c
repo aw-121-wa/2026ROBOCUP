@@ -121,6 +121,14 @@ int main(int argc,char **argv) {
         assert(body_output[0]==-330 && body_output[2]==-1);
         assert(fabsf(planner.distance-50*90*RAD)<.001f);
         assert(fabsf(Angle_Wrap(route_heading-180*RAD))<1e-5f);
+        Chassis_Hold();wait_stop();
+        state.yaw_rad=97*RAD;path_yaw.continuous=state.yaw_rad;
+        assert(Chassis_Body(-330,0,-1));
+        state.velocity[0]=body_output[0]=-330;
+        state.velocity[1]=body_output[1]=0;
+        /* Red 1.3 speed scale: 30 rpm is approximately 153.2 mm/s. */
+        assert(Chassis_ExitOrbit(-25,0,180,996,153.2f,845,845));
+        assert(fabsf(planner.distance-25)<.001f && path_blend);
         Chassis_Stop();assert(!Chassis_ExitOrbit(-200,0,180,760,314,650,650));
     } else if(!strcmp(argv[1],"capture")) {
         assert(Chassis_Body(-295,0,-0.86f));
@@ -211,7 +219,10 @@ int main(int argc,char **argv) {
         assert(fabsf(planner.distance-400)<.01f && planner.peak<=195 && dy<-.999f);
         Chassis_Hold();wait_stop();
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=90*RAD;
-        assert(!Chassis_ReturnHome(0));
+        assert(Chassis_ReturnHome(0));
+        assert(fabsf(dx)<1e-5f && dy>.999f);
+        assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
+        Chassis_Hold();wait_stop();
         assert(Chassis_AlignHome(0));assert(fabsf(rotate_tolerance_deg-0.1f)<1e-6f);
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
@@ -262,6 +273,14 @@ int main(int argc,char **argv) {
         assert(!state.armed);
         for(int i=0;i<4;i++)assert(state.rpm_requested[i]==0);
     } else if(!strcmp(argv[1],"policy")) {
+        assert(fabsf(PathPolicy_CommandBoost(0,PC_MOVE)-1.69f)<.001f);
+        assert(PathPolicy_CommandBoost(5,PC_MOVE_ROTATE)==1.3f);
+        assert(PathPolicy_CommandBoost(9,PC_MOVE)==1.0f);
+        assert(PathPolicy_CommandBoost(13,PC_FINISH_FORWARD)==1.0f);
+        assert(PathPolicy_CommandBoost(6,PC_BODY)==1);
+        assert(PathPolicy_CommandBoost(9,PC_BODY)==1);
+        assert(PathPolicy_CommandBoost(13,PC_MAP_SEARCH)==1);
+        assert(PathPolicy_CommandBoost(8,PC_ARC)==1);
         /* Control uses explicit policy even when diagnostics claim another side/stage. */
         ChassisRoutePolicy p={.stair_target_deg=180.0f};
         Chassis_SetRoutePolicy(p); path_diagnostics.blue=false;

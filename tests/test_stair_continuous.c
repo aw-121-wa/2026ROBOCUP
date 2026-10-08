@@ -69,18 +69,18 @@ int main(void) {
  /* Boundary detection cannot authorize the previous level's action. */
  PathMission m;Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;
  m.stair_scanning=true;m.waiting=true;
- PathInput in={.armed=true,.settled=true,.x_mm=200,.ball_index=1};
- stopped=0;Path_Tick(&m,10,&in);assert(m.phase==25 && stopped==0);
+ PathInput in={.armed=true,.settled=true,.x_mm=190,.ball_index=1};
+ stopped=0;Path_Tick(&m,10,&in);assert(m.phase==25 && stopped==0 && last.kind==PC_HOLD && last.argument==0);
  Path_Tick(&m,20,&in);assert(last.kind==PC_PILLAR_END && stopped==0);
  /* A ball just before the boundary may brake beyond it: still no grant. */
- m.phase=22;m.waiting=true;in.settled=false;in.x_mm=199;m.stair_distance=199;
- Path_Tick(&m,30,&in);assert(m.phase==23);
- in.settled=true;in.x_mm=200;Path_Tick(&m,40,&in);assert(m.phase==25 && !stopped);
+ m.phase=22;m.waiting=true;in.settled=false;in.x_mm=189;m.stair_distance=189;
+ Path_Tick(&m,30,&in);assert(m.phase==23 && last.kind==PC_HOLD && last.argument==1);
+ in.settled=true;in.x_mm=190;Path_Tick(&m,40,&in);assert(m.phase==25 && !stopped);
  /* Projection follows the starting direction, not absolute global X. */
  Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;
  m.stair_axis=3.14159265359f;m.waiting=true;
- in=(PathInput){.armed=true,.settled=true,.x_mm=-200};
- Path_Tick(&m,1,&in);assert(m.phase==27 && fabsf(m.stair_distance-200)<.01f);
+ in=(PathInput){.armed=true,.settled=true,.x_mm=-190};
+ Path_Tick(&m,1,&in);assert(m.phase==27 && fabsf(m.stair_distance-190)<.01f);
  /* No RFID resume: never restart movement. */
  m.phase=24;m.stair_scanning=true;in.x_mm=-100;m.stair_distance=100;
  Path_Tick(&m,1000,&in);assert(m.phase==24 && m.grabs==0);

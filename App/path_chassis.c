@@ -45,7 +45,7 @@ static void leave_pillar(PathMission *m, uint32_t now, const PathInput *in)
     m->step=8; m->phase=0; m->waiting=false; m->stable=false; m->entered=now;
     PathChassis_Tick(m,now,in); /* Same tick, no stop or stationary-angle admission. */
 }
-/* Orbit translation and rotation both scaled by 1.323, preserving the command radius. */
+/* Keep reduced translation speed; angular speed / 1.05 enlarges radius by 5%. */
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
     if ((PATH_VISION_ENABLE && in->reply == PATH_FAILED) ||
@@ -90,7 +90,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->orbit_yaw = in->yaw_deg;
                 m->orbit_ms = 0;
                 m->previous = now;
-                if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000)) m->phase = 2;
+                if (emit(m, PC_BODY, -80.94114f, 0, -58.653f, 0, 15000)) m->phase = 2;
                 break;
             }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
@@ -133,7 +133,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000)) m->phase = 2;
+            else if (emit(m, PC_BODY, -80.94114f, 0, -58.653f, 0, 15000)) m->phase = 2;
         }
         break;
     case 5:
@@ -156,7 +156,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             }
             else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
                 leave_pillar(m,now,in);
-            else if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000 - m->orbit_ms)) m->phase = 2;
+            else if (emit(m, PC_BODY, -80.94114f, 0, -58.653f, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
         break;
     case 7:
@@ -187,7 +187,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 100.0f : 200.0f, 500, 520, 860};
+    const float ends[] = {m->blue ? 100.0f : 190.0f, 500, m->blue ? 520.0f : 630.0f, 860};
     if (m->phase >= 20) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;
@@ -263,7 +263,9 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             break;
         }
         if (m->stair_scanning && in->ball_index>in->resume_index) {
-            hold(m);m->phase=23;m->waiting=false;break;
+            /* Capture braking only for a detected ball, not line/level boundaries. */
+            if (!emit(m,PC_HOLD,0,0,0,1,0)) break;
+            m->phase=23;m->waiting=false;break;
         }
         if (!m->waiting) {
             if (!in->settled) break;
@@ -322,7 +324,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case 28:
         if (PathLine_AlignFour(m,now,in)) {
-            m->point += (!m->blue && m->point==0) ? 2U : 1U; /* Red: 200 -> 520, no 500 stop. */
+            m->point += (!m->blue && m->point==0) ? 2U : 1U; /* Red: 190 -> 630, no 500 stop. */
             m->phase=20;
             m->waiting=false;
         }
@@ -353,7 +355,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if ((uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
         if (!m->waiting) {
             /* Red approach tuned at the side IR position; blue retains its own endpoint. */
-            PathCommand c={.kind=PC_MOVE_ROTATE,.x=-1450,.y=-750,
+            PathCommand c={.kind=PC_MOVE_ROTATE,.x=-1425,.y=-725,
                 .angle=90,.speed=195,.end_speed=PILLAR_SEARCH_SPEED_RPM,
                 .continuous=true,.timeout_ms=30000};
             if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=1815; c.y=-300; c.angle=-90; }
@@ -380,7 +382,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (m->phase == 0)
         {
             if (!m->waiting) {
-                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? -300 : -50,
+                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? -300 : -40,
                                .angle=STAIR_TARGET_DEG(m->blue),.speed=195,
                                .end_speed=(m->blue || PATH_BLUE_STAIR_TEST) ? 80 : 30,
                                .continuous=true,.timeout_ms=30000};

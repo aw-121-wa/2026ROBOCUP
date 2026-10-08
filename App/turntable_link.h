@@ -8,6 +8,7 @@ typedef struct
     PathReply reply;
     uint8_t frame, direction, steps;
     bool pending, stopping, awaiting, settling;
+    bool no_timeout;
     uint32_t started, at;
     uint16_t settle_ms;
     TurnTransmit transmit;

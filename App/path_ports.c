@@ -52,6 +52,7 @@ static void service_turn(uint32_t now)
             turn_purpose = TURN_STORE;
         }
     }
+    turn.no_timeout=mission.result==PATH_RUNNING && PATH_WAREHOUSE_UNTIMED(&mission);
     Turn_Tick(&turn, now, PINCFG_TURNTABLE_UART->gState == HAL_UART_STATE_READY);
     if (turn_purpose != TURN_IDLE && !turn.pending)
     {
@@ -252,24 +253,26 @@ static bool send(void *ctx, const PathCommand *c)
     (void)ctx;
     uint32_t now = HAL_GetTick();
     float speed_scale = PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase).travel_speed_scale;
+    float boost = PathPolicy_CommandBoost(mission.step,c->kind);
+    float accel_scale = speed_scale * fminf(boost,PATH_TRAVEL_BOOST);
     float scale = speed_scale * 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
     switch (c->kind)
     {
     case PC_ORBIT_ARC:
-        if (!Chassis_ExitOrbitArc(c->x,c->angle,c->speed*scale,PATH_MOVE_ACCEL_MM_S2*speed_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
+        if (!Chassis_ExitOrbitArc(c->x,c->angle,c->speed*scale*boost,PATH_MOVE_ACCEL_MM_S2*accel_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
         return motion_started(c,now,true);
     case PC_ORBIT_EXIT:
-        if (!Chassis_ExitOrbit(c->x,c->y,c->angle,c->speed*scale,c->end_speed*scale,PATH_MOVE_ACCEL_MM_S2*speed_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
+        if (!Chassis_ExitOrbit(c->x,c->y,c->angle,c->speed*scale*boost,c->end_speed*scale,PATH_MOVE_ACCEL_MM_S2*accel_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
         return motion_started(c,now,true);
     case PC_MOVE_ROTATE:
         if (c->continuous)
         {
             if (c->end_speed <= 0 ||
-                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale, PATH_MOVE_ACCEL_MM_S2 * speed_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale,
+                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale,
                                             c->start_speed * scale, c->end_speed * scale))
                 return false;
         }
-        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale, PATH_MOVE_ACCEL_MM_S2 * speed_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale))
+        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale))
             return false;
         return motion_started(c,now,c->continuous);
     case PC_HOME_ALIGN:
@@ -279,17 +282,17 @@ static bool send(void *ctx, const PathCommand *c)
         if (!Chassis_ReturnHome(c->argument)) return false;
         return motion_started(c,now,false);
     case PC_FINISH_FORWARD:
-        if (!Chassis_FinishForward(c->x,c->speed*scale,c->acceleration*speed_scale,c->deceleration*speed_scale)) return false;
+        if (!Chassis_FinishForward(c->x,c->speed*scale*boost,c->acceleration*accel_scale,c->deceleration*speed_scale)) return false;
         return motion_started(c,now,false);
     case PC_MOVE:
-        if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale,
-                                  (c->acceleration > 0 ? c->acceleration : PATH_MOVE_ACCEL_MM_S2) * speed_scale,
+        if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale * boost,
+                                  (c->acceleration > 0 ? c->acceleration : PATH_MOVE_ACCEL_MM_S2) * accel_scale,
                                   (c->deceleration > 0 ? c->deceleration : PATH_MOVE_DECEL_MM_S2) * speed_scale,
                                   c->start_speed * scale, c->end_speed * scale))
             return false;
         return motion_started(c,now,c->continuous);
     case PC_ARC:
-        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale, PATH_MOVE_ACCEL_MM_S2 * speed_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale,
+        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale,
                              c->start_speed * scale, c->end_speed * scale))
             return false;
         return motion_started(c,now,c->continuous);
@@ -334,7 +337,8 @@ static bool send(void *ctx, const PathCommand *c)
         motion_pending = true;
         return true;
     case PC_HOLD:
-        if (mission.step == 6 && (mission.phase == 2 || mission.phase == 3))
+        if ((mission.step == 6 && (mission.phase == 2 || mission.phase == 3)) ||
+            (mission.step == 9 && mission.phase == 22 && c->argument == 1))
             Chassis_HoldCapture();
         else Chassis_Hold();
         motion_pending = false;
@@ -623,6 +627,7 @@ void PathPorts_Tick(void)
         if (boot != 3) boot = 4;
     }
     /* Expire before processing newly received replies; a late reply cannot revive a timeout. */
+    rdk.no_timeout=mission.result==PATH_RUNNING && PATH_WAREHOUSE_UNTIMED(&mission);
     Rdk_Tick(&rdk, now);
     if (rdk.length && (uint32_t)(now - last_rx) >= 500)
         rdk.overflow = true;
@@ -694,7 +699,7 @@ void PathPorts_Tick(void)
     bool motion_done = false;
     if (motion_pending)
     {
-        if ((uint32_t)(now - motion_since) >= motion_timeout)
+        if (!PATH_WAREHOUSE_UNTIMED(&mission) && (uint32_t)(now - motion_since) >= motion_timeout)
         {
             io_fault |= 32;
             Chassis_HoldImmediate();

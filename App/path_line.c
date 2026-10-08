@@ -22,7 +22,7 @@ static void fail(PathMission *m, PathResult result)
 bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
                     uint32_t timeout, float lateral)
 {
-    if ((uint32_t)(now-m->entered)>=timeout) {
+    if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=timeout) {
         fail(m,PATH_TIMEOUT); return false;
     }
     if (m->step == 9) {
@@ -128,7 +128,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
     if ((uint32_t)(now-m->line_since) >= search_ms &&
         ((!bidirectional && m->line_search_state == LINE_SEARCH_IDLE) || !PathLine_Aligned(m, in->gray))) {
         if (bidirectional) {
-            if (m->line_search_state == LINE_SWEEP_FINAL) { fail(m,PATH_TIMEOUT); return false; }
+            if (m->line_search_state == LINE_SWEEP_FINAL && !PATH_WAREHOUSE_UNTIMED(m)) { fail(m,PATH_TIMEOUT); return false; }
             hold(m);
             m->line_search_state = m->line_search_state == LINE_SWEEP_REVERSE ? LINE_BRAKE_FINAL : LINE_BRAKE_REVERSE;
             return false;

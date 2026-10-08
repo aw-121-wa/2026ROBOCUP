@@ -11,10 +11,22 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
     return (ChassisRoutePolicy){
         .stair_target_deg=STAIR_TARGET_DEG(blue),
         .home_x_extra_trim_mm=blue ? 0.0f : 70.0f,
-        .travel_speed_scale=(!blue && running && step!=6) ? 1.3f : 1.0f,
+        .travel_speed_scale=(!blue && running && step!=6) ? (step==9 ? 1.0f : 1.3f) : 1.0f,
         .stationary_hold=running && step>=8 && step<=10,
         .hold_during_action=running && step==9 && phase==24,
         .suppress_lateral_comp=running && blue && step>=8 && step<=13};
+}
+/* Boundary speeds remain unchanged so entry into search/orbit stays continuous. */
+static inline float PathPolicy_CommandBoost(unsigned step, PathCommandKind kind)
+{
+    if (step==6 || step==9 || step==12 || step==13) return 1.0f;
+    switch (kind) {
+    case PC_MOVE: case PC_MOVE_ROTATE: case PC_FINISH_FORWARD: case PC_ORBIT_EXIT:
+        return step<=1 ? PATH_TRAVEL_BOOST*1.3f : PATH_TRAVEL_BOOST;
+    case PC_ARC:
+        return step==0 ? PATH_TRAVEL_BOOST*1.3f : 1.0f; /* Other arcs enter line search. */
+    default: return 1.0f;
+    }
 }
 static inline float PathPolicy_Target(const PathMission *m)
 {
