@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3 && !moving && blend_moves==0);
 #else
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==0 && map_headings==9 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==0 && map_headings==8 && zero_aligns==0 && path_diagnostics.rfid_count==0);
 #endif
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();

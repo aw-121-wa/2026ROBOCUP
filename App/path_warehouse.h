@@ -21,7 +21,8 @@ typedef enum {
     WAREHOUSE_HOME_BRAKE = 14,
     WAREHOUSE_ENTRY_BACK = 15,
     WAREHOUSE_HOME_RIGHT = 16,
-    WAREHOUSE_HOME_SEARCH = 17
+    WAREHOUSE_HOME_SEARCH = 17,
+    WAREHOUSE_HOME_ADVANCE = 18
 } WarehousePhase;
 
 typedef enum {

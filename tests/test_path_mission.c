@@ -47,7 +47,7 @@ static int startup(void) {
     CHECK(p.commands[p.n-1].speed==155 && p.commands[p.n-1].end_speed==155);
     in.settled=false; in.motion_done=true; Path_Tick(&m,15,&in);
     CHECK(m.step==1 && m.part==0 && m.waiting && p.commands[p.n-1].kind==PC_MOVE);
-    CHECK(fabsf(p.commands[p.n-1].x-1978.9384f)<0.02f);
+    CHECK(fabsf(p.commands[p.n-1].x-2028.9384f)<0.02f);
     CHECK(p.commands[p.n-1].start_speed==155 && p.commands[p.n-1].continuous && p.commands[p.n-1].end_speed==25);
     in.motion_done=true; in.settled=false; in.gray=0; Path_Tick(&m,20,&in);
     CHECK(m.step==1 && m.part==1 && p.commands[p.n-1].kind==PC_ARC);
@@ -199,19 +199,19 @@ static int chassis_only(void) {
         for(unsigned j=before;j<p.n;j++) if(p.commands[j].kind==PC_MOVE) in.x_mm+=p.commands[j].x;
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
-    CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==4 && count(&p,PC_TURN)==0);
-    const float expected[]={5,120,380,20,340,110,-10,200,200};
+    CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
+    const float expected[]={5,200,320,340,110,-10,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
-        CHECK(n<9 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
+        CHECK(n<8 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
     }
-    CHECK(n==9);
-    CHECK(count(&p,PC_MAP_LATERAL)==1);
+    CHECK(n==8);
+    CHECK(count(&p,PC_MAP_LATERAL)==2);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
     for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==13 && m.point==9) in.gray=m.phase==5?0:6; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
-    CHECK(count(&p,PC_MAP_LATERAL)==1 && count(&p,PC_MOVE)==3 && count(&p,PC_ROTATE)==0);
+    CHECK(count(&p,PC_MAP_LATERAL)==2 && count(&p,PC_MOVE)==3 && count(&p,PC_ROTATE)==0);
     return 0;
 }
 static int chassis_errors(void) {

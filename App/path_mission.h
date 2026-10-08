@@ -113,6 +113,7 @@ typedef struct
     bool stair_scanning;
     bool approach_started, approach_slow;
     float approach_x, approach_y;
+    float home_line_y; /* Map-Y projection at first home-line detection. */
     uint32_t line_since;
     bool line_entry_detected;
     PathLineSearchState line_search_state;

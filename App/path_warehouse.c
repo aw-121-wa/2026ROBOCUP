@@ -94,6 +94,11 @@ static void advance(PathMission *m, uint32_t now)
         else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->phase=WAREHOUSE_ALIGN_HOME;
     }
 }
+static float home_map_y(const PathInput *in)
+{
+    float axis=(in->yaw_deg-in->map_yaw_deg)*0.01745329252f;
+    return -sinf(axis)*in->x_mm+cosf(axis)*in->y_mm;
+}
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
     if (m->point==9 && m->phase==WAREHOUSE_ALIGN_HOME && !m->inventory.occupied && !m->inventory.uncertain) {
@@ -110,8 +115,21 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         return;
     }
-    if (m->point==9 && m->phase==WAREHOUSE_HOME_BRAKE) {
+    if (m->point==9 && m->phase==WAREHOUSE_HOME_ADVANCE) {
         if (in->settled) m->result=PATH_DONE;
+        else if ((uint32_t)(now-m->entered)>=5000U) fail(m,PATH_TIMEOUT);
+        return;
+    }
+    if (m->point==9 && m->phase==WAREHOUSE_HOME_BRAKE) {
+        if (in->settled) {
+            float current=home_map_y(in);
+            float remaining=20.0f-(m->home_line_y-current);
+            if (m->blue || remaining<=0.5f) m->result=PATH_DONE;
+            else if (!isfinite(remaining)) fail(m,PATH_ERROR);
+            else if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,.y=-remaining,.timeout_ms=5000})) {
+                m->phase=WAREHOUSE_HOME_ADVANCE; m->entered=now;
+            }
+        }
         else if ((uint32_t)(now-m->entered)>=3000U) fail(m,PATH_TIMEOUT);
         return;
     }
@@ -123,6 +141,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!arrived) m->stable=true; /* Do not mistake the warehouse line for home. */
         if (leg && m->stable && arrived) {
             if (emit(m,(PathCommand){.kind=PC_HOLD})) {
+                m->home_line_y=home_map_y(in);
                 m->phase=WAREHOUSE_HOME_BRAKE; m->entered=now;
             }
         } else if (!m->waiting) {

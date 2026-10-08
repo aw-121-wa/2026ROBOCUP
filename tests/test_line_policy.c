@@ -5,6 +5,11 @@
 static PathCommand last;
 static bool send(void *ctx,const PathCommand *c) { (void)ctx; last=*c; return true; }
 int main(void) {
+    for (unsigned blue=0;blue<2;++blue) for (unsigned step=0;step<=13;++step) {
+        ChassisRoutePolicy p=PathPolicy_Chassis(blue,PATH_RUNNING,step,0);
+        assert(p.travel_speed_scale==(!blue && step!=6 ? 1.3f : 1.0f));
+        assert(p.home_x_extra_trim_mm==(blue ? 0.0f : 70.0f));
+    }
     PathMission m={.send=send,.step=9,.result=PATH_RUNNING};
     for(unsigned gray=0;gray<16;++gray)
         assert(PathLine_Aligned(&m,gray)==(gray==6));

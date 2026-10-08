@@ -10,6 +10,8 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
     bool running=result==PATH_RUNNING;
     return (ChassisRoutePolicy){
         .stair_target_deg=STAIR_TARGET_DEG(blue),
+        .home_x_extra_trim_mm=blue ? 0.0f : 70.0f,
+        .travel_speed_scale=(!blue && running && step!=6) ? 1.3f : 1.0f,
         .stationary_hold=running && step>=8 && step<=10,
         .hold_during_action=running && step==9 && phase==24,
         .suppress_lateral_comp=running && blue && step>=8 && step<=13};

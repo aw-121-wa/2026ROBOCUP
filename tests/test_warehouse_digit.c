@@ -12,7 +12,7 @@ static bool send(void *ctx,const PathCommand *c) {
  if(c->kind==PC_MAP_SEARCH) searches++;
  if(c->kind==PC_BODY || c->kind==PC_LINE_SEARCH) return false;
  if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {if(c->x<0) return c->x==-10 && c->y==0; moves++;}
- if(c->kind==PC_MAP_LATERAL) {offsets++; if(c->y!=-15) return false;}
+ if(c->kind==PC_MAP_LATERAL) {if(m.point==9) return c->y==-20; offsets++; if(c->y!=-15) return false;}
  if(c->kind==PC_HOLD) holds++;
  if(c->kind==PC_TURN) {turns++; for(unsigned k=0;k<(unsigned)c->x;k++) BallInventory_Step(&m.inventory,c->argument!=0);}
  if(c->kind==PC_GROUP) {if(groups>=9) return false; codes[groups++]=m.inventory.code[m.inventory.current];}

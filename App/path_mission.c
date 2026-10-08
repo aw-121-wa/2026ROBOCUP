@@ -142,7 +142,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             else if (m->step == 0)
                 m->waiting = emit_arc(m);
             else if (m->step == 1)
-                m->waiting = emit_move(m, START_FORWARD_MM, 0, 230.0f,
+                m->waiting = emit_move(m, START_FORWARD_MM + ((m->blue || PATH_BLUE_DISC_TEST) ? 0.0f : 50.0f), 0, 230.0f,
                                        START_BLEND_SPEED_RPM, DISC_ENTRY_SPEED_RPM, true);
             else
             {
@@ -162,7 +162,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             {
                 m->step = 1;
                 m->part = 0;
-                m->waiting = emit_move(m, START_FORWARD_MM, 0, 230.0f,
+                m->waiting = emit_move(m, START_FORWARD_MM + ((m->blue || PATH_BLUE_DISC_TEST) ? 0.0f : 50.0f), 0, 230.0f,
                                        START_BLEND_SPEED_RPM, DISC_ENTRY_SPEED_RPM, true);
             }
             m->entered = now;

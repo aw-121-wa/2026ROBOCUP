@@ -39,8 +39,8 @@ static void run(unsigned balls) {
  }
  assert(m.step==11 && fabsf(in.x_mm-865)<.1f);
  assert(g4==1 && g3==1 && stopped==balls && m.grabs==balls);
- assert(scans==(balls==2?1:4));
- assert(headings==4); /* Entry plus all three intermediate boundaries, even when full. */
+ assert(scans==(balls==2?1:3));
+ assert(headings==3); /* Entry plus all three intermediate boundaries, even when full. */
 }
 static bool tx(void*p,const char*s,size_t n){(void)p;(void)s;(void)n;return true;}
 static void feed(RdkLink*r,const char*s){while(*s)Rdk_Feed(r,*s++);}
@@ -69,18 +69,18 @@ int main(void) {
  /* Boundary detection cannot authorize the previous level's action. */
  PathMission m;Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;
  m.stair_scanning=true;m.waiting=true;
- PathInput in={.armed=true,.settled=true,.x_mm=120,.ball_index=1};
+ PathInput in={.armed=true,.settled=true,.x_mm=200,.ball_index=1};
  stopped=0;Path_Tick(&m,10,&in);assert(m.phase==25 && stopped==0);
  Path_Tick(&m,20,&in);assert(last.kind==PC_PILLAR_END && stopped==0);
  /* A ball just before the boundary may brake beyond it: still no grant. */
- m.phase=22;m.waiting=true;in.settled=false;in.x_mm=119;m.stair_distance=119;
+ m.phase=22;m.waiting=true;in.settled=false;in.x_mm=199;m.stair_distance=199;
  Path_Tick(&m,30,&in);assert(m.phase==23);
- in.settled=true;in.x_mm=120;Path_Tick(&m,40,&in);assert(m.phase==25 && !stopped);
+ in.settled=true;in.x_mm=200;Path_Tick(&m,40,&in);assert(m.phase==25 && !stopped);
  /* Projection follows the starting direction, not absolute global X. */
  Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;
  m.stair_axis=3.14159265359f;m.waiting=true;
- in=(PathInput){.armed=true,.settled=true,.x_mm=-120};
- Path_Tick(&m,1,&in);assert(m.phase==27 && fabsf(m.stair_distance-120)<.01f);
+ in=(PathInput){.armed=true,.settled=true,.x_mm=-200};
+ Path_Tick(&m,1,&in);assert(m.phase==27 && fabsf(m.stair_distance-200)<.01f);
  /* No RFID resume: never restart movement. */
  m.phase=24;m.stair_scanning=true;in.x_mm=-100;m.stair_distance=100;
  Path_Tick(&m,1000,&in);assert(m.phase==24 && m.grabs==0);

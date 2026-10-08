@@ -135,8 +135,27 @@ static int home_line_stop(void) {
   if(bits>=2) {
    CHECK(m.phase==14 && last.kind==PC_HOLD && m.result==PATH_RUNNING);
    in.gray=0;Path_Tick(&m,20,&in);CHECK(m.phase==14);
-   in.settled=true;Path_Tick(&m,25,&in);CHECK(m.result==PATH_DONE);
+   in.settled=true;Path_Tick(&m,25,&in);
+   CHECK(m.result==PATH_RUNNING && last.kind==PC_MAP_LATERAL && last.y==-20);
+   in.settled=false;Path_Tick(&m,30,&in);CHECK(m.result==PATH_RUNNING);
+   in.settled=true;Path_Tick(&m,35,&in);CHECK(m.result==PATH_DONE);
   } else CHECK(m.phase==16 && m.result==PATH_RUNNING);
+ }
+ return 0;
+}
+static int home_advance_braking(void) {
+ for(unsigned blue=0;blue<2;++blue) for(unsigned slide=0;slide<=25;slide+=5) {
+  init();m.blue=blue;m.point=9;m.phase=16;m.stable=true;m.waiting=true;
+  PathInput in={.armed=true,.gray=6,.y_mm=100};
+  Path_Tick(&m,0,&in);CHECK(m.phase==14 && last.kind==PC_HOLD);
+  in.y_mm=100-slide;in.settled=true;
+  Path_Tick(&m,100,&in);
+  if(blue || slide>=20) CHECK(m.result==PATH_DONE);
+  else {
+   CHECK(m.phase==18 && last.kind==PC_MAP_LATERAL && last.y==-(20.0f-slide));
+   in.settled=false;Path_Tick(&m,200,&in);CHECK(m.phase==18 && m.result==PATH_RUNNING);
+   Path_Tick(&m,5100,&in);CHECK(m.result==PATH_TIMEOUT);
+  }
  }
  return 0;
 }
@@ -154,6 +173,7 @@ static int home_missing_line(void) {
  return 0;
 }
 int main(void) {
+    CHECK(home_advance_braking()==0);
     CHECK(home_missing_line()==0);
     CHECK(home_line_stop()==0);
     for(unsigned mask=0;mask<512;mask++) CHECK(run(mask)==0);

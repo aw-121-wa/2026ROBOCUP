@@ -4,6 +4,8 @@
 /* Explicit mission input. Diagnostics must never be used as control commands. */
 typedef struct {
     float stair_target_deg;
+    float home_x_extra_trim_mm;
+    float travel_speed_scale;
     bool stationary_hold;
     bool hold_during_action;
     bool suppress_lateral_comp;

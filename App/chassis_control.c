@@ -45,7 +45,7 @@ ChassisConfig chassis_config = {.wheel_radius_mm = 37.5f,
                                 .command_mode = ZDT_MULTI_COMMAND};
 static ChassisState state;
 volatile ChassisHeadingDiagnostics chassis_heading_diagnostics;
-static ChassisRoutePolicy route_policy = {.stair_target_deg=STAIR_MAP_TARGET_DEG};
+static ChassisRoutePolicy route_policy = {.stair_target_deg=STAIR_MAP_TARGET_DEG, .travel_speed_scale=1.0f};
 void Chassis_SetRoutePolicy(ChassisRoutePolicy policy)
 {
     if (isfinite(policy.stair_target_deg)) route_policy=policy;
@@ -343,7 +343,7 @@ bool Chassis_ReturnHome(unsigned leg)
         float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
         float mx=(cosf(map_yaw)*x+sinf(map_yaw)*y)*scale;
         float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
-        travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM);
+        travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM-route_policy.home_x_extra_trim_mm);
         home_right_target=current_y-(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
         home_return_ready=true;
     } else {
@@ -357,8 +357,8 @@ bool Chassis_ReturnHome(unsigned leg)
     float by=leg==0 ? travel*sn : -travel*c;
     route_heading = heading = map_yaw;
     integral = 0;
-    return Chassis_Move(bx, by, leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S,
-                        CHASSIS_HOME_ACCEL_MM_S2, CHASSIS_HOME_BRAKE_MM_S2);
+    return Chassis_Move(bx, by, (leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S)*route_policy.travel_speed_scale,
+                        CHASSIS_HOME_ACCEL_MM_S2*route_policy.travel_speed_scale, CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
 }
 void Chassis_Stop(void)
 {
@@ -553,7 +553,7 @@ bool Chassis_MapLateral(float mm)
 {
     if (!path_heading_enabled || !Chassis_IsSettled()) return false;
     float angle = map_yaw - state.yaw_rad;
-    return Chassis_Move(-sinf(angle)*mm, cosf(angle)*mm, 30, 300, 300);
+    return Chassis_Move(-sinf(angle)*mm, cosf(angle)*mm, 30*route_policy.travel_speed_scale, 300*route_policy.travel_speed_scale, 300*route_policy.travel_speed_scale);
 }
 bool Chassis_AlignZero(void)
 {
@@ -998,6 +998,7 @@ void Chassis_Update(void)
         vx = vy = 0;
         float limit = 60.0f * (2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f) /
                       (chassis_config.half_track_mm + chassis_config.half_wheelbase_mm);
+        if (!rotate_map_precision && !rotate_measured_zero) limit *= route_policy.travel_speed_scale;
         float abs_error = fabsf(error);
         float rotate_limit;
         if (abs_error > 15.0f * RAD)
@@ -1088,7 +1089,7 @@ void Chassis_Update(void)
     {
         float target[3] = {vx, vy, wz};
         Motion_SlewVelocity(body_output, target, dt,
-                            normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : BODY_ACCEL_MM_S2,
+                            (normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : BODY_ACCEL_MM_S2) * route_policy.travel_speed_scale,
                             normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : YAW_ACCEL_RAD_S2);
         vx = body_output[0]; vy = body_output[1]; wz = body_output[2];
         if (normal_stopping && vx == 0 && vy == 0 && wz == 0) normal_stopping = false;
