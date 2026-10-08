@@ -63,6 +63,8 @@ bool Chassis_MoveArc(float radius_mm, float start_angle_deg, float turn_degrees,
 void Chassis_BeginPath(void);
 void Chassis_SetRoutePolicy(ChassisRoutePolicy policy);
 bool Chassis_ReturnHome(unsigned leg); /* 0: back, 1: right transit, 2: right line approach */
+bool Chassis_ExitOrbitArc(float radius, float target_deg, float speed, float acceleration, float deceleration);
+bool Chassis_ExitOrbit(float forward_mm, float lateral_mm, float target_deg, float speed, float end_speed, float acceleration, float deceleration);
 bool Chassis_FinishForward(float distance_mm, float speed, float acceleration, float deceleration);
 bool Chassis_AlignHome(float target_deg);
 bool Chassis_AlignMapAxis(void);

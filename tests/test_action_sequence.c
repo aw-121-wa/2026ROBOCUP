@@ -40,9 +40,9 @@ int main(void) {
     in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-85.2012f && last.speed==-64.827f);
     in.yaw_deg=-351; Path_Tick(&m,20010,&in); CHECK(m.phase==2);
     in.yaw_deg=-352.9f; Path_Tick(&m,20014,&in); CHECK(m.phase==2);
-    in.yaw_deg=-353.0f; Path_Tick(&m,20015,&in); CHECK(m.phase==3 && last.kind==PC_HOLD);
-    Path_Tick(&m,20020,&in); CHECK(last.kind==PC_PILLAR_END);
-    in.reply=PATH_OK; Path_Tick(&m,20025,&in); CHECK(m.step==7);
+    in.gray=0; in.yaw_deg=-353.0f; Path_Tick(&m,20015,&in); CHECK(m.step==8 && last.kind==PC_ORBIT_EXIT && m.pillar_depart_pending);
+    Path_Tick(&m,20020,&in); CHECK(last.kind==PC_ORBIT_EXIT && m.pillar_depart_pending);
+    in.reply=PATH_OK; Path_Tick(&m,20025,&in); CHECK(m.step==8 && !m.pillar_depart_pending && last.kind==PC_GROUP && last.argument==2);
 
     CHECK(Rdk_Begin(&r,"PILLAR",0,2,300000)); Rdk_Tick(&r,2);
     feed(&r,"PILLAR_ACK\r\nPILLAR_READY\r\nPILLAR_BALL 1\r\n");

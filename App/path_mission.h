@@ -49,6 +49,8 @@ typedef enum
     PC_STAIR_SCAN,
     PC_WAREHOUSE_DIGIT,
     PC_FINISH_FORWARD, /* Retarget current straight motion without stopping. */
+    PC_ORBIT_EXIT, /* Transfer moving orbit to map-heading translation. */
+    PC_ORBIT_ARC, /* Enter stair arc directly from moving orbit. */
 } PathCommandKind;
 typedef struct
 {
@@ -122,6 +124,7 @@ typedef struct
     bool waiting, stable, expired;
     bool prep_pending;
     bool disc_depart_pending;
+    bool pillar_depart_pending;
     uint32_t prep_since;
     bool heading_align_active;
     bool stair_heading_calibrated, warehouse_heading_calibrated;

@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "chassis_control.h"
 #include "host_command.h"
 #include "host_uart.h"
@@ -402,6 +403,47 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
     else if (!path_heading_chain) heading = state.yaw_rad;
     update_path_direction();
     return true;
+}
+bool Chassis_ExitOrbitArc(float radius, float target_deg, float speed, float acceleration, float deceleration)
+{
+    if (!state.armed || !path_heading_enabled || normal_stopping || planner.active ||
+        path_blend || path_arc || path_rotation || !isfinite(target_deg)) return false;
+    bool was_body=path_body;
+    float old_heading=heading, old_route=route_heading;
+    path_body=false;
+    heading=route_heading=Angle_Wrap(map_yaw+target_deg*RAD);
+    /* Keep wheel output continuous; the existing slew limiter handles the transition. */
+    if (Chassis_MoveArc(radius,180,-90,speed,acceleration,deceleration,speed,speed)) return true;
+    path_body=was_body;heading=old_heading;route_heading=old_route;
+    return false;
+}
+bool Chassis_ExitOrbit(float forward, float lateral, float target_deg, float speed, float end_speed, float acceleration, float deceleration)
+{
+    float distance=hypotf(forward,lateral);
+    if (!state.armed || !path_heading_enabled || normal_stopping || planner.active || path_blend ||
+        path_arc || path_rotation || !isfinite(distance) || fabsf(distance)<1 ||
+        !isfinite(target_deg) || !isfinite(state.yaw_rad) || !isfinite(speed) || speed<=0 ||
+        !isfinite(end_speed) || end_speed<=0 || !isfinite(acceleration) || acceleration<=0 ||
+        !isfinite(deceleration) || deceleration<=0)
+        return false;
+    float target=map_yaw+target_deg*RAD;
+    float turn=Angle_Wrap(target-state.yaw_rad);
+    /* Translate along the stair axis while yaw converges, carrying orbit velocity.
+     * Do not call Hold: output slew limits handle the angular-rate transition. */
+    float x=forward*cosf(turn)-lateral*sinf(turn);
+    float y=forward*sinf(turn)+lateral*cosf(turn);
+    float start=fmaxf(0,(state.velocity[0]*x+state.velocity[1]*y)/fabsf(distance));
+    bool was_body=path_body;
+    float old_heading=heading, old_route=route_heading;
+    path_body=false;
+    heading=route_heading=state.yaw_rad;
+    bool ok;
+    if (fabsf(turn)<0.01f*RAD) {
+        route_heading=heading=Angle_Wrap(target);
+        ok=Chassis_MoveBoundary(x,y,fmaxf(speed,start),acceleration,deceleration,start,end_speed);
+    } else ok=Chassis_MoveRotateBoundary(x,y,turn/RAD,fmaxf(speed,start),acceleration,deceleration,start,end_speed);
+    if (!ok) { path_body=was_body;heading=old_heading;route_heading=old_route; }
+    return ok;
 }
 bool Chassis_FinishForward(float distance, float speed, float acceleration, float deceleration)
 {

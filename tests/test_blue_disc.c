@@ -31,9 +31,9 @@ int main(void) {
 #if PATH_BLUE_PILLAR_TEST
     m.result=PATH_RUNNING;m.step=4;m.phase=0;m.waiting=false;
     Path_Tick(&m,55,&in);Path_Tick(&m,60,&in);
-    assert(last.kind==PC_MOVE_ROTATE && last.x==1715 && last.angle==-180);
+    assert(last.kind==PC_MOVE_ROTATE && last.x==1815 && last.y==-300 && last.angle==-90);
     Path_Tick(&m,65,&in);
-    assert(last.kind==PC_ARC && last.x==100 && last.y==180 && last.angle==-90);
+    assert(last.kind==PC_BODY && last.x==0 && last.y==30);
     Path_Tick(&m,70,&in);assert(last.kind==PC_BODY && last.x==0 && last.y==30);
     in.ir=true;Path_Tick(&m,75,&in);assert(last.kind==PC_HOLD);
     Path_Tick(&m,110,&in);in.yaw_deg=-180;Path_Tick(&m,115,&in);
@@ -41,8 +41,8 @@ int main(void) {
     in.yaw_deg=-180+354;Path_Tick(&m,120,&in);assert(m.phase==2);
     in.yaw_deg=-180-352;Path_Tick(&m,125,&in);assert(m.phase==2);
     in.yaw_deg=-180-353;in.settled=false;Path_Tick(&m,130,&in);
-    assert(last.kind==PC_HOLD && m.phase==3);
-    Path_Tick(&m,450,&in);assert(m.result==PATH_RUNNING);
+    assert(last.kind==PC_HOLD && m.result==PATH_DONE);
+    Path_Tick(&m,450,&in);assert(m.result==PATH_DONE);
     in.settled=true;Path_Tick(&m,455,&in);assert(m.result==PATH_DONE && m.step==6);
     Path_Tick(&m,500,&in);assert(m.result==PATH_DONE && m.step==6);
 #endif

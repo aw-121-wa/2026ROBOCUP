@@ -83,6 +83,45 @@ int main(int argc,char **argv) {
         assert(fabsf(heading)<1e-6f);
         assert(Chassis_Body(-200,0,-0.7f));tick();
         assert(fabsf(heading)<1e-6f);
+    } else if(!strcmp(argv[1],"orbit_exit")) {
+        /* Both winding directions must converge to the same map 180 axis. */
+        const float exit_yaw[]={173,-173,97,-83};
+        for(unsigned side=0;side<4;side++) {
+            Chassis_Hold();wait_stop();
+            state.yaw_rad=exit_yaw[side]*RAD;
+            path_yaw.continuous=state.yaw_rad;
+            route_heading=180*RAD;
+            assert(Chassis_Body(-330,0,-1));
+            state.velocity[0]=body_output[0]=-330;
+            state.velocity[1]=body_output[1]=0;
+            body_output[2]=-1;
+            assert(Chassis_ExitOrbit(-200,0,180,760,314,650,650));
+            assert(planner.active && path_blend && !path_body && !normal_stopping);
+            assert(body_output[0]==-330 && body_output[2]==-1);
+            assert(fabsf(blend_turn-Angle_Wrap((180-exit_yaw[side])*RAD))<1e-5f);
+            assert(fabsf(Angle_Wrap(route_heading-180*RAD))<1e-5f);
+            assert(planner.start_speed>=0 && planner.end_speed==314);
+            if(side<2) assert(planner.start_speed>320);
+            float wx=dx*cosf(state.yaw_rad)-dy*sinf(state.yaw_rad);
+            float wy=dx*sinf(state.yaw_rad)+dy*cosf(state.yaw_rad);
+            assert(wx>.999f && fabsf(wy)<1e-5f);
+        }
+        Chassis_Hold();wait_stop();
+        state.yaw_rad=97*RAD;path_yaw.continuous=state.yaw_rad;
+        assert(Chassis_Body(-330,0,-1));
+        assert(Chassis_ExitOrbit(0,50,180,760,118,650,650));
+        assert(fabsf(dx*cosf(state.yaw_rad)-dy*sinf(state.yaw_rad))<1e-5f);
+        assert(dx*sinf(state.yaw_rad)+dy*cosf(state.yaw_rad)<-.999f);
+        Chassis_Hold();wait_stop();
+        state.yaw_rad=97*RAD;path_yaw.continuous=state.yaw_rad;
+        assert(Chassis_Body(-330,0,-1));
+        body_output[0]=-330;body_output[2]=-1;
+        assert(Chassis_ExitOrbitArc(50,180,314,650,650));
+        assert(path_arc && !path_body && !normal_stopping);
+        assert(body_output[0]==-330 && body_output[2]==-1);
+        assert(fabsf(planner.distance-50*90*RAD)<.001f);
+        assert(fabsf(Angle_Wrap(route_heading-180*RAD))<1e-5f);
+        Chassis_Stop();assert(!Chassis_ExitOrbit(-200,0,180,760,314,650,650));
     } else if(!strcmp(argv[1],"capture")) {
         assert(Chassis_Body(-295,0,-0.86f));
         for(int n=0;n<200;n++) tick();

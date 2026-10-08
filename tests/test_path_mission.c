@@ -97,23 +97,14 @@ static int post_disc_turn(void) {
     m.result=PATH_RUNNING; m.step=5; in.ir=false;
     Path_Tick(&m,0,&in);
     CHECK(p.n==1 && p.commands[0].kind==PC_MOVE_ROTATE);
-    CHECK(p.commands[0].x==-1645 && p.commands[0].y==0);
-    CHECK(p.commands[0].angle==180 && p.commands[0].speed==195);
-    CHECK(p.commands[0].continuous && p.commands[0].end_speed==45);
+    CHECK(p.commands[0].x==-1450 && p.commands[0].y==-750);
+    CHECK(p.commands[0].angle==90 && p.commands[0].speed==195);
+    CHECK(p.commands[0].continuous && p.commands[0].end_speed==30);
     in.settled=false; in.motion_done=true; Path_Tick(&m,5,&in);
-    CHECK(m.step==5 && m.phase==1 && p.commands[p.n-1].kind==PC_ARC);
-    PathCommand arc=p.commands[p.n-1];
-    CHECK(arc.x==100 && arc.y==0 && arc.angle==90 && arc.continuous);
-    CHECK(arc.speed==45 && arc.start_speed==45 && arc.end_speed==30);
-    /* In the original map frame the arc adds (-100,-100), retaining X=-1745. */
-    CHECK(p.commands[0].x-arc.x==-1745);
-    Path_Tick(&m,10,&in); CHECK(m.step==6 && p.commands[p.n-1].kind==PC_BODY);
+    CHECK(m.step==6 && p.commands[p.n-1].kind==PC_BODY);
     CHECK(p.commands[p.n-1].x==0 && p.commands[p.n-1].y==30 && count(&p,PC_HOLD)==0);
     in.motion_done=false; in.ir=true; Path_Tick(&m,15,&in);
     CHECK(p.commands[p.n-1].kind==PC_HOLD);
-    /* An IR hit during the arc cancels it immediately, without waiting for motion_done. */
-    Path_Init(&m,send,&p);m.result=PATH_RUNNING;m.step=5;m.phase=1;
-    Path_Tick(&m,20,&in);CHECK(m.step==6 && p.commands[p.n-1].kind==PC_HOLD);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=5;
     Path_Tick(&m,30000,&in); CHECK(m.result==PATH_TIMEOUT);
     return 0;
@@ -169,7 +160,7 @@ static int chassis_only(void) {
         if(m.step==13 && m.point==9) in.gray=m.phase==5?0:6;
         Path_Tick(&m,t,&in);
     }
-    CHECK(m.step==7 && m.result==PATH_RUNNING);
+    CHECK(m.step==8 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==1 && count(&p,PC_TURN)==0);
     bool orbit=false;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+85.2012f)<0.001f && p.commands[i].speed==-64.827f) orbit=true;
@@ -187,7 +178,8 @@ static int chassis_only(void) {
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
     m.orbit_yaw=100; in.yaw_deg=-251;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
-    in.yaw_deg=-256; Path_Tick(&m,105,&in); CHECK(m.phase==3 && count(&p,PC_HOLD)==1);
+    in.yaw_deg=-256; Path_Tick(&m,105,&in); CHECK(m.step==8 && count(&p,PC_HOLD)==0 && count(&p,PC_ORBIT_EXIT)==1);
+    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-50 && p.commands[p.n-1].end_speed==30);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==30);
     in.ir=true; in.yaw_deg=0;

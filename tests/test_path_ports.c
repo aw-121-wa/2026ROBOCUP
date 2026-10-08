@@ -1,4 +1,5 @@
 #include "path_config.h"
+#include "path_policy.h"
 #include "stair_heading.h"
 #include "disc_task_config.h"
 #include "path_ports.h"
@@ -66,18 +67,18 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (test_blue && path_diagnostics.step==0 && fabsf(x)>100) assert(x<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1715);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1815);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    if(path_diagnostics.step==13 && fabsf(hypotf(x,y)-10)<0.01f && a==300 && d==300) { }
-    else if(path_diagnostics.step==13 && (fabsf(x)==200 || x==15) && y==0) {
-        if(a==150) { if(d!=650) return false; }
-        else if(a!=850 || d!=850) return false;
-    } else if(a!=650 && !(path_diagnostics.step==9 && a==850)) return false;
-    else if(d!=650) return false;
+    /* Both route scales can occur before diagnostics publishes the new step. */
+    bool unscaled=(fabsf(a-650)<.01f || fabsf(a-850)<.01f || fabsf(a-300)<.01f || fabsf(a-250)<.01f);
+    bool scaled=(fabsf(a-845)<.01f || fabsf(a-1105)<.01f || fabsf(a-390)<.01f || fabsf(a-325)<.01f);
+    if(!unscaled && !scaled) return false;
+    if(!(fabsf(d-650)<.01f || fabsf(d-850)<.01f || fabsf(d-300)<.01f ||
+         fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }
@@ -410,13 +411,15 @@ int main(int argc, char **argv) {
             CHECK(!strcmp(wire,"PILLAR_RFID_OK 2\r\n"));
             reply("PILLAR_RESUME 2\r\n"); tick(); CHECK(moving);
         }
-        yaw=-6.22f; tick(); CHECK(!moving); tick(); tick();
+        gray_line=false; outer_line=false; yaw=-6.22f; tick(); CHECK(moving && path_diagnostics.step==8); tick(); tick();
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));
-        reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==7);
+        reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==8);
         gray_line=false;
         for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"GROUP 2\r\n"));
-        gray_line=false; tick(); CHECK(moving); /* G2 completion does not block approach. */
+        gray_line=false;
+        for(unsigned i=0;i<4 && !moving;i++) tick();
+        CHECK(moving); /* G2 completion does not block approach. */
         reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
         for(unsigned i=0;i<30 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"GROUP 105\r\n"));
@@ -562,6 +565,8 @@ int main(int argc, char **argv) {
 }
 
 void Chassis_BeginPath(void) { }
+bool Chassis_ExitOrbitArc(float radius,float angle,float v,float a,float d) { (void)angle;map_headings++;moving=false;return Chassis_MoveArc(radius,180,-90,v,a,d,v,v); }
+bool Chassis_ExitOrbit(float x,float y,float angle,float v,float end,float a,float d) { (void)angle;(void)v;(void)end;(void)a;(void)d;pending_x=x;pending_y=y;map_headings++;moving=true;return true; }
 bool Chassis_ReturnHome(unsigned leg) { (void)leg; moving=true; return true; }
 bool Chassis_FinishForward(float x,float v,float a,float d) { (void)x;(void)v;(void)a;(void)d;moving=true;return true; }
 void Chassis_HoldImmediate(void) { Chassis_Hold(); }

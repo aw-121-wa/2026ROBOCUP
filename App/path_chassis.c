@@ -2,8 +2,6 @@
 #include "path_chassis.h"
 #include "stair_heading.h"
 #include "path_warehouse.h"
-#define PILLAR_ENTRY_RADIUS_MM 100.0f
-#define PILLAR_ENTRY_SPEED_RPM 45.0f
 #define PILLAR_SEARCH_SPEED_RPM 30.0f
 /* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
@@ -35,6 +33,17 @@ static void next(PathMission *m, uint32_t now)
     m->waiting = false;
     m->stable = false;
     m->entered = now;
+}
+static void leave_pillar(PathMission *m, uint32_t now, const PathInput *in)
+{
+    if (PATH_BLUE_PILLAR_TEST && !PATH_BLUE_STAIR_TEST) { hold(m);m->result=PATH_DONE;return; }
+    if (PATH_VISION_ENABLE) {
+        if (!emit(m,PC_PILLAR_END,0,0,0,0,5000)) { fail(m,PATH_ERROR);return; }
+        m->pillar_depart_pending=m->prep_pending=true;
+        m->prep_since=now;
+    }
+    m->step=8; m->phase=0; m->waiting=false; m->stable=false; m->entered=now;
+    PathChassis_Tick(m,now,in); /* Same tick, no stop or stationary-angle admission. */
 }
 /* Orbit translation and rotation both scaled by 1.323, preserving the command radius. */
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
@@ -104,35 +113,13 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         }
         else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
         {
-            hold(m);
-            m->entered = now;
-            m->phase = 3;
+            leave_pillar(m,now,in);
         }
         break;
     case 3:
-        if (!PATH_VISION_ENABLE)
-        {
-            /* Let the post-orbit angle settle before capturing the retreat heading. */
-            if (in->settled && (uint32_t)(now - m->entered) >= 300U) {
-                if (PATH_BLUE_PILLAR_TEST && !PATH_BLUE_STAIR_TEST) { hold(m); m->result=PATH_DONE; }
-                else next(m, now);
-            }
-            break;
-        }
-        if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
-        {
-            hold(m);
-            m->phase = 5;
-            m->entered = now;
-        }
-        else if (in->settled)
-        {
-            if (emit(m, PC_PILLAR_END, 0, 0, 0, 0, 5000))
-            {
-                m->phase = 7;
-                m->entered = now;
-            }
-        }
+        if (PATH_VISION_ENABLE && in->ball_index>m->grabs) {
+            hold(m);m->phase=5;m->entered=now;
+        } else leave_pillar(m,now,in);
         break;
     case 4:
         if (in->vision_ready)
@@ -168,7 +155,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->entered = now;
             }
             else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
-                m->phase = 3;
+                leave_pillar(m,now,in);
             else if (emit(m, PC_BODY, -85.2012f, 0, -64.827f, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
         break;
@@ -363,35 +350,16 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         /* Begin travel in the same tick as G1. */
         /* fall through */
     case 5:
-        if ((uint32_t)(now - m->entered) >= 30000U)
-            fail(m, PATH_TIMEOUT);
-        else if (m->phase == 1) {
-            /* Body heading is now 180 degrees. The arc turns translation from
-             * body +X to +Y, reaching the -1745 mm approach axis. */
-            if (in->ir || in->motion_done) {
-                next(m,now);
-                pillar(m,now,in); /* IR wins; otherwise carry the arc exit speed. */
-            }
-        }
-        else if (!m->waiting)
-        {
-            PathCommand c = {.kind = PC_MOVE_ROTATE, .x = -1745 + PILLAR_ENTRY_RADIUS_MM, .y = 0,
-                             .angle = 180, .speed = 195, .end_speed = PILLAR_ENTRY_SPEED_RPM,
-                             .continuous = true, .timeout_ms = 30000};
-            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x+70.0f; c.angle=-c.angle; }
-            if (!(m->waiting = m->send(m->context, &c))) fail(m, PATH_ERROR);
-        }
-        else if (in->motion_done) {
-            if (in->ir) {
-                next(m,now); pillar(m,now,in);
-            } else {
-                PathCommand c = {.kind=PC_ARC,.x=PILLAR_ENTRY_RADIUS_MM,.y=0,.angle=90,
-                                 .speed=PILLAR_ENTRY_SPEED_RPM,.start_speed=PILLAR_ENTRY_SPEED_RPM,
-                                 .end_speed=PILLAR_SEARCH_SPEED_RPM,.continuous=true,.timeout_ms=10000};
-                if (m->blue || PATH_BLUE_PILLAR_TEST) { c.y=180.0f-c.y; c.angle=-c.angle; }
-                if (!m->send(m->context,&c)) fail(m,PATH_ERROR);
-                else { m->phase=1; m->entered=now; }
-            }
+        if ((uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
+        if (!m->waiting) {
+            /* Red approach tuned at the side IR position; blue retains its own endpoint. */
+            PathCommand c={.kind=PC_MOVE_ROTATE,.x=-1450,.y=-750,
+                .angle=90,.speed=195,.end_speed=PILLAR_SEARCH_SPEED_RPM,
+                .continuous=true,.timeout_ms=30000};
+            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=1815; c.y=-300; c.angle=-90; }
+            if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
+        } else if (in->motion_done) {
+            next(m,now); pillar(m,now,in); /* Orbit remains gated by debounced IR. */
         }
         break;
     case 6:
@@ -411,14 +379,16 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         if (m->phase == 0)
         {
-            if (!m->waiting && !emit(m,PC_MAP_HEADING,STAIR_TARGET_DEG(m->blue),0,0,0,0)) break;
             if (!m->waiting) {
-                PathCommand c={.kind=PC_MOVE,.x=-300,.speed=195,.end_speed=80,
+                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? -300 : -50,
+                               .angle=STAIR_TARGET_DEG(m->blue),.speed=195,
+                               .end_speed=(m->blue || PATH_BLUE_STAIR_TEST) ? 80 : 30,
                                .continuous=true,.timeout_ms=30000};
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
+                float speed=(m->blue || PATH_BLUE_STAIR_TEST) ? 80 : 30;
                 PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
-                               .speed=80,.start_speed=80,.end_speed=80,
+                               .speed=speed,.start_speed=speed,.end_speed=speed,
                                .continuous=true,.timeout_ms=10000};
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->approach_started=true; m->approach_x=in->x_mm; m->approach_y=in->y_mm;

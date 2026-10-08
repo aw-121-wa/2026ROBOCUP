@@ -255,6 +255,12 @@ static bool send(void *ctx, const PathCommand *c)
     float scale = speed_scale * 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
     switch (c->kind)
     {
+    case PC_ORBIT_ARC:
+        if (!Chassis_ExitOrbitArc(c->x,c->angle,c->speed*scale,PATH_MOVE_ACCEL_MM_S2*speed_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
+        return motion_started(c,now,true);
+    case PC_ORBIT_EXIT:
+        if (!Chassis_ExitOrbit(c->x,c->y,c->angle,c->speed*scale,c->end_speed*scale,PATH_MOVE_ACCEL_MM_S2*speed_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
+        return motion_started(c,now,true);
     case PC_MOVE_ROTATE:
         if (c->continuous)
         {
@@ -375,7 +381,7 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_PILLAR_STOPPED:
         return Chassis_IsSettled() && Rdk_PillarStopped(&rdk, (uint8_t)c->argument);
     case PC_PILLAR_END:
-        return Chassis_IsSettled() && Rdk_PillarEnd(&rdk);
+        return Rdk_PillarEnd(&rdk); /* Protocol still requires all grab/resume handshakes complete. */
     case PC_DISC:
         if (!Chassis_IsSettled())
             return false;

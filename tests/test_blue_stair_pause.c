@@ -7,20 +7,14 @@ static bool send(void *ctx,const PathCommand *c) { (void)ctx;last=*c;++count;ret
 int main(void) {
     PathMission m;Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=6;m.phase=3;
     PathInput in={.armed=true,.map_yaw_deg=173};
-    PathChassis_Tick(&m,0,&in);assert(count==0);
-    in.settled=true;PathChassis_Tick(&m,100,&in);
-    PathChassis_Tick(&m,299,&in);assert(count==0 && m.step==6);
-    in.settled=false;PathChassis_Tick(&m,300,&in);assert(m.step==6);
-    in.settled=true;PathChassis_Tick(&m,305,&in);assert(m.step==7 && count==0);
-    PathChassis_Tick(&m,310,&in);PathChassis_Tick(&m,315,&in);
-    assert(count==2); /* Heading target only, then travel; no stationary correction. */
-    assert(last.kind==PC_MOVE && last.x==-300);
+    PathChassis_Tick(&m,0,&in);
+    assert(m.step==8 && count==1 && last.kind==PC_ORBIT_EXIT && last.x==-300 && last.angle==180);
     Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=8;
     in.map_yaw_deg=173;in.motion_done=false;in.settled=true;
     unsigned before=count;
     PathChassis_Tick(&m,1000,&in);
-    assert(count==before+2 && m.waiting && !m.heading_align_active);
-    assert(last.kind==PC_MOVE && last.x==-300);
+    assert(count==before+1 && m.waiting && !m.heading_align_active);
+    assert(last.kind==PC_ORBIT_EXIT && last.x==-300);
     /* Residual yaw is corrected in motion; keep the original continuous arc. */
     in.motion_done=true;in.settled=false;
     PathChassis_Tick(&m,1100,&in);

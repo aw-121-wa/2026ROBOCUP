@@ -87,7 +87,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         return;
     }
     if (m->prep_pending) {
-        if (in->reply == PATH_FAILED || (uint32_t)(now-m->prep_since)>=30000U) {
+        if (in->reply == PATH_FAILED || (uint32_t)(now-m->prep_since)>=(m->pillar_depart_pending ? 5000U : 30000U)) {
             fail(m,in->reply==PATH_FAILED?PATH_ERROR:PATH_TIMEOUT); return;
         }
         if (in->reply == PATH_OK) {
@@ -96,7 +96,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); return; }
                 m->disc_depart_pending=false;
                 m->prep_since=now;
-            } else m->prep_pending=false;
+            } else { m->prep_pending=false; m->pillar_depart_pending=false; }
         }
     }
     if (m->step >= 4)
