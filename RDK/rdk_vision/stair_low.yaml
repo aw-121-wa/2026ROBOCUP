@@ -11,10 +11,10 @@ serial:
   reconnect_attempts: 3
   reconnect_delay_ms: 250
 roi:
-  x: 184
-  y: 165
-  width: 327
-  height: 124
+  x: 164
+  y: 155
+  width: 367
+  height: 144
   edge_margin: 4
 colors:
   red:

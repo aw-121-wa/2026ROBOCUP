@@ -201,7 +201,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 280.0f : 160.0f, 500, m->blue ? 675.0f : 630.0f, m->blue ? 900.0f : 860.0f};
+    const float ends[] = {m->blue ? 280.0f : 160.0f, 500, m->blue ? 675.0f : 600.0f, m->blue ? 900.0f : 860.0f};
     if (m->phase >= 20 && m->phase != 30 && m->phase != 31) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;

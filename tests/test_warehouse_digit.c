@@ -12,7 +12,7 @@ static bool send(void *ctx,const PathCommand *c) {
  if(c->kind==PC_MAP_SEARCH) searches++;
  if(c->kind==PC_BODY || c->kind==PC_LINE_SEARCH) return false;
  if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {if(c->x<0) return c->x==-30 && c->y==0; moves++;}
- if(c->kind==PC_MAP_LATERAL) {if(m.point==9) return c->y==-20; offsets++; if(c->y!=-25) return false;}
+ if(c->kind==PC_MAP_LATERAL) {if(m.point==9) return c->y==-20; offsets++; if(c->y!=-19) return false;}
  if(c->kind==PC_HOLD) holds++;
  if(c->kind==PC_TURN) {turns++; for(unsigned k=0;k<(unsigned)c->x;k++) BallInventory_Step(&m.inventory,c->argument!=0);}
  if(c->kind==PC_GROUP) {if(groups>=9) return false; codes[groups++]=m.inventory.code[m.inventory.current];}
@@ -99,7 +99,7 @@ static int entry_back(void) {
  CHECK(last.kind==PC_MOVE && fabsf(last.x)<0.001f && fabsf(last.y-30)<0.001f);
  CHECK(m.phase==WAREHOUSE_ENTRY_BACK && queries==0 && offsets==0);
  in.settled=false;Path_Tick(&m,100,&in);CHECK(queries==0 && offsets==0);
- in.settled=true;Path_Tick(&m,200,&in);CHECK(offsets==1 && queries==0 && last.y==-25);
+ in.settled=true;Path_Tick(&m,200,&in);CHECK(offsets==1 && queries==0 && last.y==-19);
  in.settled=false;Path_Tick(&m,205,&in);CHECK(queries==0);
  in.settled=true;Path_Tick(&m,210,&in);CHECK(queries==1);
  init();in.map_yaw_deg=0;Path_Tick(&m,0,&in);in.settled=false;
