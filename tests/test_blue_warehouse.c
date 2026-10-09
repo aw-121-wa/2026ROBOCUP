@@ -19,7 +19,7 @@ int main(void) {
   PathInput in={.map_yaw_deg=180,.armed=true,.settled=true,.gray=6,.reply=PATH_OK,.warehouse_vision=true};
   for(unsigned t=0;t<25000 && m.result==PATH_RUNNING;t+=5) {
    if(queries>answered) {in.warehouse_digit_reply=mode==6?PATH_NONE:PATH_OK; in.warehouse_digit=orders[mode%6][answered++];}
-   if(m.point==9) in.gray=m.phase==5?0:6;
+   if(m.point==9) in.gray=m.phase==WAREHOUSE_RETURN_HOME?0:6;
   Path_Tick(&m,t,&in);
   }
   assert(m.result==PATH_DONE && m.point==9);

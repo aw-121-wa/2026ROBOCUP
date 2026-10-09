@@ -110,14 +110,23 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
     if (m->blue && m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         if (m->phase==WAREHOUSE_ALIGN_HOME) {
-            if(in->settled) { m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->entered=now; }
-        } else if (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT) {
-            unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : 1;
-            if (!m->waiting) {
+            if(in->settled) { m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->stable=false;m->entered=now; }
+        } else if (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT ||
+                   m->phase==WAREHOUSE_HOME_SEARCH) {
+            unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : m->phase==WAREHOUSE_HOME_RIGHT ? 1 : 2;
+            unsigned gray=in->gray&15U;
+            bool arrived=gray && (gray&(gray-1U));
+            if (!arrived) m->stable=true;
+            if (leg && m->stable && arrived) {
+                if (emit(m,(PathCommand){.kind=PC_HOLD})) {
+                    m->phase=WAREHOUSE_HOME_FINAL_ALIGN;m->waiting=false;m->entered=now;
+                }
+            } else if (!m->waiting) {
                 if(in->settled) m->waiting=emit(m,(PathCommand){.kind=PC_RETURN_HOME,.argument=leg,.timeout_ms=30000});
             } else if(in->settled) {
-                if(leg==1) {m->phase=WAREHOUSE_HOME_FINAL_ALIGN;m->waiting=false;m->entered=now;}
-                else {m->phase=WAREHOUSE_HOME_RIGHT;m->waiting=false;m->entered=now;}
+                if(leg==2) {fail(m,PATH_TIMEOUT);return;}
+                m->phase=leg==0 ? WAREHOUSE_HOME_RIGHT : WAREHOUSE_HOME_SEARCH;
+                m->waiting=false;m->entered=now;
             }
         } else if (m->phase==WAREHOUSE_HOME_FINAL_ALIGN) {
             float error=remainderf(180.0f-in->map_yaw_deg,360.0f);

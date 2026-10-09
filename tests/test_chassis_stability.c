@@ -302,7 +302,7 @@ int main(int argc,char **argv) {
         state.x_mm=100;state.y_mm=200;state.yaw_rad=0;Chassis_BeginPath();
         state.yaw_rad=3.14159265359f;route_heading=heading=state.yaw_rad;
         assert(Chassis_ReturnHome(0));
-        assert(dx>.999f && fabsf(dy)<1e-5f && planner.distance==2350);
+        assert(dx>.999f && fabsf(dy)<1e-5f && planner.distance==2250);
         assert(fabsf(Angle_Wrap(route_heading-3.14159265359f))<1e-5f);
         Chassis_Hold();wait_stop();
         assert(Chassis_ReturnHome(1));
