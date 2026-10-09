@@ -178,7 +178,7 @@ target_include_directories(test_chassis_stability PRIVATE chassis_stubs path_por
 target_compile_definitions(test_chassis_stability PRIVATE CHASSIS_TELEMETRY_ENABLE=0)
 target_compile_options(test_chassis_stability PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_chassis_stability PRIVATE m)
-foreach(case heading blend entry_arc orbit orbit_exit capture slew stop fault manual align immediate line map home map_search policy open_loop)
+foreach(case heading blend start_turn dynamic_rate entry_arc orbit orbit_exit capture slew stop fault manual align immediate line map home map_search policy open_loop)
     add_test(NAME chassis_stability_${case} COMMAND test_chassis_stability ${case})
 endforeach()
 
@@ -237,3 +237,7 @@ add_test(NAME path_ports_ir_start COMMAND test_path_ports ir_start)
 add_test(NAME path_ports_no_id_continue COMMAND test_path_ports no_id_continue)
 
 add_test(NAME path_ports_missing_ids_full_route COMMAND test_path_ports full_path_missing_ids)
+
+add_test(NAME path_ports_ir_start_blue COMMAND test_path_ports ir_start_blue)
+
+add_test(NAME path_ports_no_id_continue_blue COMMAND test_path_ports no_id_continue_blue)

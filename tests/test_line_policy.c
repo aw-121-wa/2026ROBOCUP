@@ -7,8 +7,8 @@ static bool send(void *ctx,const PathCommand *c) { (void)ctx; last=*c; return tr
 int main(void) {
     for (unsigned blue=0;blue<2;++blue) for (unsigned step=0;step<=13;++step) {
         ChassisRoutePolicy p=PathPolicy_Chassis(blue,PATH_RUNNING,step,0);
-        assert(p.travel_speed_scale==(!blue && step!=6 ? (step==9 ? 1.0f : 1.3f) : 1.0f));
-        assert(p.home_x_extra_trim_mm==(blue ? 0.0f : 70.0f));
+        assert(p.travel_speed_scale==(step!=6 ? (step==9 ? 1.0f : 1.3f) : 1.0f));
+        assert(p.home_x_extra_trim_mm==70.0f);
     }
     PathMission m={.send=send,.step=9,.result=PATH_RUNNING};
     for(unsigned gray=0;gray<16;++gray)
@@ -34,5 +34,12 @@ int main(void) {
     assert(PathHeading_Ready(&m,102,&in)); assert(last.kind==PC_HOLD);
     m.step=13; m.point=9;
     assert(!PathHeading_Ready(&m,103,&in)); assert(last.kind==PC_HOME_ALIGN && last.x==0);
+    memset(&m,0,sizeof m);m.send=send;m.step=9;m.result=PATH_RUNNING;
+    in=(PathInput){.gray=6,.travel_rpm=90};
+    assert(!PathLine_Align(&m,0,&in,50000,30));assert(last.kind==PC_BODY && !m.line_entry_detected);
+    in.y_mm=PATH_STAIR_SEARCH_FAST_DISTANCE_MM;
+    assert(!PathLine_Align(&m,1,&in,50000,30));assert(last.kind==PC_BODY && last.y==30 && !m.line_entry_detected);
+    in.travel_rpm=30;
+    assert(!PathLine_Align(&m,2,&in,50000,30));assert(last.kind==PC_HOLD && m.line_entry_detected);
     return 0;
 }

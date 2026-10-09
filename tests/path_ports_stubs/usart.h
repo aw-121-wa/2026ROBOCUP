@@ -19,6 +19,7 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *);
 HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *, uint8_t *, uint16_t);
 HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *, uint8_t *, uint16_t);
 uint32_t HAL_GetTick(void);
+uint32_t HAL_UART_GetError(UART_HandleTypeDef *);
 unsigned HAL_GPIO_ReadPin(void *, uint16_t);
 static inline uint32_t __get_PRIMASK(void) { return 0; }
 static inline void __disable_irq(void) { }

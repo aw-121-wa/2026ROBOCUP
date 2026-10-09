@@ -32,13 +32,18 @@ bool HeadingEstimator_Update(HeadingEstimator *e, float angle, uint32_t frame,
     }
     return true;
 }
-float Heading_Update(float error, float gyro, float dt, float kp, float ki, float kg, float limit,
-                     float *integral)
+static float feedback_update(float error, float gyro, float dt, float kp, float ki, float kg,
+                             float *integral)
 {
     if (fabsf(error) < 0.00045f)
         error = 0;
     *integral = fmaxf(-0.5f, fminf(0.5f, *integral + error * dt));
-    return fmaxf(-limit, fminf(limit, kp * error + ki * *integral - kg * gyro));
+    return kp * error + ki * *integral - kg * gyro;
+}
+float Heading_Update(float error, float gyro, float dt, float kp, float ki, float kg, float limit,
+                     float *integral)
+{
+    return fmaxf(-limit, fminf(limit, feedback_update(error,gyro,dt,kp,ki,kg,integral)));
 }
 
 #include "heading_tuning.h"
@@ -81,6 +86,11 @@ float HeadingControl_Update(const HeadingRequest *r, const HeadingControlConfig 
     case HEADING_FIXED: break;
     default: *integral=0; return 0;
     }
-    float result=feedforward+Heading_Update(r->error,gyro,dt,kp,ki,damping,limit,integral);
+    /* Dynamic feedback must be able to overcome an excessive feedforward.
+     * Clamp their sum once, rather than limiting the correction first. */
+    float correction = r->mode==HEADING_DYNAMIC
+        ? feedback_update(r->error,gyro,dt,kp,ki,damping,integral)
+        : Heading_Update(r->error,gyro,dt,kp,ki,damping,limit,integral);
+    float result=feedforward+correction;
     return fmaxf(-limit, fminf(limit,result));
 }

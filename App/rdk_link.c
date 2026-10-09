@@ -119,6 +119,7 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
     r->active = true;
     r->sent = false;
     r->reply = PATH_WAIT;
+    r->disc_camera_ready=false;
     r->started = n;
     r->timeout = t;
     r->error = 0;
@@ -264,6 +265,11 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
         return; /* END and an in-flight detection crossed; never grant STOPPED. */
     else if (!strcmp(r->line, "DISC_ACK") && r->stage == 3)
         r->stage = 4;
+    else if (r->stage==4 && !r->disc_camera_ready && !strcmp(r->line,"DISC_CAMERA_WAIT"))
+        r->camera_wait_event=true;
+    else if (r->stage==4 && !r->disc_camera_ready && !strcmp(r->line,"DISC_CAMERA_READY")) {
+        r->disc_camera_ready=true; r->camera_wait_event=true;
+    }
     else if (!strncmp(r->line, "DISC_ACTION_DONE ", 17) &&
              strlen(r->line) == 18 && r->stage == 4)
     {

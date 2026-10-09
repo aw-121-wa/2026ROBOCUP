@@ -72,13 +72,14 @@ def build_disc_arguments(project_root: Path, color: str = "red"):
             "--trigger-group", "102",
             "--repeat", "1",
             "--max-actions", "5",
-            "--trigger-x", "400" if color == "blue" else "380",
+            "--trigger-x", "440" if color == "blue" else "380",
             "--servo-timeout", "30",
         ]
     )
 
 
-def run_disc_in_process(project_root: Path, *, rfid_gate, on_action_complete, color: str = "red") -> int:
+def run_disc_in_process(project_root: Path, *, rfid_gate, on_action_complete, color: str = "red",
+                        camera_session=None, on_camera_wait=None, on_ready=None) -> int:
     args = build_disc_arguments(project_root, color)
     config = load_task_config(args.config, 'disc') if color == "red" else load_config(args.config)
     return run_disc_task(
@@ -86,6 +87,9 @@ def run_disc_in_process(project_root: Path, *, rfid_gate, on_action_complete, co
         config=config,
         rfid_gate=rfid_gate,
         on_action_complete=on_action_complete,
+        on_ready=on_ready,
+        camera=(camera_session.borrow(config.camera, cancelled=rfid_gate.is_cancelled,
+                                      on_wait=on_camera_wait) if camera_session is not None else None),
     )
 
 
@@ -216,9 +220,15 @@ class BridgeCore:
 
     def _camera_wait(self):
         with self._lock:
-            if self._mode == 'pillar' and not self._cancel.is_set():
+            if self._mode in ('pillar', 'disc') and not self._cancel.is_set():
                 self._deadline = self._clock() + 300.0
-                self._send_line('PILLAR_CAMERA_WAIT')
+                self._send_line('DISC_CAMERA_WAIT' if self._mode == 'disc' else 'PILLAR_CAMERA_WAIT')
+
+    def _disc_camera_ready(self):
+        with self._lock:
+            if self._mode == 'disc' and not self._cancel.is_set():
+                self._deadline = self._clock() + self._disc_timeout_s
+                self._send_line('DISC_CAMERA_READY')
 
     def _pillar_main(self, gate, level=None):
         try:
@@ -284,6 +294,8 @@ class BridgeCore:
                     self._run_disc(
                         rfid_gate=gate,
                         on_action_complete=self._action_complete,
+                        on_camera_wait=self._camera_wait,
+                        on_ready=self._disc_camera_ready,
                     )
                 )
             except Exception as exc:  # noqa: BLE001 - service boundary
@@ -539,7 +551,7 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
             send_line = SerialLineWriter(ser, log=lambda text: print(text, flush=True))
             core = BridgeCore(
                 send_line=send_line,
-                run_disc=lambda **kwargs: run_disc_in_process(project_root, color=color, **kwargs),
+                run_disc=lambda **kwargs: run_disc_in_process(project_root, camera_session=camera_session, color=color, **kwargs),
                 run_pillar=lambda **kwargs: run_pillar_in_process(project_root, camera_session=camera_session, color=color, **kwargs),
                 run_stair=run_shared_stair,
                 run_scan=lambda level, **kwargs: run_stair_scan(project_root,level,

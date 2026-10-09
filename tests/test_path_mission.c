@@ -180,7 +180,7 @@ static int chassis_only(void) {
     m.orbit_yaw=100; in.yaw_deg=-251;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
     in.yaw_deg=-258; Path_Tick(&m,105,&in); CHECK(m.step==8 && count(&p,PC_HOLD)==0 && count(&p,PC_ORBIT_EXIT)==1);
-    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-30 && p.commands[p.n-1].end_speed==30);
+    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-10 && p.commands[p.n-1].end_speed==30);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==30);
     in.ir=true; in.yaw_deg=0;
@@ -193,7 +193,7 @@ static int chassis_only(void) {
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={5,180,450,230,110,-30,200,200};
+    const float expected[]={5,160,470,230,110,-30,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<8 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;

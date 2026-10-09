@@ -163,5 +163,14 @@ int main(void) {
     feed(&r,"PILLAR_CAMERA_WAIT\r\n");CHECK(r.camera_wait_event);
     feed(&r,"PILLAR_READY\r\n");CHECK(r.pillar_ready && !r.locked);
     feed(&r,"PILLAR_CAMERA_WAIT\r\n");CHECK(r.locked); /* Not a running-task heartbeat. */
+    CHECK(begin_disc(&r,0,60000)==0);
+    feed(&r,"DISC_CAMERA_WAIT\r\n");
+    CHECK(r.camera_wait_event && !r.disc_camera_ready && !r.locked);
+    r.camera_wait_event=false;
+    feed(&r,"DISC_CAMERA_READY\r\n");
+    CHECK(r.camera_wait_event && r.disc_camera_ready && !r.locked);
+    r.camera_wait_event=false;
+    feed(&r,"DISC_CAMERA_WAIT\r\n");
+    CHECK(!r.camera_wait_event); /* No extension after startup. */
     puts("ZHY link tests passed"); return 0;
 }

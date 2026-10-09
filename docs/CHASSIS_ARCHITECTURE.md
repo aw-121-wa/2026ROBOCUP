@@ -16,7 +16,7 @@
 - `App/stair_heading.h`: red/blue stair targets and heading admission tolerances.
 - `App/path_config.h`: warehouse targets, gray search speeds/deadlines and movement defaults.
 
-Both sides use stair heading 180 degrees and warehouse heading 0 degrees, with no blue-side angular offset. Heading feedback retains the 0.2-degree moving and 0.1-degree stationary tracking goals. Gray admission is position-only; home alignment remains independent.
+Red uses stair heading 180 degrees and warehouse heading 0 degrees. Blue starts with the same physical heading as red, mirrors map Y (X unchanged), and uses stair heading 0 degrees and warehouse heading 180 degrees. These are route headings, not sensor calibration offsets. Heading feedback retains the 0.2-degree moving and 0.1-degree stationary tracking goals. Gray admission is position-only; home alignment remains independent.
 
 `Chassis_LineSearch`, `Chassis_CalibrateLine` and `Chassis_AlignZero` remain legacy diagnostic APIs; the route does not emit their commands. They are not a second automatic line-calibration algorithm.
 
@@ -41,3 +41,9 @@ Physical heading stability still requires a vehicle run. No automatic run or fla
 ## White-line admission update
 
 Only gray pattern 0110 is accepted at work-area lines. After a gray hit, brake and recheck; invalid patterns use bounded bidirectional lateral search with gyro heading hold. Gray never requests edge-scanning rotation or a stationary heading alignment. The yaw-error-dependent translation slowdown is removed; normal acceleration/braking and wheel limits remain.
+
+## Dynamic turn recovery
+
+Dynamic-turn feedforward follows the path speed reconstructed from successfully submitted wheel commands, rather than the uncapped planner speed. Dynamic feedback and feedforward are summed before applying the yaw limit; an ahead-of-target chassis can therefore reverse its requested yaw. Opening blue KP remains 8.0. Blue orbit exit carries 15 rpm into its arc and accelerates to 30 rpm to keep the 10 mm boundary feasible.
+
+`PathDiagnostics.rdk_uart_hal_error` records the latest HAL UART error, and `rdk_uart_error_count` records its occurrence count. The existing communication fault stop remains in place; corrupt or missing action acknowledgements are not silently accepted.

@@ -29,6 +29,7 @@ static unsigned map_headings, line_calibrations, zero_aligns, blend_moves, arc_m
 static float blend_end, arc_begin, pending_x, pending_y;
 
 uint32_t HAL_GetTick(void) { return now; }
+uint32_t HAL_UART_GetError(UART_HandleTypeDef *u) { (void)u; return 8; }
 uint32_t PathSession_Create(void) { return 123; }
 HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *u, uint8_t *b, uint16_t n) {
     if (n != 1) return HAL_ERROR;
@@ -47,6 +48,7 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
+    if(path_diagnostics.blue && path_diagnostics.step==9 && path_diagnostics.phase==30 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
     if(path_diagnostics.step==13 && path_diagnostics.phase==5 && pin!=GPIO_PIN_10) return GPIO_PIN_SET;
     return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
             (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
@@ -65,12 +67,12 @@ bool Chassis_SetLineReference(void) { return !moving; }
 void Chassis_Hold(void) { moving = false; pending_x=pending_y=0; ++holds; }
 bool Chassis_Move(float x, float y, float v, float a, float d) {
 #if PATH_BLUE_STAIR_TEST
-    if(path_diagnostics.step==8 && fabsf(x)>2) assert(x==-300 && y==0);
-    if(path_diagnostics.step==9 && (path_diagnostics.phase==22 || path_diagnostics.phase==30) && fabsf(x)>2) assert(x>0 && y==0);
+    if(path_diagnostics.step==8 && fabsf(x)>2) assert(x==10 && y==0);
+    if(path_diagnostics.step==9 && (path_diagnostics.phase==22 || path_diagnostics.phase==30) && fabsf(x)>2) assert((x>0 || (path_diagnostics.phase==30 && x==-100)) && y==0);
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
-    if (test_blue && path_diagnostics.step==0 && fabsf(x)>100) assert(x<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1815);
+    if (test_blue && path_diagnostics.step==0 && fabsf(x)>100 && y!=0) assert(x>0 && y<0);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-715);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
@@ -90,7 +92,7 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
 bool Chassis_MoveArc(float radius, float start_angle, float turn, float v, float a, float d,
                      float start_speed, float end_speed) {
 #if PATH_BLUE_STAIR_TEST
-    if(path_diagnostics.step==8) assert(radius==50 && start_angle==180 && turn==-90);
+    if(path_diagnostics.step==8) assert(radius==50 && start_angle==0 && turn==90);
 #endif
     (void)radius; (void)start_angle; (void)turn; (void)end_speed;
     ++arc_moves; arc_begin=start_speed;
@@ -203,33 +205,44 @@ static int complete_gate(uint8_t index, uint32_t uid) {
 int main(int argc, char **argv) {
     CHECK(argc == 2);
     if (!strcmp(argv[1], "ir_start")) {
-        PathPorts_Init(); state.bias_ready=true;
+        PathPorts_Init(); state.bias_ready=false;
         tick(); CHECK(!state.armed && !strcmp(wire,"PING\r\n"));
         now+=200; tick(); ir_blocked=false; now+=200; tick();
-        CHECK(!state.armed); /* Pre-ready gesture cannot launch later. */
+        CHECK(!state.armed); /* Request waits for G0/COLOR and IMU readiness. */
         reply("PONG\r\n"); tick(); tick();
         reply("GROUP_ACK 0\r\nGROUP_DONE 0\r\n"); tick(); tick();
         CHECK(!strcmp(wire,"COLOR RED\r\n"));
         reply("COLOR_OK RED\r\n"); tick(); now+=200; tick();
-        CHECK(!PathPorts_Busy() && !state.armed);
-        ir_blocked=true; tick(); now+=100; tick();
-        CHECK(!state.armed);
-        ir_blocked=false; tick(); now+=90; tick(); CHECK(!state.armed);
-        now+=10; tick();
+        CHECK(!state.armed); /* IMU is the final startup dependency. */
+        state.bias_ready=true; tick();
         CHECK(state.armed && path_diagnostics.result==PATH_RUNNING && !path_diagnostics.blue);
         Chassis_Stop(); tick(); ir_blocked=true; now+=200; tick();
         ir_blocked=false; now+=200; tick(); now+=200; tick();
         CHECK(!state.armed && path_diagnostics.result!=PATH_RUNNING);
         puts("infrared boot handshake and one-shot start passed"); return 0;
     }
+    if (!strcmp(argv[1], "ir_start_blue")) {
+        PathPorts_Init();state.bias_ready=true;ir_blocked=true;
+        tick();reply("PONG\r\n");tick();tick();
+        reply("GROUP_ACK 0\r\nGROUP_DONE 0\r\n");tick();tick();
+        reply("COLOR_OK RED\r\n");tick();
+        now+=4900;tick();CHECK(!state.armed);
+        now+=110;tick();tick();tick();CHECK(!state.armed && !strcmp(wire,"COLOR BLUE\r\n"));
+        reply("COLOR_OK BLUE\r\n");tick();
+        CHECK(state.armed && path_diagnostics.result==PATH_RUNNING && path_diagnostics.blue);
+        CHECK(ir_blocked); /* Blue starts while the infrared remains covered. */
+        Chassis_Stop();tick();ir_blocked=false;now+=200;tick();now+=200;tick();
+        CHECK(!state.armed && path_diagnostics.result!=PATH_RUNNING);
+        puts("blue long-hold handshake and one-shot start passed");return 0;
+    }
     if (!strcmp(argv[1], "no_vision")) {
-        PathPorts_Init(); outer_line=true; tick(); CHECK(path_diagnostics.gray==15);
+        PathPorts_Init(); outer_line=true; tick(); CHECK(path_diagnostics.gray==6);
         outer_line=false; tick(); CHECK(path_diagnostics.gray==6);
         CHECK(!PathPorts_Busy() && wire[0]==0 && rx4==NULL && rx7==NULL);
         CHECK(!PathPorts_Start()); /* ARM is still mandatory. */
         state.armed=true; CHECK(PathPorts_Start());
         tick();
-        CHECK(blend_moves==0 && moving && blend_end>0);
+        CHECK(blend_moves==(PATH_BLUE_DISC_TEST?1:0) && moving && blend_end>0);
         unsigned before=holds;
         moving=false; tick(); /* Translation done while wheels carry nonzero speed. */
         CHECK(arc_moves==1 && moving && holds==before && arc_begin==blend_end);
@@ -247,19 +260,19 @@ int main(int argc, char **argv) {
         }
 #if PATH_BLUE_STAIR_TEST
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9);
-        CHECK(!moving && blend_moves==1 && wire[0]==0);
+        CHECK(!moving && blend_moves==2 && wire[0]==0);
         for(unsigned i=0;i<100;i++) tick();
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==9 && !moving);
 #elif PATH_BLUE_PILLAR_TEST
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==6);
-        CHECK(!moving && blend_moves==1 && wire[0]==0);
+        CHECK(!moving && blend_moves==2 && wire[0]==0);
         for(unsigned i=0;i<100;i++) tick();
-        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==6 && !moving && blend_moves==1);
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==6 && !moving && blend_moves==2);
 #elif PATH_BLUE_DISC_TEST
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3);
-        CHECK(!moving && blend_moves==0 && wire[0]==0);
+        CHECK(!moving && blend_moves==1 && wire[0]==0);
         for(unsigned i=0;i<100;i++) tick();
-        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3 && !moving && blend_moves==0);
+        CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3 && !moving && blend_moves==1);
 #else
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
         CHECK(line_calibrations==0 && map_headings==8 && zero_aligns==0 && path_diagnostics.rfid_count==0);
@@ -321,9 +334,9 @@ int main(int argc, char **argv) {
         } else CHECK(0);
         puts("boot test passed"); return 0;
     }
-    test_blue = !strcmp(argv[1], "full_path_blue") || !strcmp(argv[1],"blue_bypass");
+    test_blue = !strcmp(argv[1], "full_path_blue") || !strcmp(argv[1],"blue_bypass") || !strcmp(argv[1],"no_id_continue_blue");
     rfid_init_failure = !strcmp(argv[1], "rfid_init");
-    CHECK(start_disc(test_blue || !strncmp(argv[1], "full_path",9)) == 0);
+    CHECK(start_disc((test_blue && strcmp(argv[1],"no_id_continue_blue")) || !strncmp(argv[1], "full_path",9)) == 0);
     if(!strcmp(argv[1],"blue_bypass")) {
         for(unsigned i=1;i<=5;i++) {
             char response[60];snprintf(response,sizeof(response),"DISC_ACTION_DONE %u\r\n",i);
@@ -409,6 +422,7 @@ int main(int argc, char **argv) {
         CHECK(path_diagnostics.disc_rfid_confirmed_index==1);
         CHECK(strcmp(wire,"DISC_RFID_OK 1\r\n"));
         PathPorts_Error(&huart4); tick();
+        CHECK(path_diagnostics.rdk_uart_hal_error==8 && path_diagnostics.rdk_uart_error_count==1);
         CHECK(path_diagnostics.result==PATH_ERROR && path_diagnostics.inventory_uncertain);
         CHECK(strcmp(wire,"DISC_RFID_OK 1\r\n"));
     } else if (!strncmp(argv[1], "full_path",9)) {
@@ -420,7 +434,7 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(wire,"GROUP 1\r\n")); CHECK(moving);
         reply("GROUP_ACK 1\r\nGROUP_DONE 1\r\n"); tick(); tick(); CHECK(moving);
         moving=false;
-        for(unsigned i=0;i<30 && strcmp(wire,"PILLAR_START\r\n");i++) tick();
+        for(unsigned i=0;i<30 && strcmp(wire,"PILLAR_START\r\n");i++) { moving=false; tick(); }
         CHECK(!strcmp(wire,"PILLAR_START\r\n")); CHECK(!moving);
         reply("PILLAR_ACK\r\n"); tick(); CHECK(!moving);
         for(unsigned retry=0;retry<20;retry++) {
@@ -448,7 +462,7 @@ int main(int argc, char **argv) {
             CHECK(!strcmp(wire,"PILLAR_RFID_OK 2\r\n"));
             reply("PILLAR_RESUME 2\r\n"); tick(); CHECK(moving);
         }
-        gray_line=false; outer_line=false; yaw=-6.26f; tick(); CHECK(moving && path_diagnostics.step==8); tick(); tick();
+        gray_line=false; outer_line=false; yaw=test_blue?-9.26f:-6.26f; tick(); CHECK(moving && path_diagnostics.step==8); tick(); tick();
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));
         reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==8);
         gray_line=false;
@@ -594,7 +608,7 @@ int main(int argc, char **argv) {
         reply("DISC_DONE\r\n"); tick(); CHECK(path_diagnostics.result == PATH_DONE);
         for (unsigned i=0;i<1000;i++) tick();
         CHECK(turn_positions == 5);
-    } else if (!strcmp(argv[1], "no_id_continue")) {
+    } else if ((!strcmp(argv[1], "no_id_continue") || !strcmp(argv[1], "no_id_continue_blue"))) {
         for(uint8_t i=1;i<=5;i++) {
             CHECK(action_done(i)==0);
             uint32_t start=now;
@@ -640,7 +654,7 @@ bool Chassis_AlignMapAxis(void) { map_yaw_test=STAIR_TARGET_DEG(path_diagnostics
 bool Chassis_MapSearch(float mm_s) { (void)mm_s; moving=true; return true; }
 bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
-bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=STAIR_TARGET_DEG(path_diagnostics.blue)))return false; map_headings++; map_yaw_test=degrees; return true; }
+bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=180))return false; map_headings++; map_yaw_test=degrees; return true; }
 
 bool Chassis_AlignHome(float target_deg) { map_yaw_test=target_deg; moving=true; return true; }
 

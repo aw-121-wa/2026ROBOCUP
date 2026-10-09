@@ -23,7 +23,7 @@ int main(void) {
     assert(!PathLine_AlignFour(&m,5,&in));
     assert(PathLine_AlignFour(&m,105,&in));
    } else {
-    assert(last.kind==PC_MAP_SEARCH && last.y<0);
+    assert(last.kind==PC_MAP_SEARCH && (blue ? last.y>0 : last.y<0));
    }
    assert(turns==0);
   }

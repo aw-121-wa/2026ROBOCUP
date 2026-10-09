@@ -101,6 +101,7 @@ static bool ready, initialized, motion_pending, motion_continuous, verified, tes
 static unsigned boot;
 static bool requested_blue, side_pending = PATH_VISION_ENABLE != 0, side_inflight;
 static uint32_t boot_retry;
+static volatile uint32_t rdk_uart_hal_error, rdk_uart_error_count;
 static uint32_t motion_since, motion_timeout, last_rx;
 static volatile uint32_t rfid_fault;
 static uint8_t rx_byte, tx_buffer[80];
@@ -553,7 +554,7 @@ void PathPorts_Cancel(void)
 {
     if (!initialized)
         return;
-    (void)IrStart_Update(&ir_start,HAL_GetTick(),false,false);
+    IrStart_Clear(&ir_start);
     if (!PATH_RDK_ENABLE)
     {
         Path_Cancel(&mission);
@@ -610,8 +611,11 @@ void PathPorts_RxComplete(UART_HandleTypeDef *u)
 void PathPorts_Error(UART_HandleTypeDef *u)
 {
     if (!PATH_RDK_ENABLE) return;
-    if (u == PINCFG_RDK_UART)
+    if (u == PINCFG_RDK_UART) {
+        rdk_uart_hal_error=HAL_UART_GetError(u);
+        ++rdk_uart_error_count;
         io_fault |= 16;
+    }
     else if (u == PINCFG_RFID_UART)
         rfid_fault |= 16;
 }
@@ -648,6 +652,10 @@ void PathPorts_Tick(void)
     }
     if (rdk.camera_wait_event) {
         rdk.camera_wait_event=false;
+        if (mission.result==PATH_RUNNING && !rdk.locked && mission.step==3 &&
+            mission.phase==1 && rdk.stage==4) {
+            rdk.started=now; mission.entered=now;
+        }
         if (mission.result==PATH_RUNNING && !rdk.locked && !rdk.pillar_ready &&
             ((mission.step==6 && mission.phase==4) || (mission.step==9 && mission.phase==21))) {
             /* Renew only startup deadlines, never motion/grab deadlines. */
@@ -745,8 +753,6 @@ void PathPorts_Tick(void)
         }
     }
     uint8_t gray = 0;
-    if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3) == GPIO_PIN_RESET) gray |= 8;
-    if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_RESET) gray |= 1;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_0) == GPIO_PIN_RESET)
         gray |= 4;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_1) == GPIO_PIN_RESET)
@@ -757,11 +763,20 @@ void PathPorts_Tick(void)
     uint32_t ir_raw = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_SET;
     /* Boot HELLO/G0/COLOR already prepares vision; no host ARM/PATH is needed. */
     const ChassisState *chassis=Chassis_GetState();
-    bool start_ready=ready && verified && !io_fault && !requested_blue &&
-        !PathPorts_Busy() && !chassis->armed && !chassis->fault &&
-        chassis->bias_ready && Chassis_IsSettled();
-    if (IrStart_Update(&ir_start,now,ir_raw==0,start_ready) && Chassis_Arm()) {
-        if (!PathPorts_Start()) Chassis_Stop();
+    bool observe_start=!io_fault && !chassis->fault && !rdk.locked && boot!=4 &&
+        !chassis->armed && mission.result==PATH_IDLE;
+    if (!observe_start) IrStart_Clear(&ir_start);
+    else {
+        (void)IrStart_Update(&ir_start,now,ir_raw==0,false);
+        if (ir_start.pending && requested_blue!=ir_start.blue)
+            (void)PathPorts_SelectSide(ir_start.blue);
+        bool start_ready=ready && verified && !io_fault &&
+            requested_blue==ir_start.blue && !PathPorts_Busy() &&
+            !chassis->armed && !chassis->fault && chassis->bias_ready && Chassis_IsSettled();
+        if (IrStart_Update(&ir_start,now,ir_raw==0,start_ready) && Chassis_Arm()) {
+            if (PathPorts_Start()) ir_start.fired=true;
+            else Chassis_Stop();
+        }
     }
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = io_fault || Chassis_GetState()->fault ||
@@ -769,6 +784,8 @@ void PathPorts_Tick(void)
                     .settled = Chassis_IsSettled(),
                     .motion_done = motion_done,
                     .gray = gray,
+                    .travel_rpm = hypotf(chassis->velocity[0],chassis->velocity[1])*60.0f /
+                                  (6.28318530718f*chassis_config.wheel_radius_mm),
                     .yaw_deg = Chassis_ContinuousYaw() * 57.295779513f,
                     .x_mm = Chassis_GetState()->x_mm,
                     .y_mm = Chassis_GetState()->y_mm,
@@ -826,6 +843,8 @@ void PathPorts_Tick(void)
                                          .warehouse_code = mission.step == 13 && mission.point < 9 ?
                                               PathWarehouse_Code(&mission) : 0,
                                          .blue = mission.blue,
+                                         .rdk_uart_hal_error=rdk_uart_hal_error,
+                                         .rdk_uart_error_count=rdk_uart_error_count,
                                          .step = mission.step,
                                          .phase = mission.phase,
                                          .point = mission.step == 9 ? mission.point + 1U : 0U,

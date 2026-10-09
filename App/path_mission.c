@@ -8,7 +8,9 @@
 #define START_DIAG_Y_MM 567.3904f
 #define DISC_ENTRY_RADIUS_MM 50.0f
 #define DISC_ENTRY_SPEED_RPM 25.0f
-#define START_FORWARD_MM (2028.9384f - DISC_ENTRY_RADIUS_MM)
+#define START_FORWARD_MM 2028.9384f
+#define BLUE_START_FORWARD_EXTRA_MM 195.0f
+#define BLUE_START_TURN_SPEED_SCALE 0.9f
 /* Approach + G100 + disc; RDK owns G101, vision and five G102 actions. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float speed, uint32_t t)
 {
@@ -24,7 +26,16 @@ static bool emit_move(PathMission *m, float x, float y, float speed,
     PathCommand c = {.kind = PC_MOVE, .x = x, .y = y, .speed = speed,
                      .start_speed = start_speed, .end_speed = end_speed,
                      .continuous = continuous, .timeout_ms = 30000};
-    if (m->blue || PATH_BLUE_DISC_TEST) c.x = -c.x;
+    if (m->blue || PATH_BLUE_DISC_TEST) {
+        if (m->step==0 && m->part==0) {
+            c.kind=PC_MOVE_ROTATE; c.y=-c.y; c.angle=180.0f;
+            c.speed*=BLUE_START_TURN_SPEED_SCALE;
+            c.end_speed*=BLUE_START_TURN_SPEED_SCALE;
+        } else {
+            if (m->step==1) c.x+=BLUE_START_FORWARD_EXTRA_MM;
+            c.x=-c.x;
+        } /* Body is reversed after the opening half-turn. */
+    }
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -39,7 +50,10 @@ static bool emit_arc(PathMission *m)
                      .speed = 155.0f, .start_speed = START_BLEND_SPEED_RPM,
                      .end_speed = START_BLEND_SPEED_RPM, .continuous = true,
                      .timeout_ms = 30000};
-    if (m->blue || PATH_BLUE_DISC_TEST) { c.y = 180.0f - c.y; c.angle = -c.angle; }
+    if (m->blue || PATH_BLUE_DISC_TEST) {
+        c.y = 180.0f - c.y; c.angle = -c.angle;
+        c.start_speed*=BLUE_START_TURN_SPEED_SCALE; /* Match the opening turn exit. */
+    }
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -60,7 +74,7 @@ bool Path_Start(PathMission *m, uint32_t now, const PathInput *in)
     if (m->result == PATH_RUNNING || !in->armed || in->fault || !in->settled ||
         m->inventory.occupied || m->inventory.uncertain)
         return false;
-    bool blue = m->blue;
+    bool blue = m->blue || PATH_BLUE_DISC_TEST;
     PathSend s = m->send;
     void *c = m->context;
     *m =
@@ -145,7 +159,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             else if (m->step == 0)
                 m->waiting = emit_arc(m);
             else if (m->step == 1)
-                m->waiting = emit_move(m, START_FORWARD_MM + ((m->blue || PATH_BLUE_DISC_TEST) ? 0.0f : 50.0f), 0, 230.0f,
+                m->waiting = emit_move(m, START_FORWARD_MM, 0, 230.0f,
                                        START_BLEND_SPEED_RPM, DISC_ENTRY_SPEED_RPM, true);
             else
             {
@@ -165,7 +179,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             {
                 m->step = 1;
                 m->part = 0;
-                m->waiting = emit_move(m, START_FORWARD_MM + ((m->blue || PATH_BLUE_DISC_TEST) ? 0.0f : 50.0f), 0, 230.0f,
+                m->waiting = emit_move(m, START_FORWARD_MM, 0, 230.0f,
                                        START_BLEND_SPEED_RPM, DISC_ENTRY_SPEED_RPM, true);
             }
             m->entered = now;

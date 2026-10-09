@@ -3,8 +3,8 @@
 #include <math.h>
 #include "heading_tuning.h"
 #define STAIR_MAP_TARGET_DEG 180.0f
-/* Both field sides use the same map heading, without a side offset. */
-#define STAIR_TARGET_DEG(blue) STAIR_MAP_TARGET_DEG
+/* Both start poses share map zero; mirrored work faces require opposite headings. */
+#define STAIR_TARGET_DEG(blue) ((blue) ? 0.0f : STAIR_MAP_TARGET_DEG)
 #define STAIR_HEADING_KP 4.0f
 #define STAIR_HEADING_TOLERANCE_DEG HEADING_STATIC_TOLERANCE_DEG
 #define STAIR_HEADING_STOP_TOLERANCE_DEG HEADING_STATIC_TOLERANCE_DEG

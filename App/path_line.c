@@ -32,9 +32,15 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
             m->approach_x=in->x_mm; m->approach_y=in->y_mm;
         }
         float x=in->x_mm-m->approach_x, y=in->y_mm-m->approach_y;
-        /* Command odometry only limits fast travel; gray detection always takes priority. */
-        if (in->gray || x*x+y*y >= PATH_STAIR_SEARCH_FAST_DISTANCE_MM*PATH_STAIR_SEARCH_FAST_DISTANCE_MM) m->approach_slow=true;
+        /* Ignore gray during fast approach and while the slow command is ramping down. */
+        if (x*x+y*y >= PATH_STAIR_SEARCH_FAST_DISTANCE_MM*PATH_STAIR_SEARCH_FAST_DISTANCE_MM ||
+            (in->gray && isfinite(in->travel_rpm) && in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM+2.0f)) m->approach_slow=true;
         if (!m->approach_slow) lateral=PATH_STAIR_SEARCH_FAST_RPM;
+        if (!m->line_entry_detected && (!m->approach_slow ||
+            !isfinite(in->travel_rpm) || in->travel_rpm>PATH_STAIR_SEARCH_SLOW_RPM+2.0f)) {
+            (void)emit(m,PC_BODY,0,lateral,0,0,timeout);
+            return false;
+        }
     }
     if (!m->line_entry_detected) {
         if (!in->gray) {
@@ -44,6 +50,12 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
         hold(m);
         m->line_entry_detected=true;
         return false;
+    }
+    /* Blue stair arrival must reach rear-off retreat, even if braking changes gray. */
+    if (m->blue && m->step==9) {
+        if (!in->settled) return false;
+        m->line_entry_detected=false;
+        return true;
     }
     if (!m->line_active && in->settled && PathLine_Aligned(m,in->gray)) {
         if (!emit(m,PC_LINE_REFERENCE,0,0,0,0,0)) return false;
@@ -159,7 +171,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
      * Warehouse sweeps right, left across the start, then right again. */
     if (!bidirectional && m->line_search_state == LINE_SEARCH_IDLE) m->line_search_state=LINE_SWEEP_FIRST;
     float direction=m->line_search_state==LINE_SWEEP_REVERSE ? 1.0f : -1.0f;
-    (void)emit(m,PC_MAP_SEARCH,0,direction*policy.lateral_mm_s,0,0,policy.motion_timeout_ms);
+    (void)emit(m,PC_MAP_SEARCH,0,(m->blue ? -direction : direction)*policy.lateral_mm_s,0,0,policy.motion_timeout_ms);
     return false;
 }
 

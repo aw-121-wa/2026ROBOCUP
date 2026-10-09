@@ -24,6 +24,7 @@ typedef struct
     bool warehouse_active, warehouse_sent, warehouse_ready;
     char warehouse_request[64];
     bool pillar_ready, pillar_ending;
+    bool disc_camera_ready;
     bool camera_wait_event; /* Startup heartbeat, consumed by the port adapter. */
     bool stair_scan;
     uint8_t ball_index, stopped_index, resume_index;

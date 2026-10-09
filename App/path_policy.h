@@ -10,11 +10,13 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
     bool running=result==PATH_RUNNING;
     return (ChassisRoutePolicy){
         .stair_target_deg=STAIR_TARGET_DEG(blue),
-        .home_x_extra_trim_mm=blue ? 0.0f : 70.0f,
-        .travel_speed_scale=(!blue && running && step!=6) ? (step==9 ? 1.0f : 1.3f) : 1.0f,
+        .home_x_extra_trim_mm=70.0f,
+        .travel_speed_scale=(running && step!=6) ? (step==9 ? 1.0f : 1.3f) : 1.0f,
+        .mirror_map_y=blue,
+        .use_start_turn_kp=running && blue && step==0,
         .stationary_hold=running && step>=8 && step<=10,
         .hold_during_action=running && step==9 && phase==24,
-        .suppress_lateral_comp=running && blue && step>=8 && step<=13};
+        .suppress_lateral_comp=false};
 }
 /* Boundary speeds remain unchanged so entry into search/orbit stays continuous. */
 static inline float PathPolicy_CommandBoost(unsigned step, PathCommandKind kind)

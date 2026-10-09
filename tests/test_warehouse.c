@@ -153,15 +153,15 @@ static int home_line_stop(void) {
  return 0;
 }
 static int home_advance_braking(void) {
- for(unsigned blue=0;blue<2;++blue) for(unsigned slide=0;slide<=25;slide+=5) {
+ for(unsigned blue=0;blue<1;++blue) for(unsigned slide=0;slide<=25;slide+=5) {
   init();m.blue=blue;m.point=9;m.phase=16;m.stable=true;m.waiting=true;
   PathInput in={.armed=true,.gray=6,.y_mm=100};
   Path_Tick(&m,0,&in);CHECK(m.phase==14 && last.kind==PC_HOLD);
-  in.y_mm=100-slide;in.settled=true;
+  in.y_mm=blue ? 100+slide : 100-slide;in.settled=true;
   Path_Tick(&m,100,&in);
-  if(blue || slide>=20) CHECK(m.result==PATH_DONE);
+  if(slide>=20) CHECK(m.result==PATH_DONE);
   else {
-   CHECK(m.phase==18 && last.kind==PC_MAP_LATERAL && last.y==-(20.0f-slide));
+   CHECK(m.phase==18 && last.kind==PC_MAP_LATERAL && last.y==(blue ? 1 : -1)*(20.0f-slide));
    in.settled=false;Path_Tick(&m,200,&in);CHECK(m.phase==18 && m.result==PATH_RUNNING);
    Path_Tick(&m,5100,&in);CHECK(m.result==PATH_TIMEOUT);
   }

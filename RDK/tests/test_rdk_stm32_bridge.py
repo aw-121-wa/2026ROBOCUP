@@ -50,11 +50,33 @@ class BridgeCoreTests(unittest.TestCase):
         self.assertTrue(core.wait_for_idle(1))
         self.assertEqual(tx[-2:],['PILLAR_READY','PILLAR_DONE'])
 
+    def test_disc_camera_retry_renews_startup_then_ready_restores_timeout(self):
+        tx, entered, release = [], threading.Event(), threading.Event()
+        now=[0.0]
+        def disc(**kw):
+            for _ in range(3):
+                now[0]+=200
+                kw['on_camera_wait']()
+                core.tick()
+                self.assertFalse(kw['rfid_gate'].is_cancelled())
+            kw['on_ready']()
+            entered.set()
+            release.wait(1)
+            return 1
+        core=BridgeCore(tx.append,disc,clock=lambda:now[0],disc_timeout_s=60)
+        core.handle('DISC_START')
+        self.assertTrue(entered.wait(1))
+        self.assertEqual(tx.count('DISC_CAMERA_WAIT'),3)
+        self.assertIn('DISC_CAMERA_READY',tx)
+        now[0]+=61;core.tick();release.set()
+        self.assertTrue(core.wait_for_idle(1))
+        self.assertIn('DISC_ERROR',tx)
+
     def test_overall_timeout_cancels_gate_and_stops_worker(self):
         tx, entered = [], threading.Event()
         now = [100.0]
 
-        def run_disc(*, rfid_gate, on_action_complete):
+        def run_disc(*, rfid_gate, on_action_complete, **camera_callbacks):
             del on_action_complete
             entered.set()
             deadline = time.monotonic() + 1.0
@@ -73,7 +95,7 @@ class BridgeCoreTests(unittest.TestCase):
     def test_disc_cancel_closes_open_action_gate(self):
         tx, entered = [], threading.Event()
 
-        def run_disc(*, rfid_gate, on_action_complete):
+        def run_disc(*, rfid_gate, on_action_complete, **camera_callbacks):
             del on_action_complete
             entered.set()
             deadline = time.monotonic() + 1.0
@@ -107,7 +129,7 @@ class BridgeCoreTests(unittest.TestCase):
     def test_active_worker_receives_only_matching_rfid_confirmation(self):
         tx, action_done, allow_finish = [], threading.Event(), threading.Event()
 
-        def run_disc(*, rfid_gate, on_action_complete):
+        def run_disc(*, rfid_gate, on_action_complete, **camera_callbacks):
             self.assertTrue(rfid_gate.on_action_complete(1)); on_action_complete(1)
             action_done.set(); self.assertTrue(allow_finish.wait(1.0)); return 7
 
@@ -157,7 +179,7 @@ class BridgeCoreTests(unittest.TestCase):
         tx = []
         ready = [threading.Event() for _ in range(5)]
 
-        def run_disc(*, rfid_gate, on_action_complete):
+        def run_disc(*, rfid_gate, on_action_complete, **camera_callbacks):
             for index in range(1, 6):
                 self.assertTrue(rfid_gate.on_action_complete(index)); on_action_complete(index)
                 ready[index - 1].set(); deadline = time.monotonic() + 1.0

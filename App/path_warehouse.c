@@ -53,6 +53,12 @@ static void fail(PathMission *m, PathResult result)
 }
 static bool emit(PathMission *m, PathCommand command)
 {
+    /* A recognized blue digit prohibits lateral search; unloading remains gyro-controlled. */
+    if (m->blue && m->point<9 && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
+        (command.kind==PC_MAP_SEARCH || command.kind==PC_MAP_LATERAL)) {
+        fail(m,PATH_ERROR);return false;
+    }
+    if (m->blue && command.kind==PC_MAP_LATERAL) command.y=-command.y;
     if (m->send(m->context,&command)) return true;
     fail(m,PATH_ERROR);
     return false;
@@ -102,6 +108,27 @@ static float home_map_y(const PathInput *in)
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
+    if (m->blue && m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
+        if (m->phase==WAREHOUSE_ALIGN_HOME) {
+            if(in->settled) { m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->entered=now; }
+        } else if (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT) {
+            unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : 1;
+            if (!m->waiting) {
+                if(in->settled) m->waiting=emit(m,(PathCommand){.kind=PC_RETURN_HOME,.argument=leg,.timeout_ms=30000});
+            } else if(in->settled) {
+                if(leg==1) {m->phase=WAREHOUSE_HOME_FINAL_ALIGN;m->waiting=false;m->entered=now;}
+                else {m->phase=WAREHOUSE_HOME_RIGHT;m->waiting=false;m->entered=now;}
+            }
+        } else if (m->phase==WAREHOUSE_HOME_FINAL_ALIGN) {
+            float error=remainderf(180.0f-in->map_yaw_deg,360.0f);
+            if (!isfinite(error)) {fail(m,PATH_ERROR);return;}
+            if ((uint32_t)(now-m->entered)>=PATH_HEADING_TIMEOUT_MS) {fail(m,PATH_TIMEOUT);return;}
+            if (!in->settled) return;
+            if (fabsf(error)<0.1f) m->result=PATH_DONE;
+            else m->waiting=emit(m,(PathCommand){.kind=PC_HOME_ALIGN,.x=180,.timeout_ms=PATH_HEADING_TIMEOUT_MS});
+        } else fail(m,PATH_ERROR);
+        return;
+    }
     if (m->point==9 && m->phase==WAREHOUSE_ALIGN_HOME && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         /* Brake after unloading, then correct heading during return travel. */
         if (in->settled) {
@@ -119,9 +146,9 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (in->settled) {
             float current=home_map_y(in);
             float remaining=20.0f-(m->home_line_y-current);
-            if (m->blue || remaining<=0.5f) m->result=PATH_DONE;
+            if (remaining<=0.5f) m->result=PATH_DONE;
             else if (!isfinite(remaining)) fail(m,PATH_ERROR);
-            else if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,.y=-remaining,.timeout_ms=5000})) {
+            else if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,.y=m->blue ? remaining : -remaining,.timeout_ms=5000})) {
                 m->phase=WAREHOUSE_HOME_ADVANCE; m->entered=now;
             }
         }
@@ -259,6 +286,12 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!in->settled) break;
             if (!PathHeading_Ready(m,now,in)) break;
             m->entered=now;
+            if (m->blue) {
+                if (emit(m,(PathCommand){.kind=PC_MOVE,.y=-10,.speed=30,
+                        .acceleration=300,.deceleration=300,.timeout_ms=5000}))
+                    m->phase=WAREHOUSE_FIRST_OFFSET;
+                break;
+            }
             /* Retreat along map -X, independently of residual body yaw. */
             float yaw=in->map_yaw_deg*0.01745329252f;
             if (!isfinite(yaw)) { fail(m,PATH_ERROR); break; }

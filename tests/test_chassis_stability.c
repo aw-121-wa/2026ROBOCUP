@@ -63,6 +63,41 @@ int main(int argc,char **argv) {
         fake_imu.yaw_deg=179.7f;planner.active=false;
         for(int n=0;n<12;n++)tick();
         wait_stop();assert(fabsf(Angle_Wrap(heading-180*RAD))<1e-5f);
+    } else if(!strcmp(argv[1],"start_turn")) {
+        path_diagnostics.blue=true;path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=0;tick();
+        assert(route_policy.use_start_turn_kp);
+        assert(Chassis_MoveRotate(100,0,180,100,550,550));
+        fake_imu.yaw_deg=179.7f;planner.active=false;tick();
+        assert(chassis_heading_diagnostics.mode==HEADING_DYNAMIC);
+        float test_integral=0;
+        HeadingRequest request={.mode=HEADING_DYNAMIC,.error=state.yaw_error,.gyro=0};
+        HeadingControlConfig config={8.0f,chassis_config.ki,
+                                     chassis_config.gyro_damping,chassis_config.wz_limit};
+        float expected=HeadingControl_Update(&request,&config,.005f,&test_integral);
+        assert(fabsf(chassis_heading_diagnostics.requested_rad_s-expected)<1e-5f);
+        for(unsigned step=0;step<=13;step++) {
+            assert(!PathPolicy_Chassis(false,PATH_RUNNING,step,0).use_start_turn_kp);
+            assert(PathPolicy_Chassis(true,PATH_RUNNING,step,0).use_start_turn_kp==(step==0));
+        }
+    } else if(!strcmp(argv[1],"dynamic_rate")) {
+        path_diagnostics.blue=true;path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=0;tick();
+        assert(Chassis_MoveRotateBoundary(1000,0,180,1000,650,650,0,100));
+        segment_progress=500;planner.time=10;fake_imu.yaw_deg=90;
+        /* At 90 degrees the original map-X segment points along body -Y. */
+        Mecanum_Inverse(geometry(),0,-50,0,state.rpm_applied);
+        memcpy(state.rpm_pending,state.rpm_applied,sizeof(state.rpm_applied));
+        memcpy(state.rpm_inflight,state.rpm_applied,sizeof(state.rpm_applied));
+        pending_valid=tx_busy=tx_done=false;tx_part=0;
+        tick();
+        assert(state.applied_path_speed>49 && state.applied_path_speed<51);
+        float target, rate;
+        Motion_SmoothTurn(segment_progress,planner.distance,blend_turn,state.applied_path_speed,&target,&rate);
+        HeadingRequest request={.mode=HEADING_DYNAMIC,.error=state.yaw_error,.gyro=0,.feedforward=rate};
+        HeadingControlConfig config={8,0,chassis_config.gyro_damping,chassis_config.wz_limit};
+        float test_integral=0;
+        float expected=HeadingControl_Update(&request,&config,.005f,&test_integral);
+        assert(fabsf(chassis_heading_diagnostics.requested_rad_s-expected)<1e-5f);
+        assert(fabsf(expected)<.5f); /* Uncapped 1000 mm/s would saturate the yaw output. */
     } else if(!strcmp(argv[1],"entry_arc")) {
         assert(Chassis_MoveRotateBoundary(-1640,0,180,550,550,550,0,165));
         fake_imu.yaw_deg=180; segment_progress=1640; tick();
@@ -129,6 +164,14 @@ int main(int argc,char **argv) {
         /* Red 1.3 speed scale: 30 rpm is approximately 153.2 mm/s. */
         assert(Chassis_ExitOrbit(-25,0,180,996,153.2f,845,845));
         assert(fabsf(planner.distance-25)<.001f && path_blend);
+        Chassis_Hold();wait_stop();
+        state.yaw_rad=280*RAD;path_yaw.continuous=state.yaw_rad;
+        assert(Chassis_Body(-318,0,-1));
+        state.velocity[0]=-318;state.velocity[1]=0;
+        assert(!Chassis_ExitOrbit(10,0,0,996,153.2f,845,845));
+        assert(path_body); /* Rejecting an impossible boundary restores orbit state. */
+        assert(Chassis_ExitOrbit(10,0,0,996,76.6f,845,845));
+        assert(planner.active && path_blend && fabsf(planner.distance-10)<.001f);
         Chassis_Stop();assert(!Chassis_ExitOrbit(-200,0,180,760,314,650,650));
     } else if(!strcmp(argv[1],"capture")) {
         assert(Chassis_Body(-295,0,-0.86f));
@@ -238,6 +281,24 @@ int main(int argc,char **argv) {
         path_arc=true;
         assert(!Chassis_FinishForward(25,65,250,650));
         path_arc=false;
+        Chassis_Hold();wait_stop();
+        assert(Chassis_Move(-200,0,65,250,650));
+        state.velocity[0]=-60;state.velocity[1]=0;body_output[0]=-60;
+        assert(!Chassis_FinishForward(25,65,250,650)); /* Cannot reverse a live scan. */
+        assert(Chassis_FinishForward(-25,65,250,650));
+        assert(planner.distance==25 && planner.start_speed==60 && chain_x==-1);
+        assert(body_output[0]==-60 && !normal_stopping);
+        Chassis_Hold();wait_stop();
+        path_diagnostics.blue=true;tick();
+        state.x_mm=100;state.y_mm=200;state.yaw_rad=0;Chassis_BeginPath();
+        state.yaw_rad=3.14159265359f;route_heading=heading=state.yaw_rad;
+        assert(Chassis_ReturnHome(0));
+        assert(dx>.999f && fabsf(dy)<1e-5f && planner.distance==2200);
+        assert(fabsf(Angle_Wrap(route_heading-3.14159265359f))<1e-5f);
+        Chassis_Hold();wait_stop();
+        assert(Chassis_ReturnHome(1));
+        assert(dy<-.999f && fabsf(dx)<1e-5f && planner.distance==1000);
+        assert(fabsf(Angle_Wrap(route_heading-3.14159265359f))<1e-5f);
         Chassis_Stop();assert(!Chassis_ReturnHome(0));
         assert(!Chassis_FinishForward(25,65,250,650));
     } else if(!strcmp(argv[1],"line")) {
@@ -281,6 +342,16 @@ int main(int argc,char **argv) {
         assert(PathPolicy_CommandBoost(9,PC_BODY)==1);
         assert(PathPolicy_CommandBoost(13,PC_MAP_SEARCH)==1);
         assert(PathPolicy_CommandBoost(8,PC_ARC)==1);
+        for(unsigned step=0;step<=13;step++) {
+            ChassisRoutePolicy red=PathPolicy_Chassis(false,PATH_RUNNING,step,24);
+            ChassisRoutePolicy blue=PathPolicy_Chassis(true,PATH_RUNNING,step,24);
+            assert(red.travel_speed_scale==blue.travel_speed_scale);
+            assert(red.home_x_extra_trim_mm==blue.home_x_extra_trim_mm);
+            assert(red.suppress_lateral_comp==blue.suppress_lateral_comp);
+            assert(red.stationary_hold==blue.stationary_hold);
+            assert(red.hold_during_action==blue.hold_during_action);
+            assert(!red.mirror_map_y && blue.mirror_map_y);
+        }
         /* Control uses explicit policy even when diagnostics claim another side/stage. */
         ChassisRoutePolicy p={.stair_target_deg=180.0f};
         Chassis_SetRoutePolicy(p); path_diagnostics.blue=false;

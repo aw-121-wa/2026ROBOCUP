@@ -461,6 +461,22 @@ bool JY60_Init(void)
 
 void JY60_Process(void)
 {
+    /* UART overrun aborts DMA in HAL. Retry from the task, not the IRQ;
+     * never allow pre-error frames to restore trust. */
+    static uint32_t retry_ms;
+    if (PINCFG_JY60_UART->RxState == HAL_UART_STATE_READY &&
+        PINCFG_JY60_UART->ErrorCode != HAL_UART_ERROR_NONE) {
+        uint32_t now_ms = HAL_GetTick();
+        JY60_EnterLost();
+        if ((uint32_t)(now_ms-retry_ms) >= 1000U) {
+            retry_ms = now_ms;
+            if (HAL_UART_AbortReceive(PINCFG_JY60_UART) == HAL_OK) {
+                __HAL_UART_CLEAR_OREFLAG(PINCFG_JY60_UART);
+                (void)JY60_Init();
+            }
+        }
+        return;
+    }
     /*
      * DMA 当前写位置。
      *

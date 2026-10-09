@@ -69,10 +69,11 @@ typedef struct
 {
     bool armed, fault, settled, motion_done;
     float yaw_deg;
+    float travel_rpm; /* Applied planar command speed in wheel-equivalent rpm. */
     float x_mm, y_mm; /* Command-integrated open-loop odometry, in world frame. */
     float map_yaw_deg; /* Measured yaw relative to the fixed PATH start direction. */
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
-    uint8_t gray; /* Active bits: PD3/PD0/PD1/PB13. Acceptance is station-specific. */
+    uint8_t gray; /* Two active probes: front PD0 bit 2, rear PD1 bit 1; both on = 0110. */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;

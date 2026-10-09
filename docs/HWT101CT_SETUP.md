@@ -16,7 +16,7 @@
   tolerance; this is not a guaranteed bound on physical tracking error.
 - Stationary calibration/rotation admission and active stair hold use 0.1 degrees.
   Gray acquisition does not request stationary angle calibration; emergency STOP remains.
-- Both red and blue use map targets 180 degrees at stairs and 0 degrees at warehouse.
+- Red uses map targets 180 degrees at stairs and 0 degrees at warehouse; blue uses 0 and 180 degrees respectively.
   No blue-side angular compensation is applied.
 
 ## Commissioning

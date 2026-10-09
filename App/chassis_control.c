@@ -334,6 +334,14 @@ void Chassis_BeginPath(void)
 bool Chassis_ReturnHome(unsigned leg)
 {
     if (!path_heading_enabled || !state.armed || !Chassis_IsSettled()) return false;
+    if (route_policy.mirror_map_y) {
+        if (leg>1) return false;
+        /* Blue fixed return: keep the unloading heading and use body-frame directions. */
+        float boost=PATH_TRAVEL_BOOST*route_policy.travel_speed_scale;
+        return Chassis_Move(leg==0 ? 2200.0f : 0,leg==1 ? -1000.0f : 0,
+                            CHASSIS_HOME_SPEED_MM_S*boost,CHASSIS_HOME_ACCEL_MM_S2*boost,
+                            CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
+    }
     /* Return travel keeps heading control active without an angle admission gate. */
     if (leg>2 || !isfinite(state.x_mm) || !isfinite(state.y_mm) || !isfinite(state.yaw_rad)) return false;
     float travel;
@@ -345,17 +353,19 @@ bool Chassis_ReturnHome(unsigned leg)
         float mx=(cosf(map_yaw)*x+sinf(map_yaw)*y)*scale;
         float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
         travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM-route_policy.home_x_extra_trim_mm);
-        home_right_target=current_y-(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
+        home_right_target=current_y+-1*(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
         home_return_ready=true;
     } else {
         if (!home_return_ready) return false;
-        float remaining=fmaxf(0,current_y-home_right_target);
+        float remaining=fmaxf(0,1*(current_y-home_right_target));
         travel=leg==1 ? fmaxf(0,remaining-CHASSIS_HOME_SEARCH_MM) : remaining+CHASSIS_HOME_SEARCH_MM;
     }
     if (travel < 0.5f) return true;
     float angle=state.yaw_rad-map_yaw, c=cosf(angle), sn=sinf(angle);
-    float bx=leg==0 ? -travel*c : -travel*sn;
-    float by=leg==0 ? travel*sn : -travel*c;
+    float lateral=-travel;
+    float forward=route_policy.mirror_map_y ? travel : -travel;
+    float bx=leg==0 ? forward*c : lateral*sn;
+    float by=leg==0 ? -forward*sn : lateral*c;
     route_heading = heading = map_yaw;
     integral = 0;
     float boost=leg==2 ? 1.0f : PATH_TRAVEL_BOOST;
@@ -448,13 +458,13 @@ bool Chassis_ExitOrbit(float forward, float lateral, float target_deg, float spe
 }
 bool Chassis_FinishForward(float distance, float speed, float acceleration, float deceleration)
 {
-    if (!state.armed || !isfinite(distance) || distance<=0) return false;
+    if (!state.armed || !isfinite(distance) || fabsf(distance)<0.01f) return false;
     if (!Chassis_MotionBusy()) return Chassis_Move(distance,0,speed,acceleration,deceleration);
     if (!planner.active || normal_stopping || path_arc || path_blend || path_rotation || path_body ||
-        fabsf(chain_x-1)>0.001f || fabsf(chain_y)>0.001f) return false;
+        fabsf(chain_x-(distance>0 ? 1.0f : -1.0f))>0.001f || fabsf(chain_y)>0.001f) return false;
     float start=fmaxf(0, state.velocity[0]*dx+state.velocity[1]*dy);
     Planner next;
-    if (!Planner_StartBoundary(&next,distance,fmaxf(speed,start),acceleration,deceleration,start,0)) return false;
+    if (!Planner_StartBoundary(&next,fabsf(distance),fmaxf(speed,start),acceleration,deceleration,start,0)) return false;
     planner=next;
     segment_progress=0;
     return true;
@@ -968,10 +978,12 @@ void Chassis_Update(void)
     {
         float fraction = planner.active ? fmaxf(0, fminf(1, segment_progress / planner.distance)) : 1;
         float turn = blend_turn * fraction;
-        float feedforward = planner.active ? blend_turn * speed / planner.distance : 0;
+        /* Target progress follows committed wheel commands, not the uncapped planner. */
+        float progress_speed = fmaxf(0,state.applied_path_speed);
+        float feedforward = planner.active ? blend_turn * progress_speed / planner.distance : 0;
         if (blend_continuous)
             Motion_SmoothTurn(fraction * planner.distance, planner.distance, blend_turn,
-                              speed, &turn, &feedforward);
+                              progress_speed, &turn, &feedforward);
         float error = blend_yaw + turn - path_yaw.continuous;
         state.yaw_error = error;
         yaw_request.mode=HEADING_DYNAMIC;
@@ -1068,6 +1080,8 @@ void Chassis_Update(void)
         yaw_request.error=state.yaw_error;
     }
     /* Only the final selected mode evaluates the angle loop. */
+    if (yaw_request.mode==HEADING_DYNAMIC && route_policy.use_start_turn_kp)
+        yaw_config.kp=HEADING_START_TURN_KP;
     wz=HeadingControl_Update(&yaw_request,&yaw_config,dt,&integral);
     chassis_heading_diagnostics.mode=yaw_request.mode;
     chassis_heading_diagnostics.requested_rad_s=wz;
