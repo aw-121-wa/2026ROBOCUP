@@ -40,7 +40,49 @@ class BlockDetector:
         x,y,w,h = self.roi
         if image.shape != (h,w): raise ValueError('empty reference must exactly match ROI')
         self.empty = image.astype(np.float32)
+        self.empty_samples = [self.empty]
+        for name in settings.get('empty_references', []):
+            reference = cv2.imread(str(root / name), cv2.IMREAD_GRAYSCALE)
+            if reference is None or reference.shape != (h, w):
+                raise ValueError(f'invalid additional empty reference: {name}')
+            self.empty_samples.append(reference.astype(np.float32))
         self.ready = True
+
+    def _matches_empty(self, gray):
+        """Positive empty match, with bounded translation and smooth lighting drift.
+
+        Never infer EMPTY merely from failure to recognize a digit. Compare the
+        whole ROI (including its edges); do not crop away an entering block.
+        """
+        current = gray.astype(np.float32)
+        h, w = gray.shape
+        yy, xx = np.mgrid[-1:1:complex(h), -1:1:complex(w)]
+        basis = np.stack([np.ones_like(xx), xx, yy], axis=-1).reshape(-1, 3)
+        inverse = np.linalg.pinv(basis)
+        for reference in self.empty_samples:
+            for dy in (0, -3, 3, -6, 6):
+                for dx in (0, -3, 3, -6, 6):
+                    aligned = cv2.warpAffine(reference, np.float32([[1, 0, dx], [0, 1, dy]]),
+                                             (w, h), borderMode=cv2.BORDER_REPLICATE)
+                    delta = current - aligned
+                    lighting = inverse @ delta.ravel()
+                    if abs(lighting[0]) > 35 or np.max(np.abs(lighting[1:])) > 20:
+                        continue
+                    residual = delta - (basis @ lighting).reshape(h, w)
+                    if np.mean(np.abs(residual)) > self.settings.get('empty_mean_error', 4.0):
+                        continue
+                    if np.mean(np.abs(residual) > 25) > self.settings.get('empty_changed_fraction', .01):
+                        continue
+                    # A new vertical contour can be a block side or unreadable
+                    # print, even when it covers few pixels in the empty ROI.
+                    edges = cv2.Canny(gray, 25, 60)
+                    known = cv2.Canny(np.uint8(np.clip(aligned, 0, 255)), 25, 60)
+                    unexplained = edges & ~cv2.dilate(known, np.ones((5, 5), np.uint8))
+                    contours, _ = cv2.findContours(unexplained, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                    if any(cv2.boundingRect(c)[3] >= 15 for c in contours):
+                        continue
+                    return True
+        return False
 
     def detect(self, frame):
         if not self.ready: return UNKNOWN
@@ -64,13 +106,7 @@ class BlockDetector:
                 found.append(scores[0][1])
         if len(found)==1: return found[0]
         if found: return UNKNOWN
-        # Only a close positive match to a verified empty cell can mean EMPTY.
-        current = gray.astype(np.float32)
-        delta = current-self.empty
-        delta -= np.median(delta)  # tolerate small uniform illumination drift
-        mean_error = float(np.mean(np.abs(delta)))
-        changed = float(np.mean(np.abs(delta)>25))
-        if mean_error<=self.settings.get('empty_mean_error',4.0) and changed<=self.settings.get('empty_changed_fraction',.01):
+        if self._matches_empty(gray):
             return EMPTY
         return UNKNOWN
 

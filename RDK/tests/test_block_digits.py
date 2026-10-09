@@ -32,6 +32,28 @@ class BlockTests(unittest.TestCase):
  def test_uncalibrated_never_empty(self):
   detector=BlockDetector(self.root,dict(self.settings,calibrated=False))
   self.assertEqual(detector.detect(self.empty),UNKNOWN)
+ def test_empty_with_lighting_gradient_and_shift(self):
+  shifted=cv2.warpAffine(self.empty,np.float32([[1,0,3],[0,1,3]]),(160,180),borderMode=cv2.BORDER_REPLICATE)
+  gradient=np.linspace(-12,12,160)[None,:]
+  image=np.uint8(np.clip(shifted.astype(float)+gradient+8,0,255))
+  self.assertEqual(BlockDetector(self.root,self.settings).detect(image),EMPTY)
+ def test_unreadable_print_and_block_edge_are_not_empty(self):
+  detector=BlockDetector(self.root,self.settings)
+  for x in (0,60,157):
+   image=self.empty.copy();cv2.rectangle(image,(x,35),(min(159,x+2),145),30,-1)
+   self.assertEqual(detector.detect(image),UNKNOWN)
+  image=self.empty.copy();cv2.putText(image,'?',(45,130),cv2.FONT_HERSHEY_SIMPLEX,3,0,6)
+  self.assertEqual(detector.detect(image),UNKNOWN)
+ def test_real_empty_column_and_all_digit_samples(self):
+  import yaml
+  root=ROOT/'rdk_vision'
+  settings=yaml.safe_load((root/'block_digits.yaml').read_text())['red']
+  for row in (1,2,3):
+   detector=BlockDetector(root,settings[row]);folder=root/settings[row]['templates']
+   for label,value in [('1',1),('2',2),('3',3),('empty',EMPTY)]:
+    self.assertEqual(detector.detect(cv2.imread(str(folder/(label+'-scene.png')))),value)
+  image=cv2.imread(str(root/'block_samples/shared/row2/empty-column3-scene.png'))
+  self.assertEqual(BlockDetector(root,settings[2]).detect(image),EMPTY)
  def test_missing_sample_and_bad_roi(self):
   (self.root/'2.png').unlink()
   with self.assertRaises(ValueError):BlockDetector(self.root,self.settings)

@@ -320,7 +320,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             uint8_t first=m->warehouse_columns[0], second=m->warehouse_columns[1];
             if (m->point==6 && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
                 first>=1 && first<=3 && second>=1 && second<=3 && first!=second) {
-                if (emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,
+                if (emit(m,(PathCommand){.kind=PC_MOVE,.x=m->blue ? PATH_WAREHOUSE_COLUMN_SPACING_MM : PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM,
                         .speed=120,.acceleration=850,.deceleration=850,.timeout_ms=30000})) {
                     remember_digit(m,(uint8_t)(6-first-second));
                     m->warehouse_query=false;

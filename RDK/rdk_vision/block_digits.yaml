@@ -1,8 +1,11 @@
-# Same 112/115/118 poses share captured glyphs on both sides. Field validation remains required.
 red:
   1:
     calibrated: true
-    roi: [280, 215, 75, 58]
+    roi:
+    - 280
+    - 215
+    - 75
+    - 58
     templates: block_samples/shared/row1
     empty_reference: block_samples/shared/row1/empty.png
     min_digit_height: 20
@@ -11,16 +14,26 @@ red:
     empty_changed_fraction: 0.01
   2:
     calibrated: true
-    roi: [270, 200, 100, 86]
+    roi:
+    - 270
+    - 200
+    - 100
+    - 86
     templates: block_samples/shared/row2
     empty_reference: block_samples/shared/row2/empty.png
     min_digit_height: 20
     min_score: 0.75
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
+    empty_references:
+    - block_samples/shared/row2/empty-column3.png
   3:
     calibrated: true
-    roi: [275, 180, 100, 95]
+    roi:
+    - 275
+    - 180
+    - 100
+    - 95
     templates: block_samples/shared/row3
     empty_reference: block_samples/shared/row3/empty.png
     min_digit_height: 20
@@ -30,7 +43,11 @@ red:
 blue:
   1:
     calibrated: true
-    roi: [280, 215, 75, 58]
+    roi:
+    - 280
+    - 215
+    - 75
+    - 58
     templates: block_samples/shared/row1
     empty_reference: block_samples/shared/row1/empty.png
     min_digit_height: 20
@@ -39,16 +56,26 @@ blue:
     empty_changed_fraction: 0.01
   2:
     calibrated: true
-    roi: [270, 200, 100, 86]
+    roi:
+    - 270
+    - 200
+    - 100
+    - 86
     templates: block_samples/shared/row2
     empty_reference: block_samples/shared/row2/empty.png
     min_digit_height: 20
     min_score: 0.75
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
+    empty_references:
+    - block_samples/shared/row2/empty-column3.png
   3:
     calibrated: true
-    roi: [275, 180, 100, 95]
+    roi:
+    - 275
+    - 180
+    - 100
+    - 95
     templates: block_samples/shared/row3
     empty_reference: block_samples/shared/row3/empty.png
     min_digit_height: 20
