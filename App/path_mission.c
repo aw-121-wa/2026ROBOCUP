@@ -82,7 +82,7 @@ bool Path_Start(PathMission *m, uint32_t now, const PathInput *in)
     void *c = m->context;
     *m =
         (PathMission){.blue = blue, .send = s, .context = c, .result = PATH_RUNNING, .phase = 99, .entered = now};
-    if (!PATH_VISION_ENABLE)
+    if (!PATH_COLLECTION_VISION_ENABLE)
     {
         m->phase = 0;
         return true;
@@ -215,7 +215,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
     {
         if (PathLine_Align(m, now, in, PATH_DISC_LINE_TIMEOUT_MS, 25))
         {
-            if (!PATH_VISION_ENABLE) { m->result=PATH_DONE; return; }
+            if (!PATH_COLLECTION_VISION_ENABLE) { m->result=PATH_DONE; return; }
             m->phase=3; m->entered=now; /* Line reached; serialize the next arm/vision request. */
         }
     }
@@ -248,7 +248,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
 
 void Path_RecordId(PathMission *m, uint32_t id)
 {
-    if (!PATH_VISION_ENABLE) return;
+    if (!PATH_COLLECTION_VISION_ENABLE) return;
     if (m->result != PATH_RUNNING ||
         !((m->step == 3 && m->phase == 1) || (m->step == 6 && m->phase == 6) ||
           (m->step == 9 && m->phase == 24 && m->stair_scanning && m->grabs < 2)))

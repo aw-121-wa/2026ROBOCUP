@@ -84,13 +84,31 @@ class BlockDetector:
                     return True
         return False
 
-    def detect(self, frame):
-        if not self.ready: return UNKNOWN
-        x,y,w,h = self.roi
-        if frame is None or y+h>frame.shape[0] or x+w>frame.shape[1]: return UNKNOWN
-        crop = frame[y:y+h,x:x+w]
-        gray = cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY) if crop.ndim==3 else crop
-        if not 25<float(np.mean(gray))<245: return UNKNOWN
+    def _has_block_evidence(self, gray):
+        """Detect a card/glyph silhouette even when its digit is unreadable."""
+        window = self.settings.get('digit_window')
+        if not window:
+            return True
+        ww, hh = window
+        h, w = gray.shape
+        for top in sorted(set(range(0, h - hh + 1, 8)) | {max(0, h - hh)}):
+            for left in sorted(set(range(0, w - ww + 1, 8)) | {max(0, w - ww)}):
+                crop = gray[top:top + hh, left:left + ww]
+                mask = cv2.adaptiveThreshold(
+                    crop, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    cv2.THRESH_BINARY_INV, 31, 7)
+                contours, _ = cv2.findContours(
+                    mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for contour in contours:
+                    a, b, c, d = cv2.boundingRect(contour)
+                    if (cv2.contourArea(contour) >= 35 and d >= self.settings.get(
+                            'block_evidence_min_height', 30) and c >= 5 and
+                            .10 < c / d < 1.6):
+                        return True
+        return False
+
+    def _digits(self, gray):
+        h, w = gray.shape
         _,mask = cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV|cv2.THRESH_OTSU)
         contours,_ = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         found = []
@@ -104,8 +122,29 @@ class BlockDetector:
                              for digit,template in self.templates), reverse=True)
             if scores[0][0]>=self.settings.get('min_score',.75) and scores[0][0]-scores[1][0]>=.15:
                 found.append(scores[0][1])
+        return found
+
+    def detect(self, frame):
+        if not self.ready: return UNKNOWN
+        x,y,w,h = self.roi
+        if frame is None or y+h>frame.shape[0] or x+w>frame.shape[1]: return UNKNOWN
+        crop = frame[y:y+h,x:x+w]
+        gray = cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY) if crop.ndim==3 else crop
+        if not 25<float(np.mean(gray))<245: return UNKNOWN
+        found = self._digits(gray)
+        window = self.settings.get('digit_window')
+        if window:
+            ww, hh = window
+            found = []
+            for top in sorted(set(range(0, h-hh+1, 8)) | set(range(10, h-hh+1, 8)) | {h-hh}):
+                for left in sorted(set(range(0, w-ww+1, 8)) | set(range(10, w-ww+1, 8)) | {w-ww}):
+                    found.extend(self._digits(gray[top:top+hh,left:left+ww]))
+            found = sorted(set(found))
         if len(found)==1: return found[0]
         if found: return UNKNOWN
+        # A blank cell has no tall central glyph.  If there is no card-shaped
+        # evidence, accept EMPTY even when the shelf background moved.
+        if not self._has_block_evidence(gray): return EMPTY
         if self._matches_empty(gray):
             return EMPTY
         return UNKNOWN

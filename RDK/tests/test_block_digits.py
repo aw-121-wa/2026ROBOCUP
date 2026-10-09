@@ -44,6 +44,18 @@ class BlockTests(unittest.TestCase):
    self.assertEqual(detector.detect(image),UNKNOWN)
   image=self.empty.copy();cv2.putText(image,'?',(45,130),cv2.FONT_HERSHEY_SIMPLEX,3,0,6)
   self.assertEqual(detector.detect(image),UNKNOWN)
+ def test_real_empty_scene_without_background_match_is_empty(self):
+  image=cv2.imread(str(ROOT/'rdk_vision/block_samples/shared/row1/empty-column3-scene.png'))
+  settings=dict(calibrated=True, roi=[255,155,150,135], digit_window=[75,58],
+                templates='block_samples/shared/row1',
+                empty_reference='block_samples/shared/row1/empty.png')
+  self.assertEqual(BlockDetector(ROOT/'rdk_vision', settings).detect(image), EMPTY)
+ def test_offset_card_with_unreadable_digit_is_not_empty(self):
+  image=cv2.imread(str(ROOT/'rdk_vision/block_samples/shared/row1/2-offset-scene.png'))
+  settings=dict(calibrated=True, roi=[255,155,150,135], digit_window=[75,58],
+                templates='block_samples/shared/row1',
+                empty_reference='block_samples/shared/row1/empty.png')
+  self.assertEqual(BlockDetector(ROOT/'rdk_vision', settings).detect(image), 2)
  def test_real_empty_column_and_all_digit_samples(self):
   import yaml
   root=ROOT/'rdk_vision'
@@ -52,6 +64,9 @@ class BlockTests(unittest.TestCase):
    detector=BlockDetector(root,settings[row]);folder=root/settings[row]['templates']
    for label,value in [('1',1),('2',2),('3',3),('empty',EMPTY)]:
     self.assertEqual(detector.detect(cv2.imread(str(folder/(label+'-scene.png')))),value)
+  for name,expected in [('2-offset-scene.png',2),('empty-column3-scene.png',EMPTY)]:
+   image=cv2.imread(str(root/'block_samples/shared/row1'/name))
+   self.assertEqual(BlockDetector(root,settings[1]).detect(image),expected)
   image=cv2.imread(str(root/'block_samples/shared/row2/empty-column3-scene.png'))
   self.assertEqual(BlockDetector(root,settings[2]).detect(image),EMPTY)
  def test_missing_sample_and_bad_roi(self):

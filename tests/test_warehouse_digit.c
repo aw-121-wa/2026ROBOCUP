@@ -111,7 +111,7 @@ static int inferred_column(void) {
  m.warehouse_columns[0]=3; m.warehouse_columns[1]=1; m.warehouse_used=(1U<<3)|(1U<<1);
  PathInput in={.armed=true,.settled=true,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
  Path_Tick(&m,0,&in);
- CHECK(last.kind==PC_MOVE && last.x==180 && queries==0 && m.warehouse_columns[2]==2);
+ CHECK(last.kind==PC_MOVE && last.x==170 && queries==0 && m.warehouse_columns[2]==2);
  CHECK(m.phase==WAREHOUSE_INFERRED_MOVE && groups==0);
  in.settled=false; Path_Tick(&m,10000,&in); CHECK(groups==0 && m.phase==WAREHOUSE_INFERRED_MOVE);
  in.settled=true; Path_Tick(&m,10005,&in); CHECK(m.phase==WAREHOUSE_SELECT_BALL && queries==0);

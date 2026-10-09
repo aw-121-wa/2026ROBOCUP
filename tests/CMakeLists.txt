@@ -263,3 +263,11 @@ target_include_directories(test_destack PRIVATE ../App)
 target_compile_options(test_destack PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_destack PRIVATE m)
 add_test(NAME destack COMMAND test_destack)
+add_executable(test_warehouse_only_vision test_warehouse_only_vision.c
+    ../App/path_mission.c ../App/path_chassis.c ../App/path_line.c
+    ../App/path_warehouse.c ../App/path_destack.c ../App/ball_inventory.c)
+target_include_directories(test_warehouse_only_vision PRIVATE ../App)
+target_compile_definitions(test_warehouse_only_vision PRIVATE PATH_WAREHOUSE_ONLY_VISION=1)
+target_compile_options(test_warehouse_only_vision PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_warehouse_only_vision PRIVATE m)
+add_test(NAME warehouse_only_vision COMMAND test_warehouse_only_vision)

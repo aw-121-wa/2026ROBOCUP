@@ -51,14 +51,20 @@ static bool move(PathMission *m,uint32_t now,const PathInput *in,float target)
 static void next_row(PathMission *m,uint32_t now)
 {
     if (--m->destack.row) enter(m,DESTACK_POSE,now);
-    else {m->destack.cleared=true;enter(m,WAREHOUSE_SELECT_BALL,now);}
+    else {
+        /* Finish all columns before admitting any ball-unload action. */
+        if (m->destack.column) --m->destack.column;
+        else {m->destack.cleared=true;m->destack.column=2;}
+        m->point=m->destack.column*3;
+        enter(m,DESTACK_NEXT,now);
+    }
 }
 bool PathDestack_Advance(PathMission *m,uint32_t now)
 {
-    if (!m->destack.enabled || !m->destack.scanned || m->point%3!=2) return false;
+    if (!m->destack.enabled || !m->destack.scanned || !m->destack.cleared || m->point%3!=2) return false;
     if (m->destack.column) {
         --m->destack.column;m->point=m->destack.column*3;
-        m->destack.cleared=false;enter(m,DESTACK_NEXT,now);
+        enter(m,DESTACK_NEXT,now);
     } else {m->point=9;enter(m,DESTACK_HOME,now);}
     return true;
 }
@@ -101,7 +107,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
             else if (digit>=1 && digit<=3) {
                 if (m->destack.occupied&(1U<<digit)) {fail(m);break;}
                 m->destack.target=(uint8_t)digit;enter(m,DESTACK_PICK,now);
-            } else if (digit==0) enter(m,DESTACK_CHECK,now); /* UNKNOWN: stationary retry. */
+            } else if (digit==0) enter(m,DESTACK_CHECK,now); /* Unknown: retry this row, never skip it. */
             else fail(m);
         }
         break;
@@ -124,7 +130,8 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         break;
     case DESTACK_NEXT:
         if (move(m,now,in,m->destack.position[m->destack.column])) {
-            m->destack.row=3;enter(m,DESTACK_POSE,now);
+            m->destack.row=3;
+            enter(m,m->destack.cleared ? WAREHOUSE_SELECT_BALL : DESTACK_POSE,now);
         }
         break;
     case DESTACK_HOME:
