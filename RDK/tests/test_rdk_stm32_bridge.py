@@ -28,6 +28,28 @@ class BridgeCommandTests(unittest.TestCase):
 
 
 class BridgeCoreTests(unittest.TestCase):
+    def test_camera_wait_renews_startup_and_ready_releases_next_stage(self):
+        tx, entered, release = [], threading.Event(), threading.Event()
+        now=[0.0]
+        def pillar(**kw):
+            for _ in range(3):
+                now[0]+=200
+                kw['on_camera_wait']()
+                core.tick()
+                self.assertFalse(kw['rfid_gate'].is_cancelled())
+            entered.set()
+            release.wait(1)
+            kw['on_ready']()
+            return 0
+        core=BridgeCore(tx.append, lambda **kw:0, run_pillar=pillar, clock=lambda:now[0])
+        core.handle('PILLAR_START')
+        self.assertTrue(entered.wait(1))
+        self.assertNotIn('PILLAR_READY',tx)
+        self.assertEqual(tx.count('PILLAR_CAMERA_WAIT'),3)
+        core.handle('PILLAR_END');release.set()
+        self.assertTrue(core.wait_for_idle(1))
+        self.assertEqual(tx[-2:],['PILLAR_READY','PILLAR_DONE'])
+
     def test_overall_timeout_cancels_gate_and_stops_worker(self):
         tx, entered = [], threading.Event()
         now = [100.0]

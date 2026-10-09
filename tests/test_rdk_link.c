@@ -155,5 +155,13 @@ int main(void) {
     CHECK(Rdk_Begin(&r,"GROUP",110,0,100));Rdk_Tick(&r,60000);
     CHECK(r.active && !r.locked);
     r.no_timeout=false;Rdk_Tick(&r,60001);CHECK(r.locked);
+    Rdk_Init(&r,0,tx,0);r.stage=2;
+    CHECK(Rdk_Begin(&r,"PILLAR",0,0,300000));Rdk_Tick(&r,0);
+    feed(&r,"PILLAR_ACK\r\nPILLAR_CAMERA_WAIT\r\n");
+    CHECK(r.camera_wait_event && !r.pillar_ready && !r.locked && r.active);
+    r.camera_wait_event=false;
+    feed(&r,"PILLAR_CAMERA_WAIT\r\n");CHECK(r.camera_wait_event);
+    feed(&r,"PILLAR_READY\r\n");CHECK(r.pillar_ready && !r.locked);
+    feed(&r,"PILLAR_CAMERA_WAIT\r\n");CHECK(r.locked); /* Not a running-task heartbeat. */
     puts("ZHY link tests passed"); return 0;
 }

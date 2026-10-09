@@ -18,7 +18,8 @@ static unsigned count(const Port *p, PathCommandKind k) {
 }
 static int parallel_prep(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
-    m.result=PATH_RUNNING; m.step=3; m.phase=2; in.gray=0; in.reply=PATH_WAIT;
+    CHECK(Path_Start(&m,0,&in)); Path_Tick(&m,0,&in);
+    m.step=3; m.phase=2; in.gray=0; in.reply=PATH_WAIT;
     Path_Tick(&m,0,&in); CHECK(m.prep_pending && m.phase==0);
     Path_Tick(&m,5,&in); CHECK(p.commands[p.n-1].kind==PC_BODY);
     in.gray=6; Path_Tick(&m,10,&in); Path_Tick(&m,15,&in);
@@ -33,13 +34,13 @@ static int parallel_prep(void) {
 static int startup(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
     CHECK(Path_Start(&m,0,&in)); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
-    CHECK(p.n==2 && p.commands[0].kind==PC_HELLO && p.commands[1].kind==PC_MOVE);
-    CHECK(fabsf(p.commands[1].x-1558.8922f)<0.02f);
-    CHECK(fabsf(p.commands[1].y-567.3904f)<0.02f);
-    CHECK(p.commands[1].angle==0 && p.commands[1].continuous);
-    CHECK(p.commands[1].start_speed==0 && p.commands[1].end_speed==155);
+    CHECK(p.n==3 && p.commands[0].kind==PC_HELLO && p.commands[1].kind==PC_GROUP && p.commands[1].argument==100 && p.commands[2].kind==PC_MOVE);
+    CHECK(fabsf(p.commands[2].x-1558.8922f)<0.02f);
+    CHECK(fabsf(p.commands[2].y-567.3904f)<0.02f);
+    CHECK(p.commands[2].angle==0 && p.commands[2].continuous);
+    CHECK(p.commands[2].start_speed==0 && p.commands[2].end_speed==155);
     in.settled=true; in.motion_done=false; Path_Tick(&m,8,&in);
-    CHECK(m.part==0 && p.n==2);
+    CHECK(m.part==0 && p.n==3);
     in.settled=false; in.motion_done=true; Path_Tick(&m,10,&in);
     CHECK(m.step==0 && m.part==1 && m.waiting && p.commands[p.n-1].kind==PC_ARC);
     CHECK(p.commands[p.n-1].x==800 && p.commands[p.n-1].y==20);
@@ -55,7 +56,7 @@ static int startup(void) {
     CHECK(p.commands[p.n-1].start_speed==25 && p.commands[p.n-1].end_speed==25);
     Path_Tick(&m,25,&in);
     CHECK(m.step==3 && m.phase==2 && count(&p,PC_ROTATE)==0);
-    CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_HOLD)==0);
+    CHECK(count(&p,PC_GROUP)==1 && count(&p,PC_HOLD)==0);
     m.step=1; m.part=1; m.waiting=true; in.motion_done=false; in.gray=6;
     Path_Tick(&m,30,&in);
     CHECK(m.step==3 && m.stable && p.commands[p.n-1].kind==PC_HOLD);
@@ -130,8 +131,8 @@ static int disc_contract(void) {
     CHECK(count(&p,PC_DISC)==1 && count(&p,PC_GROUP)==0);
     for (uint8_t ids=0; ids<DISC_REQUIRED_RFID_COUNT; ++ids) {
         Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=3; m.phase=1;
-        m.id_count=ids; in.reply=PATH_OK;
-        Path_Tick(&m,100,&in); CHECK(m.result==PATH_ERROR);
+        m.id_count=ids; in.reply=PATH_OK; in.disc_completed=DISC_REQUIRED_RFID_COUNT;
+        Path_Tick(&m,100,&in); CHECK(m.result==PATH_DONE);
     }
     CHECK(count(&p,PC_TURN)==0);
     Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=3; m.phase=1;
@@ -178,8 +179,8 @@ static int chassis_only(void) {
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; m.phase=2;
     m.orbit_yaw=100; in.yaw_deg=-251;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
-    in.yaw_deg=-256; Path_Tick(&m,105,&in); CHECK(m.step==8 && count(&p,PC_HOLD)==0 && count(&p,PC_ORBIT_EXIT)==1);
-    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-40 && p.commands[p.n-1].end_speed==30);
+    in.yaw_deg=-258; Path_Tick(&m,105,&in); CHECK(m.step==8 && count(&p,PC_HOLD)==0 && count(&p,PC_ORBIT_EXIT)==1);
+    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-30 && p.commands[p.n-1].end_speed==30);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==30);
     in.ir=true; in.yaw_deg=0;
@@ -192,7 +193,7 @@ static int chassis_only(void) {
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={5,190,440,230,110,-25,200,200};
+    const float expected[]={5,180,450,230,110,-30,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<8 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;

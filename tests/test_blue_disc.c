@@ -39,8 +39,8 @@ int main(void) {
     Path_Tick(&m,110,&in);in.yaw_deg=-180;Path_Tick(&m,115,&in);
     assert(last.kind==PC_BODY && last.x==-80.94114f && last.speed==-58.653f && m.phase==2);
     in.yaw_deg=-180+354;Path_Tick(&m,120,&in);assert(m.phase==2);
-    in.yaw_deg=-180-352;Path_Tick(&m,125,&in);assert(m.phase==2);
-    in.yaw_deg=-180-353;in.settled=false;Path_Tick(&m,130,&in);
+    in.yaw_deg=-180-357;Path_Tick(&m,125,&in);assert(m.phase==2);
+    in.yaw_deg=-180-358;in.settled=false;Path_Tick(&m,130,&in);
     assert(last.kind==PC_HOLD && m.result==PATH_DONE);
     Path_Tick(&m,450,&in);assert(m.result==PATH_DONE);
     in.settled=true;Path_Tick(&m,455,&in);assert(m.result==PATH_DONE && m.step==6);

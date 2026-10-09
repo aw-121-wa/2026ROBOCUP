@@ -62,6 +62,20 @@ class SimpleBoard:
 
 
 class ParallelCameraPrepTests(unittest.TestCase):
+    def test_retry_lease_wait_does_not_repeat_servo(self):
+        camera = BlockingCamera()
+        camera.retry_start = True
+        timer = threading.Timer(.2, camera.allow_start_finish.set)
+        board = SimpleBoard()
+        timer.start()
+        try:
+            run_preparation_with_camera_warmup(board=board, camera=camera,
+                prep_group=103, repeat_count=1, servo_timeout_s=30,
+                camera_ready_timeout_ms=10)
+        finally:
+            timer.join()
+        self.assertEqual(board.calls, [(103, 1, 30)])
+
     def test_servo_failure_cancels_parallel_startup(self):
         camera = BlockingCamera()
         camera.exited = threading.Event()

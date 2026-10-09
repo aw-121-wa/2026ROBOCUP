@@ -16,6 +16,40 @@ from types import SimpleNamespace
 
 
 class SharedCameraTests(unittest.TestCase):
+    def test_retry_failed_open_and_no_frame_until_fresh(self):
+        import time
+        config = replace(load_config(ROOT / 'rdk_vision/stair_low.yaml').camera, startup_timeout_ms=10)
+        broken, empty, good = Mock(), Mock(), Mock()
+        broken.start.side_effect = RuntimeError('USB unavailable')
+        empty.get_latest.return_value = None
+        good.get_latest.side_effect = lambda: SimpleNamespace(timestamp=time.monotonic())
+        factory = Mock(side_effect=[broken, empty, good])
+        session = SharedTaskCamera(factory)
+        wait = Mock()
+        lease = session.borrow(config, cancelled=lambda: False, on_wait=wait)
+        lease.start()
+        self.assertEqual(factory.call_count, 3)
+        broken.stop.assert_called_once()
+        empty.stop.assert_called_once()
+        self.assertGreaterEqual(wait.call_count, 3)
+        self.assertIsNotNone(lease.get_latest())
+        session.close()
+
+    def test_retry_cancel_does_not_reopen(self):
+        import threading
+        cancel = threading.Event()
+        config = load_config(ROOT / 'rdk_vision/stair_low.yaml').camera
+        factory = Mock()
+        def failed():
+            cancel.set()
+            raise RuntimeError('USB unavailable')
+        factory.return_value.start.side_effect = failed
+        session = SharedTaskCamera(factory)
+        lease = session.borrow(config, cancelled=cancel.is_set, on_wait=lambda: None)
+        with self.assertRaises(RuntimeError): lease.start()
+        self.assertEqual(factory.call_count, 1)
+        factory.return_value.stop.assert_called_once()
+
     def test_failed_lease_aborts_owner_but_normal_stop_still_retains_stream(self):
         factory = Mock()
         session = SharedTaskCamera(factory)

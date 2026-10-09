@@ -9,8 +9,10 @@
 #include "chassis_control.h"
 #include "pin_config.h"
 #include "disc_task_config.h"
+#include "ir_start.h"
 #include <string.h>
 #include <math.h>
+static IrStart ir_start;
 static PathMission mission;
 static RdkLink rdk;
 static TurntableLink turn;
@@ -35,7 +37,7 @@ static void cancel_turn(void)
          (rdk.stage == 4 || rdk.stage == 10 || rdk.stage == 12))))
         mission.inventory.uncertain = true;
     turn_enabled = false;
-    turn_issued = mission.id_count;
+    turn_issued = mission.inventory.collected;
     turn_purpose = TURN_IDLE;
     if (turn.pending && !turn.stopping) Turn_Stop(&turn, HAL_GetTick());
 }
@@ -43,8 +45,8 @@ static void service_turn(uint32_t now)
 {
     if (!Chassis_GetState()->armed || Chassis_GetState()->fault || mission.result >= PATH_CANCELED)
         cancel_turn();
-    /* Original collection scheduling: one forward step per accepted UID. */
-    if (turn_enabled && !turn.pending && turn.reply != PATH_FAILED && turn_issued < mission.id_count)
+    /* Advance once per captured slot, including a timed-out unknown ID. */
+    if (turn_enabled && !turn.pending && turn.reply != PATH_FAILED && turn_issued < mission.inventory.collected)
     {
         if (Turn_Start(&turn, false, now))
         {
@@ -68,11 +70,11 @@ static void service_turn(uint32_t now)
     }
     if (turn.reply == PATH_FAILED) turn_enabled = false;
 }
-/* Passive bookkeeping: never changes RFID acceptance, permission or collection timing. */
+/* Capture slots and UID count are independent: an unread ball still occupies a slot. */
 static void remember_ball(uint32_t uid, const uint8_t *block)
 {
     BallInventory *b = &mission.inventory;
-    unsigned slot = mission.id_count - 1U;
+    unsigned slot = b->collected;
     if (slot >= BALL_SLOT_COUNT)
     {
         inventory_fault |= INVENTORY_FULL;
@@ -91,6 +93,7 @@ static void remember_ball(uint32_t uid, const uint8_t *block)
     b->uid[slot] = uid;
     b->code[slot] = code;
     b->occupied |= (uint16_t)(1U << slot);
+    ++b->collected;
 }
 volatile PathDiagnostics path_diagnostics;
 static bool ready, initialized, motion_pending, motion_continuous, verified, test_ping, stationary;
@@ -112,6 +115,7 @@ static uint8_t rfid_frame[28], rfid_length;
 static uint8_t disc_action_done_index, disc_rfid_confirmed_index;
 static volatile uint8_t disc_waiting_rfid_index;
 static uint8_t rfid_gate_base_count;
+static uint32_t rfid_wait_since;
 /* Accept auto UID, auto UID+block, and A1 read-UID replies only.
  * Sliding resynchronization also handles noise and corrupt/partial frames. */
 static bool rfid_feed(uint8_t byte)
@@ -225,6 +229,7 @@ static void open_rfid_gate(uint8_t index)
     rfid_head = rfid_tail = 0;
     rfid_length = 0;
     rfid_gate_base_count = mission.id_count;
+    rfid_wait_since = HAL_GetTick();
     disc_waiting_rfid_index = index;
     rfid_capture = true;
     __set_PRIMASK(mask);
@@ -351,17 +356,17 @@ static bool send(void *ctx, const PathCommand *c)
         return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
     case PC_TURN:
         if (mission.step != 13 || !Chassis_IsSettled() || rdk.active || turn.pending ||
-            turn_purpose != TURN_IDLE || turn_issued < mission.id_count || mission.inventory.uncertain ||
+            turn_purpose != TURN_IDLE || turn_issued < mission.inventory.collected || mission.inventory.uncertain ||
             c->argument > 1 || !isfinite(c->x) || c->x < 1 || c->x > BALL_SLOT_COUNT/2 ||
             c->x != (unsigned)c->x || !Turn_StartSteps(&turn, c->argument != 0, (uint8_t)c->x, now)) return false;
         turn_purpose = TURN_UNLOAD;
         return true;
     case PC_GROUP:
         return (mission.step != 13 || (!turn.pending && turn_purpose == TURN_IDLE &&
-                turn_issued == mission.id_count)) &&
+                turn_issued == mission.inventory.collected)) &&
                (Chassis_IsSettled() || ((c->argument == 2 || c->argument == 105) && mission.step == 8) ||
                 (c->argument == 105 && mission.step == 9 && mission.phase == 0) ||
-                (c->argument == 100 && mission.step == 3 && mission.phase == 2) ||
+                
                 (c->argument == 1 && mission.disc_depart_pending &&
                  (mission.step == 5 || mission.step == 6))) &&
                Rdk_Begin(&rdk, "GROUP", c->argument, now, c->timeout_ms);
@@ -419,6 +424,7 @@ static bool send(void *ctx, const PathCommand *c)
 }
 void PathPorts_Init(void)
 {
+    ir_start=(IrStart){0};
     Turn_Init(&turn, turn_transmit, 0);
     Rdk_Init(&rdk, 0, transmit, 0);
     Path_Init(&mission, send, 0);
@@ -439,7 +445,7 @@ bool PathPorts_Busy(void)
 {
     if (!PATH_RDK_ENABLE) return initialized && mission.result == PATH_RUNNING;
     return initialized && (boot != 3 || side_pending || side_inflight || mission.result == PATH_RUNNING || rdk.active || rdk.locked || turn.pending ||
-                           (turn_enabled && turn_issued < mission.id_count));
+                           (turn_enabled && turn_issued < mission.inventory.collected));
 }
 bool PathPorts_Ping(void)
 {
@@ -503,7 +509,7 @@ bool PathPorts_Reset(void)
     Turn_Init(&turn, turn_transmit, 0);
     turn_purpose = TURN_IDLE;
     turn_enabled = false;
-    turn_issued = mission.id_count;
+    turn_issued = mission.inventory.collected;
     verified = test_ping = stationary = motion_pending = motion_continuous = false;
     boot = 0;
     requested_blue=false; side_pending=PATH_VISION_ENABLE != 0; side_inflight=false;
@@ -547,6 +553,7 @@ void PathPorts_Cancel(void)
 {
     if (!initialized)
         return;
+    (void)IrStart_Update(&ir_start,HAL_GetTick(),false,false);
     if (!PATH_RDK_ENABLE)
     {
         Path_Cancel(&mission);
@@ -639,6 +646,16 @@ void PathPorts_Tick(void)
         Rdk_Feed(&rdk, b);
         last_rx = now;
     }
+    if (rdk.camera_wait_event) {
+        rdk.camera_wait_event=false;
+        if (mission.result==PATH_RUNNING && !rdk.locked && !rdk.pillar_ready &&
+            ((mission.step==6 && mission.phase==4) || (mission.step==9 && mission.phase==21))) {
+            /* Renew only startup deadlines, never motion/grab deadlines. */
+            rdk.started=now;
+            mission.entered=now;
+            if (mission.step==9) mission.stair_started=now;
+        }
+    }
     uint8_t action_index;
     if (Rdk_TakeDiscActionDone(&rdk, &action_index))
     {
@@ -654,6 +671,17 @@ void PathPorts_Tick(void)
         Rdk_SendDiscRfidOk(&rdk,disc_action_done_index))
         disc_rfid_confirmed_index=disc_action_done_index;
     record_pending_ids();
+    /* All three capture tasks share this action-complete gate. A missing ID
+     * releases permission after a bounded read window, without inventing a UID.
+     * Reserve the unknown pocket only after the release was successfully queued. */
+    if (disc_waiting_rfid_index && mission.result==PATH_RUNNING &&
+        Chassis_GetState()->armed && !Chassis_GetState()->fault && !io_fault && !rdk.locked &&
+        (uint32_t)(now-rfid_wait_since)>=PATH_RFID_WAIT_MS &&
+        Rdk_SendDiscRfidOk(&rdk,disc_waiting_rfid_index)) {
+        if (mission.id_count==rfid_gate_base_count) remember_ball(0,NULL);
+        disc_rfid_confirmed_index=disc_waiting_rfid_index;
+        close_rfid_gate();
+    }
     if (io_fault)
     {
         rdk.locked = true;
@@ -727,6 +755,14 @@ void PathPorts_Tick(void)
                          mission.phase == 1 &&
                          (uint32_t)(now - mission.entered) >= DISC_TASK_TIMEOUT_MS;
     uint32_t ir_raw = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_10) == GPIO_PIN_SET;
+    /* Boot HELLO/G0/COLOR already prepares vision; no host ARM/PATH is needed. */
+    const ChassisState *chassis=Chassis_GetState();
+    bool start_ready=ready && verified && !io_fault && !requested_blue &&
+        !PathPorts_Busy() && !chassis->armed && !chassis->fault &&
+        chassis->bias_ready && Chassis_IsSettled();
+    if (IrStart_Update(&ir_start,now,ir_raw==0,start_ready) && Chassis_Arm()) {
+        if (!PathPorts_Start()) Chassis_Stop();
+    }
     PathInput in = {.armed = Chassis_GetState()->armed,
                     .fault = io_fault || Chassis_GetState()->fault ||
                              (PATH_RDK_ENABLE && rdk.locked && !(rdk.error == 1 && disc_deadline)),
@@ -756,11 +792,8 @@ void PathPorts_Tick(void)
     if (stationary && phase == 99 && mission.phase == 0 && mission.result == PATH_RUNNING)
     {
         mission.step = 3;
-        mission.phase = 1;
+        mission.phase = 3; /* Start DISC after the departure G100 completes. */
         mission.entered = now;
-        PathCommand c = {.kind = PC_DISC, .timeout_ms = DISC_TASK_TIMEOUT_MS};
-        if (!send(0, &c))
-            mission.result = PATH_ERROR;
     }
     if ((!PATH_BLUE_DISC_TEST || PATH_BLUE_PILLAR_TEST) && !stationary && previous == PATH_RUNNING && mission.result == PATH_DONE && mission.step == 3)
     {

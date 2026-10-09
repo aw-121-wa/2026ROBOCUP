@@ -10,6 +10,7 @@ static unsigned column_code(const PathMission *m,unsigned col)
 }
 static void plan_warehouse(PathMission *m)
 {
+    (void)BallInventory_AssignMissing(&m->inventory);
     static const uint8_t orders[6][3]={{1,2,3},{1,3,2},{2,1,3},{2,3,1},{3,1,2},{3,2,1}};
     int slots[9];
     for(unsigned col=0;col<3;col++)
@@ -90,7 +91,7 @@ static void advance(PathMission *m, uint32_t now)
     m->phase=m->point%3 == 0 ? WAREHOUSE_MOVE : WAREHOUSE_SELECT_BALL;
     if (m->point==9)
     {
-        if (m->inventory.occupied) fail(m,PATH_ERROR);
+        if (BallInventory_HasKnown(&m->inventory)) fail(m,PATH_ERROR);
         else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->phase=WAREHOUSE_ALIGN_HOME;
     }
 }
@@ -101,7 +102,7 @@ static float home_map_y(const PathInput *in)
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
-    if (m->point==9 && m->phase==WAREHOUSE_ALIGN_HOME && !m->inventory.occupied && !m->inventory.uncertain) {
+    if (m->point==9 && m->phase==WAREHOUSE_ALIGN_HOME && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         /* Brake after unloading, then correct heading during return travel. */
         if (in->settled) {
             m->waiting=false; m->stable=false;
@@ -128,7 +129,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         return;
     }
     if (m->point==9 && (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT ||
-                       m->phase==WAREHOUSE_HOME_SEARCH) && !m->inventory.occupied && !m->inventory.uncertain) {
+                       m->phase==WAREHOUSE_HOME_SEARCH) && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : m->phase==WAREHOUSE_HOME_RIGHT ? 1 : 2;
         unsigned gray=in->gray&15U;
         bool arrived=gray && (gray&(gray-1U));
@@ -246,6 +247,13 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             } else begin_lateral_alignment(m,now);
         }
         break;
+    case WAREHOUSE_INFERRED_MOVE:
+        /* Identity is inferred, position is still established by column spacing. */
+        if (in->settled) {
+            m->phase=WAREHOUSE_SELECT_BALL;
+            m->entered=now;
+        }
+        break;
     case WAREHOUSE_MOVE: /* Start at the detected line; only subsequent columns require a move. */
         if (m->point==0 && !m->waiting) {
             if (!in->settled) break;
@@ -264,10 +272,21 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting) {
             if (!in->settled || !PathHeading_Ready(m,now,in)) break;
             m->entered=now;
+            uint8_t first=m->warehouse_columns[0], second=m->warehouse_columns[1];
+            if (m->point==6 && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
+                first>=1 && first<=3 && second>=1 && second<=3 && first!=second) {
+                if (emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,
+                        .speed=120,.acceleration=850,.deceleration=850,.timeout_ms=30000})) {
+                    remember_digit(m,(uint8_t)(6-first-second));
+                    m->warehouse_query=false;
+                    m->phase=WAREHOUSE_INFERRED_MOVE;
+                }
+                break;
+            }
             /* Later columns are reached by forward digit scanning, without a right shift.
              * Default order retains the fixed forward column spacing. */
             if (m->warehouse_mode==WAREHOUSE_DEFAULT_ORDER &&
-                !emit(m,(PathCommand){.kind=PC_MOVE,.x=200,.speed=120,
+                !emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,.speed=120,
                     .acceleration=850,.deceleration=850,.timeout_ms=30000})) break;
             m->phase=WAREHOUSE_FIRST_OFFSET;
         }

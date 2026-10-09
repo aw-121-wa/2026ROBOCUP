@@ -117,6 +117,9 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_ERROR);
         else if (in->reply == PATH_OK)
         {
+            PathCommand prep = {.kind=PC_GROUP,.argument=100,.timeout_ms=30000};
+            if (!m->send(m->context,&prep)) { fail(m,PATH_ERROR); return; }
+            m->prep_pending=true; m->prep_since=now;
             m->phase = 0;
             m->entered = now;
         }
@@ -181,34 +184,14 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             m->step = 3; /* Skip the former standalone 180-degree turn. */
             m->waiting = false;
             m->entered = now;
-            if (m->step == 3) m->phase = 2; /* G100 before disc alignment/start. */
+            if (m->step == 3) m->phase = 2; /* Enter disc line alignment. */
         }
         return;
     }
     if (m->phase == 2)
     {
-        if (!PATH_VISION_ENABLE)
-        {
-            m->phase = 0;
-            m->entered = now;
-            return;
-        }
-        if (!m->waiting)
-        {
-            PathCommand c = {.kind = PC_GROUP, .argument = 100, .timeout_ms = 30000};
-            if (!m->send(m->context, &c)) fail(m, PATH_ERROR);
-            else {
-                m->prep_pending=true; m->prep_since=now;
-                m->waiting=false; m->phase=0; m->entered=now;
-            }
-        }
-        else if (in->reply == PATH_FAILED) fail(m, PATH_ERROR);
-        else if (in->reply == PATH_OK)
-        {
-            m->waiting = false;
-            m->phase = 0;
-            m->entered = now;
-        }
+        /* G100 was issued at departure; do not repeat it at the line. */
+        m->waiting=false; m->phase=0; m->entered=now;
         return;
     }
     if (m->phase == 0)
@@ -231,8 +214,8 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_ERROR);
         else if (m->id_count >= DISC_REQUIRED_RFID_COUNT || in->reply == PATH_OK)
         {
-            if (PATH_SKIP_MATERIAL(m) ? in->disc_completed != DISC_REQUIRED_RFID_COUNT
-                                      : m->id_count < DISC_REQUIRED_RFID_COUNT)
+            if (in->disc_completed != DISC_REQUIRED_RFID_COUNT &&
+                (PATH_SKIP_MATERIAL(m) || m->id_count < DISC_REQUIRED_RFID_COUNT))
                 fail(m, PATH_ERROR);
             else
             {

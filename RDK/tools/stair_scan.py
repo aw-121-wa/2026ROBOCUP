@@ -51,13 +51,13 @@ def scan_loop(camera, detector, board, group, gate, on_action_complete,
 
 
 def run_stair_scan(project_root, level, *, camera_session, rfid_gate,
-                   on_action_complete, on_ready, before_action, should_finish, color='red'):
+                   on_action_complete, on_ready, before_action, should_finish, color='red', on_camera_wait=None):
     if level not in (1,2,3): raise ValueError('STAIR_SCAN level must be 1..3')
     if color not in ('red','blue'): raise ValueError('invalid ball color')
     name=('low','high','mid')[level-1]
     suffix='_blue' if color=='blue' else ''
     config=load_config(project_root/'rdk_vision'/f'stair_{name}{suffix}.yaml')
-    camera=camera_session.borrow(config.camera)
+    camera=camera_session.borrow(config.camera, cancelled=rfid_gate.is_cancelled, on_wait=on_camera_wait)
     camera.start()
     if not camera.wait_until_ready(config.camera.startup_timeout_ms):
         raise TimeoutError('STAIR_SCAN camera startup timeout')

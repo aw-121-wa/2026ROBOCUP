@@ -87,7 +87,13 @@ def run_preparation_with_camera_warmup(
 
         # Most of this wait is normally hidden by G101.  The timeout only covers
         # the remaining camera startup time after G101 has completed.
-        camera_thread.join(timeout=max(0.1, camera_ready_timeout_ms / 1000.0))
+        if getattr(camera, "retry_start", False) is True:
+            # The lease retries camera startup and observes task cancellation.
+            # Do not rerun the preparation action when USB startup fails.
+            while camera_thread.is_alive():
+                camera_thread.join(timeout=0.1)
+        else:
+            camera_thread.join(timeout=max(0.1, camera_ready_timeout_ms / 1000.0))
         if camera_thread.is_alive():
             raise RuntimeError(
                 "camera/AWB startup did not finish before startup timeout"

@@ -7,13 +7,16 @@ typedef struct {
     uint32_t uid[BALL_SLOT_COUNT];
     uint8_t code[BALL_SLOT_COUNT]; /* High nibble row, low nibble column; retained after unloading. */
     uint16_t occupied;
-    uint8_t current, placed;
+    uint16_t inferred; /* Slots assigned a missing destination, not a read UID. */
+    uint8_t current, placed, collected; /* Includes unknown-ID capture slots. */
     bool uncertain;
 } BallInventory;
 typedef enum { BALL_ADDED, BALL_DUPLICATE, BALL_CONFLICT, BALL_INVALID, BALL_FULL } BallRecord;
 uint8_t BallInventory_Decode(const uint8_t block[16]);
 BallRecord BallInventory_Record(BallInventory *b, uint32_t uid, uint8_t code);
 int BallInventory_Find(const BallInventory *b, uint8_t code);
+unsigned BallInventory_AssignMissing(BallInventory *b);
+bool BallInventory_HasKnown(const BallInventory *b);
 void BallInventory_Step(BallInventory *b, bool reverse);
 bool BallInventory_ReverseTo(uint8_t current, uint8_t target);
 bool BallInventory_Unload(BallInventory *b, uint8_t code);

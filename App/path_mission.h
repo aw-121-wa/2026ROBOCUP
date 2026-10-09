@@ -107,6 +107,7 @@ typedef struct
     bool warehouse_query;
     bool warehouse_ignore_line; /* Latched only after the first acknowledged unload. */
     bool stair_prep_started, stair_ready_started;
+    bool warehouse_prep_started; /* G3 may overlap the full stair remainder after two grabs. */
     bool id_overflow;
     float orbit_yaw;
     float stair_origin_x, stair_origin_y, stair_axis, stair_distance;

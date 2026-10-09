@@ -227,3 +227,13 @@ target_compile_options(test_line_policy PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_line_policy PRIVATE m)
 add_test(NAME line_policy COMMAND test_line_policy)
 
+
+add_executable(test_ir_start test_ir_start.c)
+target_include_directories(test_ir_start PRIVATE ../App)
+target_compile_options(test_ir_start PRIVATE -Wall -Wextra -Werror)
+add_test(NAME ir_start COMMAND test_ir_start)
+add_test(NAME path_ports_ir_start COMMAND test_path_ports ir_start)
+
+add_test(NAME path_ports_no_id_continue COMMAND test_path_ports no_id_continue)
+
+add_test(NAME path_ports_missing_ids_full_route COMMAND test_path_ports full_path_missing_ids)

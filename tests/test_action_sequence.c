@@ -17,9 +17,13 @@ int main(void) {
     feed(&r,"GROUP_DONE 0\r\n"); CHECK(!r.active && r.reply==PATH_OK);
     PathMission m; Path_Init(&m,send,0);
     PathInput in={.armed=true,.settled=true,.reply=PATH_OK,.gray=15,.ir=true};
-    m.result=PATH_RUNNING; m.step=2; m.waiting=true;
-    Path_Tick(&m,10,&in); Path_Tick(&m,15,&in);
+    CHECK(Path_Start(&m,0,&in));
+    Path_Tick(&m,10,&in);
     CHECK(last.kind==PC_GROUP && last.argument==100);
+    in.reply=PATH_WAIT;Path_Tick(&m,15,&in);
+    CHECK(last.kind==PC_MOVE && m.prep_pending); /* Travel overlaps preparation. */
+    m.step=3;m.phase=2;m.waiting=false;in.reply=PATH_OK;
+    Path_Tick(&m,16,&in);CHECK(m.phase==0 && last.kind==PC_MOVE); /* No repeated G100. */
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=4;
     Path_Tick(&m,20,&in); CHECK(last.kind==PC_MOVE_ROTATE && m.prep_pending);
     in.reply=PATH_WAIT; Path_Tick(&m,25,&in); CHECK(m.step==5 && m.prep_pending && last.kind==PC_MOVE_ROTATE);
@@ -39,8 +43,8 @@ int main(void) {
     Path_Tick(&m,20000,&in); CHECK(m.phase==6); /* RFID wait is not orbit time. */
     in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-80.94114f && last.speed==-58.653f);
     in.yaw_deg=-351; Path_Tick(&m,20010,&in); CHECK(m.phase==2);
-    in.yaw_deg=-352.9f; Path_Tick(&m,20014,&in); CHECK(m.phase==2);
-    in.gray=0; in.yaw_deg=-353.0f; Path_Tick(&m,20015,&in); CHECK(m.step==8 && last.kind==PC_ORBIT_EXIT && m.pillar_depart_pending);
+    in.yaw_deg=-357.9f; Path_Tick(&m,20014,&in); CHECK(m.phase==2);
+    in.gray=0; in.yaw_deg=-358.0f; Path_Tick(&m,20015,&in); CHECK(m.step==8 && last.kind==PC_ORBIT_EXIT && m.pillar_depart_pending);
     Path_Tick(&m,20020,&in); CHECK(last.kind==PC_ORBIT_EXIT && m.pillar_depart_pending);
     in.reply=PATH_OK; Path_Tick(&m,20025,&in); CHECK(m.step==8 && !m.pillar_depart_pending && last.kind==PC_GROUP && last.argument==2);
 

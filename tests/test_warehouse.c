@@ -12,7 +12,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_RETURN_HOME) homes++;
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
-    if(c->kind==PC_MOVE && c->x==-25 && c->y==0) return c->acceleration==300 && c->deceleration==300;
+    if(c->kind==PC_MOVE && c->x==-30 && c->y==0) return c->acceleration==300 && c->deceleration==300;
     if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
     if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
@@ -115,10 +115,13 @@ static int errors(void) {
     init(); m.point=3; Path_Tick(&m,0,&in); in.settled=false;
     Path_Tick(&m,30000,&in); CHECK(m.result==PATH_RUNNING && groups==0);
     init(); Path_Cancel(&m); CHECK(m.result==PATH_CANCELED && groups==0);
-    init(); m.inventory.occupied=1; m.inventory.uid[0]=123; /* Unknown destination: never guess a row. */
-    in.settled=true;
-    for(unsigned t=0;t<1000 && m.result==PATH_RUNNING;t+=5) Path_Tick(&m,t,&in);
-    CHECK(m.result==PATH_ERROR && moves==2 && groups==0 && m.inventory.occupied==1);
+    init(); m.inventory.occupied=1; m.inventory.uid[0]=123; /* Unknown destination receives the first unused code at warehouse entry. */
+    in.settled=true; in.reply=PATH_OK;
+    for(unsigned t=0;t<1000 && m.result==PATH_RUNNING;t+=5) {
+        if(m.point==9) in.gray=m.phase==5?0:6;
+        Path_Tick(&m,t,&in);
+    }
+    CHECK(m.result==PATH_DONE && moves==2 && groups==1 && m.inventory.occupied==0 && m.inventory.inferred==1);
     return 0;
 }
 static int home_line_stop(void) {

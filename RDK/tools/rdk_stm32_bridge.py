@@ -44,8 +44,10 @@ def run_pillar_in_process(project_root: Path, *, camera_session=None, color='red
     args.trigger_group = 104
     args.max_actions = 59  # Remaining entries in the STM32 64-UID result buffer.
     config = load_config(project_root / 'rdk_vision' / ('pillar_blue.yaml' if color=='blue' else 'pillar_runtime.yaml'))
+    on_camera_wait = kwargs.pop('on_camera_wait', None)
     if camera_session is not None:
-        kwargs['camera'] = camera_session.borrow(config.camera)
+        kwargs['camera'] = camera_session.borrow(config.camera,
+            cancelled=kwargs['rfid_gate'].is_cancelled, on_wait=on_camera_wait)
     # Shared detector/ROI/HSV; pillar stops on any normally valid fresh ball.
     return run_disc_task(args, config=config, trigger=PillarBallTrigger(), **kwargs)
 
@@ -212,6 +214,12 @@ class BridgeCore:
                 return False
         return not self._cancel.is_set() and not self._finish.is_set()
 
+    def _camera_wait(self):
+        with self._lock:
+            if self._mode == 'pillar' and not self._cancel.is_set():
+                self._deadline = self._clock() + 300.0
+                self._send_line('PILLAR_CAMERA_WAIT')
+
     def _pillar_main(self, gate, level=None):
         try:
             runner = self._run_pillar if level is None else lambda **kw: self._run_scan(level, **kw)
@@ -219,6 +227,7 @@ class BridgeCore:
                 rfid_gate=gate,
                 on_action_complete=lambda n: self._send_line(f'PILLAR_ACTION_DONE {n}'),
                 on_ready=lambda: self._send_line('PILLAR_READY'),
+                on_camera_wait=self._camera_wait,
                 before_action=self._before_pillar_action,
                 should_finish=self._finish.is_set,
             )

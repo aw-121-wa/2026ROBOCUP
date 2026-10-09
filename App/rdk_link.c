@@ -97,7 +97,7 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
             snprintf(r->request,sizeof(r->request),"STAIR_SCAN %lu\r\n",(unsigned long)a);
         else strcpy(r->request, "PILLAR_START\r\n");
         r->stage = 9;
-        r->pillar_ready = r->pillar_ending = false;
+        r->pillar_ready = r->pillar_ending = r->camera_wait_event = false;
         r->ball_index = r->stopped_index = r->resume_index = 0;
         r->disc_action_done_index = r->disc_rfid_sent_index = 0;
         r->disc_action_event_pending = r->aux_pending = false;
@@ -233,6 +233,9 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
     }
     else if (r->stage == 9 && !strcmp(r->line, "PILLAR_ACK"))
         r->stage = 10;
+    else if (r->stage == 10 && !r->pillar_ready && !r->pillar_ending &&
+             !strcmp(r->line, "PILLAR_CAMERA_WAIT"))
+        r->camera_wait_event = true;
     else if (r->stage == 10 && !r->pillar_ready && !strcmp(r->line, "PILLAR_READY"))
         r->pillar_ready = true;
     else if (r->stage == 10 && r->pillar_ready && !r->pillar_ending &&

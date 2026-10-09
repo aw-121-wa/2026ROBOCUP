@@ -2,7 +2,30 @@
 #include <stdio.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n", __LINE__, #x); return 1; } } while (0)
+static int missing_codes(void) {
+    for(unsigned missing=0;missing<9;missing++) {
+        BallInventory b={.occupied=511};
+        for(unsigned i=0;i<9;i++) if(i!=missing) {
+            b.code[i]=(uint8_t)(((i/3+1)<<4)|(i%3+1)); b.uid[i]=100+i;
+        }
+        CHECK(BallInventory_AssignMissing(&b)==1);
+        CHECK(b.code[missing]==(((missing/3+1)<<4)|(missing%3+1)));
+        CHECK(b.uid[missing]==0 && b.inferred==(1U<<missing));
+        CHECK(BallInventory_AssignMissing(&b)==0);
+        b.occupied=0; CHECK(BallInventory_AssignMissing(&b)==0);
+    }
+    BallInventory b={.occupied=4095};
+    CHECK(BallInventory_AssignMissing(&b)==9 && b.inferred==511);
+    CHECK(b.code[9]==0 && b.code[10]==0 && b.code[11]==0);
+    CHECK(BallInventory_AssignMissing(&b)==0);
+    b=(BallInventory){.occupied=3,.uncertain=true};
+    CHECK(BallInventory_AssignMissing(&b)==0);
+    b.uncertain=false;b.code[0]=0x11;b.code[1]=0x11;
+    CHECK(BallInventory_AssignMissing(&b)==0);
+    return 0;
+}
 int main(void) {
+    CHECK(missing_codes()==0);
     for (unsigned start=0;start<12;start++) for (unsigned target=0;target<12;target++) {
         BallInventory seek={.current=(uint8_t)start};
         unsigned steps=0;

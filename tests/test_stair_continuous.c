@@ -38,9 +38,9 @@ static void run(unsigned balls) {
   if(last.kind==PC_PILLAR_STOPPED) { got++;in.resume_index=in.ball_index;event=false; }
  }
  assert(m.step==11 && fabsf(in.x_mm-865)<.1f);
- assert(g4==1 && g3==1 && stopped==balls && m.grabs==balls);
+ assert(g4==(balls==2?0U:1U) && g3==1 && stopped==balls && m.grabs==balls);
  assert(scans==(balls==2?1:3));
- assert(headings==3); /* Entry plus all three intermediate boundaries, even when full. */
+ assert(headings==(balls==2?1U:3U)); /* Full inventory skips intermediate line alignment. */
 }
 static bool tx(void*p,const char*s,size_t n){(void)p;(void)s;(void)n;return true;}
 static void feed(RdkLink*r,const char*s){while(*s)Rdk_Feed(r,*s++);}
@@ -63,24 +63,55 @@ static void entry_braking_keeps_detection(void) {
   PathChassis_Tick(&m,180,&in);assert(last.kind==PC_MAP_SEARCH && m.phase==28);
  }
 }
+static void early_warehouse_prep(void) {
+ for(unsigned blue=0;blue<2;blue++) for(unsigned point=0;point<4;point++) {
+  PathMission m; Path_Init(&m,send,0); m.blue=blue; m.result=PATH_RUNNING;
+  m.step=9; m.phase=24; m.point=point; m.stair_scanning=true;
+  m.grabs=1; m.stair_base_grabs=0;
+  PathInput in={.armed=true,.settled=true,.map_yaw_deg=STAIR_TARGET_DEG(blue),
+      .x_mm=50,.ball_index=2,.resume_index=1,.reply=PATH_WAIT};
+  m.stair_heading_calibrated=true; g3=g4=0;
+  Path_Tick(&m,1,&in); assert(m.phase==24 && g3==0); /* Detection alone is insufficient. */
+  in.resume_index=2; Path_Tick(&m,2,&in); assert(m.grabs==2 && g3==0);
+  Path_Tick(&m,3,&in); assert(m.phase==25);
+  Path_Tick(&m,4,&in); assert(m.phase==26 && last.kind==PC_PILLAR_END && g3==0);
+  Path_Tick(&m,5,&in); assert(m.phase==26 && g3==0); /* END must be acknowledged. */
+  /* END may arrive while heading hold is applying a small correction.
+   * Real ports reject G3 until settled; never treat that temporary state as failure. */
+  in.reply=PATH_OK; in.settled=false; Path_Tick(&m,6,&in);
+  assert(m.result==PATH_RUNNING && m.phase==26 && g3==0 && !m.warehouse_prep_started);
+  assert(m.stair_scanning); /* Keep the completed scan state until the handoff is accepted. */
+  in.settled=true; Path_Tick(&m,7,&in);
+  assert(g3==1 && g4==0 && m.point==3 && m.phase==22 && m.prep_pending);
+  assert(m.warehouse_prep_started && !m.stair_scanning);
+  in.reply=PATH_WAIT; Path_Tick(&m,8,&in);
+  assert(last.kind==PC_MOVE && last.x==810 && last.speed==PATH_STAIR_FAST_SPEED_RPM);
+  assert(m.prep_pending); /* Travel does not wait for G3. */
+  in.x_mm=860; Path_Tick(&m,9,&in); assert(m.phase==27);
+  Path_Tick(&m,10,&in); Path_Tick(&m,11,&in);
+  assert(m.step==11 && g3==1 && g4==0 && m.prep_pending);
+  in.reply=PATH_FAILED; Path_Tick(&m,12,&in); assert(m.result==PATH_ERROR);
+ }
+}
 int main(void) {
+ early_warehouse_prep();
  entry_braking_keeps_detection();
  run(0);run(1);run(2);
  /* Boundary detection cannot authorize the previous level's action. */
  PathMission m;Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;
  m.stair_scanning=true;m.waiting=true;
- PathInput in={.armed=true,.settled=true,.x_mm=190,.ball_index=1};
+ PathInput in={.armed=true,.settled=true,.x_mm=180,.ball_index=1};
  stopped=0;Path_Tick(&m,10,&in);assert(m.phase==25 && stopped==0 && last.kind==PC_HOLD && last.argument==0);
  Path_Tick(&m,20,&in);assert(last.kind==PC_PILLAR_END && stopped==0);
  /* A ball just before the boundary may brake beyond it: still no grant. */
- m.phase=22;m.waiting=true;in.settled=false;in.x_mm=189;m.stair_distance=189;
+ m.phase=22;m.waiting=true;in.settled=false;in.x_mm=179;m.stair_distance=179;
  Path_Tick(&m,30,&in);assert(m.phase==23 && last.kind==PC_HOLD && last.argument==1);
- in.settled=true;in.x_mm=190;Path_Tick(&m,40,&in);assert(m.phase==25 && !stopped);
+ in.settled=true;in.x_mm=180;Path_Tick(&m,40,&in);assert(m.phase==25 && !stopped);
  /* Projection follows the starting direction, not absolute global X. */
  Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=22;
  m.stair_axis=3.14159265359f;m.waiting=true;
- in=(PathInput){.armed=true,.settled=true,.x_mm=-190};
- Path_Tick(&m,1,&in);assert(m.phase==27 && fabsf(m.stair_distance-190)<.01f);
+ in=(PathInput){.armed=true,.settled=true,.x_mm=-180};
+ Path_Tick(&m,1,&in);assert(m.phase==27 && fabsf(m.stair_distance-180)<.01f);
  /* No RFID resume: never restart movement. */
  m.phase=24;m.stair_scanning=true;in.x_mm=-100;m.stair_distance=100;
  Path_Tick(&m,1000,&in);assert(m.phase==24 && m.grabs==0);

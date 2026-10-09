@@ -805,42 +805,15 @@ static void service_host_commands(uint32_t now)
             host_parser = (HostParser){0};
             break; /* Discard the rest of this snapshot too. */
         }
-        if (command.kind == HOST_ARM)
+        if (command.kind == HOST_PING)
         {
-            if (!state.armed && !Chassis_Arm())
-                host_result = HOST_NOT_READY;
-        }
-        else if (command.kind == HOST_RED || command.kind == HOST_BLUE)
-        {
-            if (!PathPorts_SelectSide(command.kind == HOST_BLUE)) host_result = HOST_NOT_READY;
-        }
-        else if (command.kind == HOST_PING)
-        {
-            if (!PathPorts_Ping())
-                host_result = HOST_NOT_READY;
+            if (!PathPorts_Ping()) host_result = HOST_NOT_READY;
         }
         else if (command.kind == HOST_RDK_RESET)
         {
-            if (!PathPorts_Reset())
-                host_result = HOST_NOT_READY;
+            if (!PathPorts_Reset()) host_result = HOST_NOT_READY;
         }
-        else if (command.kind == HOST_DISC)
-        {
-            if (!PathPorts_Disc())
-                host_result = HOST_NOT_READY;
-        }
-        else if (command.kind == HOST_PATH)
-        {
-            if (!PathPorts_Start())
-                host_result = HOST_NOT_READY;
-        }
-        else
-        {
-            float x = command.kind == HOST_FORWARD ? command.distance_mm : 0;
-            float y = command.kind == HOST_SHIFT ? command.distance_mm : 0;
-            if (!Chassis_Move(x, y, 450.519f, 550.0f, 550.0f))
-                host_result = HOST_NOT_READY;
-        }
+        else host_result = HOST_NOT_READY; /* Starts/motion now require the infrared gesture. */
     }
 }
 void Chassis_Update(void)
@@ -866,9 +839,10 @@ void Chassis_Update(void)
     }
     if (imu->trust == JY60_TRUST_LOST)
     {
-        if (state.armed)
+        if (state.armed) {
             state.fault |= 2;
-        Chassis_Stop();
+            Chassis_Stop();
+        } /* Initial IMU warmup must not cancel the automatic RDK boot handshake. */
     }
     if (!state.bias_ready && imu->trust != JY60_TRUST_GOOD)
     {
@@ -913,9 +887,10 @@ void Chassis_Update(void)
     PathYaw_Update(&path_yaw, state.yaw_rad, yaw_ready);
     if (!yaw_ready)
     {
-        if (state.armed)
+        if (state.armed) {
             state.fault |= 2;
-        Chassis_Stop();
+            Chassis_Stop();
+        } /* Initial IMU warmup must not cancel the automatic RDK boot handshake. */
     }
     if (!yaw_ready || !yaw_was_ready)
     {

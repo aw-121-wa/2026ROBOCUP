@@ -48,3 +48,36 @@ bool BallInventory_Unload(BallInventory *b, uint8_t code)
     b->placed++;
     return true;
 }
+
+bool BallInventory_HasKnown(const BallInventory *b)
+{
+    for (unsigned i=0;i<BALL_SLOT_COUNT;i++)
+        if ((b->occupied & (1U<<i)) && b->code[i]) return true;
+    return false;
+}
+
+/* Called after collection, before warehouse planning. Keep actual UIDs intact. */
+unsigned BallInventory_AssignMissing(BallInventory *b)
+{
+    if (b->uncertain) return 0;
+    unsigned used=0, assigned=0;
+    for (unsigned slot=0;slot<BALL_SLOT_COUNT;slot++) {
+        uint8_t code=b->code[slot];
+        if (!code) continue;
+        if (!valid_code(code)) return 0;
+        unsigned bit=1U<<(((code>>4)-1U)*3U+(code&15U)-1U);
+        if (used & bit) return 0;
+        used |= bit; /* Retain destinations already unloaded across replanning. */
+    }
+    for (unsigned slot=0;slot<BALL_SLOT_COUNT;slot++) {
+        if (!(b->occupied & (1U<<slot)) || b->code[slot]) continue;
+        unsigned id=0;
+        while (id<9 && (used & (1U<<id))) ++id;
+        if (id==9) break;
+        b->code[slot]=(uint8_t)(((id/3U+1U)<<4)|(id%3U+1U));
+        b->inferred |= (uint16_t)(1U<<slot);
+        used |= 1U<<id;
+        ++assigned;
+    }
+    return assigned;
+}

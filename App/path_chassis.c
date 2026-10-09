@@ -111,7 +111,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->phase = 5;
             m->entered = now;
         }
-        else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
+        else if (m->orbit_yaw - in->yaw_deg >= 358.0f)
         {
             leave_pillar(m,now,in);
         }
@@ -154,7 +154,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (m->orbit_yaw - in->yaw_deg >= 353.0f)
+            else if (m->orbit_yaw - in->yaw_deg >= 358.0f)
                 leave_pillar(m,now,in);
             else if (emit(m, PC_BODY, -80.94114f, 0, -58.653f, 0, 15000 - m->orbit_ms)) m->phase = 2;
         }
@@ -187,7 +187,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 100.0f : 190.0f, 500, m->blue ? 520.0f : 630.0f, 860};
+    const float ends[] = {m->blue ? 100.0f : 180.0f, 500, m->blue ? 520.0f : 630.0f, 860};
     if (m->phase >= 20) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;
@@ -301,8 +301,18 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case 26:
         if ((uint32_t)(now-m->entered)>=5000U) { fail(m,PATH_TIMEOUT);break; }
-        if (in->reply==PATH_OK) {
+        /* Heading hold may resume after END was sent. G3 requires zero wheel
+         * output: wait for settled instead of issuing a command the port rejects. */
+        if (in->reply==PATH_OK && (m->grabs<2 || in->settled)) {
             m->stair_scanning=false; m->waiting=false;
+            if (m->grabs>=2) {
+                /* RESUME and END confirm that capture/storage is complete. Prepare
+                 * the warehouse while crossing the entire remaining stair span. */
+                if (!emit(m,PC_GROUP,0,0,0,3,30000)) break;
+                m->warehouse_prep_started=true;
+                m->prep_pending=true; m->prep_since=now;
+                m->point=3; /* Keep the original 860 mm endpoint, skip level stops/G4. */
+            }
             m->phase=m->stair_distance>=ends[m->point]-0.5f?27:22;
         }
         break;
@@ -324,7 +334,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case 28:
         if (PathLine_AlignFour(m,now,in)) {
-            m->point += (!m->blue && m->point==0) ? 2U : 1U; /* Red: 190 -> 630, no 500 stop. */
+            m->point += (!m->blue && m->point==0) ? 2U : 1U; /* Red: 180 -> 630, no 500 stop. */
             m->phase=20;
             m->waiting=false;
         }
@@ -382,7 +392,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (m->phase == 0)
         {
             if (!m->waiting) {
-                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? -300 : -40,
+                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? -300 : -30,
                                .angle=STAIR_TARGET_DEG(m->blue),.speed=195,
                                .end_speed=(m->blue || PATH_BLUE_STAIR_TEST) ? 80 : 30,
                                .continuous=true,.timeout_ms=30000};
@@ -420,7 +430,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         stair(m, now, in);
         break;
     case 10:
-        if (!PATH_VISION_ENABLE) { next(m,now); break; }
+        if (!PATH_VISION_ENABLE || m->warehouse_prep_started) { next(m,now); break; }
         if (emit(m,PC_GROUP,0,0,0,3,30000)) {
             m->prep_pending=true; m->prep_since=now;
             next(m,now);
