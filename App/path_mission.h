@@ -50,6 +50,7 @@ typedef enum
     PC_WAREHOUSE_DIGIT,
     PC_FINISH_FORWARD, /* Retarget current straight motion without stopping. */
     PC_ORBIT_EXIT, /* Transfer moving orbit to map-heading translation. */
+    PC_BLOCK_CHECK, /* argument=row 1..3; token-scoped RDK digit/empty check. */
     PC_ORBIT_ARC, /* Enter stair arc directly from moving orbit. */
 } PathCommandKind;
 typedef struct
@@ -78,6 +79,7 @@ typedef struct
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
     bool warehouse_vision;
+    bool destack_enabled; /* Production vision route; false for chassis-only tests. */
     bool warehouse_ready;
     uint8_t warehouse_digit;
     PathReply warehouse_digit_reply;
@@ -106,6 +108,11 @@ typedef struct
     uint8_t warehouse_mode; /* WarehouseMode values; see path_warehouse.h. */
     uint8_t warehouse_columns[3], warehouse_used;
     bool warehouse_query;
+    struct {
+        bool enabled, scanned, cleared, carrying;
+        uint8_t column, row, target, occupied;
+        float position[3], axis;
+    } destack;
     bool warehouse_ignore_line; /* Latched only after the first acknowledged unload. */
     bool stair_prep_started, stair_ready_started;
     bool warehouse_prep_started; /* G3 may overlap the full stair remainder after two grabs. */

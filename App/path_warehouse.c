@@ -1,6 +1,7 @@
 #include "path_warehouse.h"
 #include "path_chassis.h"
 #include "path_config.h"
+#include "path_destack.h"
 #include <math.h>
 /* Compare all 6^3 row orders once, including the transitions between columns.
  * Cache pocket lookups before enumeration; replan when a new digit changes the mapping. */
@@ -91,6 +92,7 @@ static void remember_digit(PathMission *m, uint8_t digit)
 }
 static void advance(PathMission *m, uint32_t now)
 {
+    if (PathDestack_Advance(m,now)) return;
     ++m->point;
     m->waiting=false;
     m->entered=now;
@@ -108,6 +110,7 @@ static float home_map_y(const PathInput *in)
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
+    if (PathDestack_Tick(m,now,in)) return;
     if (m->blue && m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         if (m->phase==WAREHOUSE_ALIGN_HOME) {
             if(in->settled) { m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->stable=false;m->entered=now; }

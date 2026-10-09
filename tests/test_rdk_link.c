@@ -172,5 +172,23 @@ int main(void) {
     r.camera_wait_event=false;
     feed(&r,"DISC_CAMERA_WAIT\r\n");
     CHECK(!r.camera_wait_event); /* No extension after startup. */
+    for(unsigned group=112;group<=120;group++) {
+        CHECK(connect(&r)==0);CHECK(Rdk_Begin(&r,"GROUP",group,0,30000));Rdk_Tick(&r,0);
+        char expected[40];snprintf(expected,sizeof expected,"GROUP %u\r\n",group);CHECK(!strcmp(wire,expected));
+        snprintf(expected,sizeof expected,"GROUP_ACK %u\r\nGROUP_DONE %u\r\n",group,group);
+        feed(&r,expected);CHECK(r.reply==PATH_OK && !r.active);
+    }
+    CHECK(connect(&r)==0);CHECK(Rdk_BlockBegin(&r,3,0,10000));Rdk_Tick(&r,0);
+    char result[64];unsigned token=r.warehouse_token;
+    snprintf(result,sizeof result,"WAREHOUSE_DIGIT %u 1\r\n",token);feed(&r,result);CHECK(r.warehouse_active);
+    snprintf(result,sizeof result,"BLOCK_RESULT %u 4\r\n",token+1);feed(&r,result);CHECK(r.warehouse_active);
+    snprintf(result,sizeof result,"BLOCK_RESULT %u 4\r\n",token);feed(&r,result);
+    CHECK(!r.warehouse_active && r.warehouse_reply==PATH_OK && r.warehouse_digit==4);
+    CHECK(Rdk_BlockBegin(&r,1,1,10000));Rdk_Tick(&r,1);
+    feed(&r,result);CHECK(r.warehouse_active); /* Old completed token cannot finish next row. */
+    r.no_timeout=true;Rdk_Tick(&r,10002);CHECK(!r.warehouse_active && r.warehouse_reply==PATH_FAILED);
+    CHECK(connect(&r)==0);r.sequence=0xfffffffeU;CHECK(Rdk_BlockBegin(&r,2,0,10000));Rdk_Tick(&r,0);
+    CHECK(!strcmp(wire,"BLOCK_CHECK 4294967295 2\r\n"));
+    feed(&r,"BLOCK_RESULT 4294967295 5\r\n");CHECK(r.warehouse_reply==PATH_FAILED);
     puts("ZHY link tests passed"); return 0;
 }

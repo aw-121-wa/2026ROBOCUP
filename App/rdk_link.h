@@ -21,6 +21,7 @@ typedef struct
     uint32_t warehouse_token, warehouse_started, warehouse_timeout;
     uint8_t warehouse_digit;
     PathReply warehouse_reply;
+    bool block_query;
     bool warehouse_active, warehouse_sent, warehouse_ready;
     char warehouse_request[64];
     bool pillar_ready, pillar_ending;
@@ -34,6 +35,7 @@ typedef struct
 void Rdk_Init(RdkLink *r, uint32_t session, RdkTransmit transmit, void *context);
 bool Rdk_Begin(RdkLink *r, const char *verb, uint32_t argument, uint32_t now, uint32_t timeout);
 bool Rdk_WarehouseBegin(RdkLink *r, uint8_t excluded, uint32_t now, uint32_t timeout);
+bool Rdk_BlockBegin(RdkLink *r, uint8_t row, uint32_t now, uint32_t timeout);
 void Rdk_Feed(RdkLink *r, uint8_t byte);
 void Rdk_Tick(RdkLink *r, uint32_t now);
 bool Rdk_TakeDiscActionDone(RdkLink *r, uint8_t *index);

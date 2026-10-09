@@ -3,6 +3,9 @@
 #include "heading_tuning.h"
 /* Extra cruise/acceleration gain; line search and pillar orbit are excluded. */
 /* Read briefly after completed capture; missing RFID must not block the route. */
+#ifndef PATH_DESTACK_ENABLE
+#define PATH_DESTACK_ENABLE 1
+#endif
 #define PATH_RFID_WAIT_MS 1000U
 #define PATH_TRAVEL_BOOST 1.3f
 #define PATH_WAREHOUSE_UNTIMED(m) ((m)->step==12 || ((m)->step==13 && (m)->point<9))

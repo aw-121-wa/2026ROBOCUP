@@ -350,6 +350,10 @@ static bool send(void *ctx, const PathCommand *c)
         motion_pending = false;
         motion_continuous = false;
         return true;
+    case PC_BLOCK_CHECK:
+        return mission.step==13 && Chassis_IsSettled() &&
+               c->argument>=1 && c->argument<=3 &&
+               Rdk_BlockBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
     case PC_WAREHOUSE_DIGIT:
         return mission.step==13 && c->argument<=14 &&
                Rdk_WarehouseBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
@@ -793,6 +797,7 @@ void PathPorts_Tick(void)
                     .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,
                     .warehouse_vision = PATH_RDK_ENABLE != 0,
+                    .destack_enabled = PATH_DESTACK_ENABLE && PATH_RDK_ENABLE != 0 && PATH_VISION_ENABLE && !PATH_SKIP_MATERIAL(&mission),
                     .warehouse_ready = rdk.warehouse_ready,
                     .warehouse_digit = rdk.warehouse_digit,
                     .warehouse_digit_reply = rdk.warehouse_reply,
