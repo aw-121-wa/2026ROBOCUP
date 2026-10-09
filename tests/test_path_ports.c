@@ -72,7 +72,7 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (test_blue && path_diagnostics.step==0 && fabsf(x)>100 && y!=0) assert(x>0 && y<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-715);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-765);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
@@ -85,7 +85,7 @@ bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
     bool retuned=(fabsf(a-714.999f)<.03f || fabsf(a-935)<.03f || fabsf(a-1428.05f)<.03f);
     if(!unscaled && !scaled && !boosted && !retuned) return false;
     if(!(fabsf(d-650)<.01f || fabsf(d-850)<.01f || fabsf(d-300)<.01f ||
-         fabsf(d-715)<.03f || fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
+         fabsf(d-765)<.03f || fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }

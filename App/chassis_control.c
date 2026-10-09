@@ -338,7 +338,7 @@ bool Chassis_ReturnHome(unsigned leg)
         if (leg>1) return false;
         /* Blue fixed return: keep the unloading heading and use body-frame directions. */
         float boost=PATH_TRAVEL_BOOST*route_policy.travel_speed_scale;
-        return Chassis_Move(leg==0 ? 2200.0f : 0,leg==1 ? -1000.0f : 0,
+        return Chassis_Move(leg==0 ? 2350.0f : 0,leg==1 ? -1000.0f : 0,
                             CHASSIS_HOME_SPEED_MM_S*boost,CHASSIS_HOME_ACCEL_MM_S2*boost,
                             CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
     }

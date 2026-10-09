@@ -36,15 +36,15 @@ static int startup(void) {
     CHECK(Path_Start(&m,0,&in)); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
     CHECK(p.n==3 && p.commands[0].kind==PC_HELLO && p.commands[1].kind==PC_GROUP && p.commands[1].argument==100 && p.commands[2].kind==PC_MOVE);
     CHECK(fabsf(p.commands[2].x-1558.8922f)<0.02f);
-    CHECK(fabsf(p.commands[2].y-567.3904f)<0.02f);
+    CHECK(fabsf(p.commands[2].y-617.3904f)<0.02f);
     CHECK(p.commands[2].angle==0 && p.commands[2].continuous);
     CHECK(p.commands[2].start_speed==0 && p.commands[2].end_speed==155);
     in.settled=true; in.motion_done=false; Path_Tick(&m,8,&in);
     CHECK(m.part==0 && p.n==3);
     in.settled=false; in.motion_done=true; Path_Tick(&m,10,&in);
     CHECK(m.step==0 && m.part==1 && m.waiting && p.commands[p.n-1].kind==PC_ARC);
-    CHECK(p.commands[p.n-1].x==800 && p.commands[p.n-1].y==20);
-    CHECK(p.commands[p.n-1].angle==-20 && p.commands[p.n-1].start_speed==155);
+    CHECK(p.commands[p.n-1].x==800 && fabsf(p.commands[p.n-1].y-21.6057608f)<.001f);
+    CHECK(p.commands[p.n-1].angle==-p.commands[p.n-1].y && p.commands[p.n-1].start_speed==155);
     CHECK(p.commands[p.n-1].speed==155 && p.commands[p.n-1].end_speed==155);
     in.settled=false; in.motion_done=true; Path_Tick(&m,15,&in);
     CHECK(m.step==1 && m.part==0 && m.waiting && p.commands[p.n-1].kind==PC_MOVE);

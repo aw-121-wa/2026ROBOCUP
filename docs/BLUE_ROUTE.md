@@ -6,11 +6,11 @@ Both start poses use the red start heading as map 0 degrees. Blue reflects map Y
 | --- | --- |
 | Opening diagonal | Map (+1558.8922, -567.3904) mm; rotate +180 degrees while moving |
 | Following straight | Blue length 2223.9384 mm (red 2028.9384 mm + 195 mm), negative body X at heading 180 |
-| Disc to pillar | Body (+1395, -715) mm from heading 180; rotate -90 to 90 |
+| Disc to pillar | Body (+1395, -765) mm from heading 180; rotate -90 to 90 |
 | Pillar | Keep negative rotation direction and existing orbit speeds; accumulate 530 degrees, including pauses |
 | Stair entry / work | Map heading 0; positive body X for progress, mirrored lateral search |
 | Warehouse transfer / work | Turn -180 to map heading 180; positive body X for column scanning |
-| Home | Keep the unloading heading; body +X 2200 mm, then body right (-Y) 1000 mm; then align map 180 degrees within 0.1 degree |
+| Home | Keep the unloading heading; body +X 2350 mm, then body right (-Y) 1000 mm; then align map 180 degrees within 0.1 degree |
 
 The opening and warehouse arcs are transformed in the final body heading frame. Gray admission stays 0110 and bidirectional lateral search remains enabled. Red route behavior is unchanged by this mirror conversion. Both sides share the red baseline speed, acceleration/deceleration and return trims. Blue opening turn speed and its exit speed are reduced by 10%; the following arc starts at that reduced boundary speed and returns to the shared exit speed. Blue opening straight adds 195 mm. Blue opening dynamic-turn KP is 8.0; feedforward and damping retain their existing settings. Blue stair triggers are 280 and 675 mm with a 900 mm endpoint (red 160 and 630 mm, endpoint 860 mm); the former blue 500 mm intermediate stop is removed. Side-specific exceptions are the mirrored geometry, opening half-turn, 530-degree orbit and work-area headings.
 

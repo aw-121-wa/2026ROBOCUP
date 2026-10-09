@@ -397,7 +397,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             PathCommand c={.kind=PC_MOVE_ROTATE,.x=-1425,.y=-725,
                 .angle=90,.speed=195,.end_speed=PILLAR_SEARCH_SPEED_RPM,
                 .continuous=true,.timeout_ms=30000};
-            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x-30; c.y+=10; c.angle=-90; }
+            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x-30; c.y-=40; c.angle=-90; }
             if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
         } else if (in->motion_done) {
             next(m,now); pillar(m,now,in); /* Orbit remains gated by debounced IR. */
