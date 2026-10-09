@@ -35,7 +35,7 @@ static int startup(void) {
     Port p={0}; PathMission m; PathInput in=ready(); Path_Init(&m,send,&p);
     CHECK(Path_Start(&m,0,&in)); Path_Tick(&m,0,&in); Path_Tick(&m,5,&in);
     CHECK(p.n==3 && p.commands[0].kind==PC_HELLO && p.commands[1].kind==PC_GROUP && p.commands[1].argument==100 && p.commands[2].kind==PC_MOVE);
-    CHECK(fabsf(p.commands[2].x-1558.8922f)<0.02f);
+    CHECK(fabsf(p.commands[2].x-1608.8922f)<0.02f);
     CHECK(fabsf(p.commands[2].y-617.3904f)<0.02f);
     CHECK(p.commands[2].angle==0 && p.commands[2].continuous);
     CHECK(p.commands[2].start_speed==0 && p.commands[2].end_speed==155);
@@ -43,12 +43,12 @@ static int startup(void) {
     CHECK(m.part==0 && p.n==3);
     in.settled=false; in.motion_done=true; Path_Tick(&m,10,&in);
     CHECK(m.step==0 && m.part==1 && m.waiting && p.commands[p.n-1].kind==PC_ARC);
-    CHECK(p.commands[p.n-1].x==800 && fabsf(p.commands[p.n-1].y-21.6057608f)<.001f);
+    CHECK(p.commands[p.n-1].x==800 && fabsf(p.commands[p.n-1].y-20.9936228f)<.001f);
     CHECK(p.commands[p.n-1].angle==-p.commands[p.n-1].y && p.commands[p.n-1].start_speed==155);
     CHECK(p.commands[p.n-1].speed==155 && p.commands[p.n-1].end_speed==155);
     in.settled=false; in.motion_done=true; Path_Tick(&m,15,&in);
     CHECK(m.step==1 && m.part==0 && m.waiting && p.commands[p.n-1].kind==PC_MOVE);
-    CHECK(fabsf(p.commands[p.n-1].x-2028.9384f)<0.02f);
+    CHECK(fabsf(p.commands[p.n-1].x-2078.9384f)<0.02f);
     CHECK(p.commands[p.n-1].start_speed==155 && p.commands[p.n-1].continuous && p.commands[p.n-1].end_speed==25);
     in.motion_done=true; in.settled=false; in.gray=0; Path_Tick(&m,20,&in);
     CHECK(m.step==1 && m.part==1 && p.commands[p.n-1].kind==PC_ARC);
@@ -180,7 +180,7 @@ static int chassis_only(void) {
     m.orbit_yaw=100; in.yaw_deg=-251;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
     in.yaw_deg=-258; Path_Tick(&m,105,&in); CHECK(m.step==8 && count(&p,PC_HOLD)==0 && count(&p,PC_ORBIT_EXIT)==1);
-    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-10 && p.commands[p.n-1].end_speed==30);
+    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-10 && p.commands[p.n-1].end_speed==15);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==30);
     in.ir=true; in.yaw_deg=0;

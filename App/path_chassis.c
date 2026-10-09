@@ -449,13 +449,13 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!m->waiting) {
                 PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? 10 : -10,
                                .angle=STAIR_TARGET_DEG(m->blue || PATH_BLUE_STAIR_TEST),.speed=195,
-                               .end_speed=m->blue ? 15 : 30,
+                               .end_speed=15,
                                .continuous=true,.timeout_ms=30000};
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
                 float speed=30;
                 PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
-                               .speed=speed,.start_speed=m->blue ? 15 : speed,.end_speed=speed,
+                               .speed=speed,.start_speed=15,.end_speed=speed,
                                .continuous=true,.timeout_ms=10000};
                 if (m->blue || PATH_BLUE_STAIR_TEST) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }

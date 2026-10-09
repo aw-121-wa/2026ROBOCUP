@@ -36,7 +36,8 @@ static bool emit_move(PathMission *m, float x, float y, float speed,
             c.x=-c.x;
         } /* Body is reversed after the opening half-turn. */
     }
-    if (!(m->blue || PATH_BLUE_DISC_TEST) && m->step==0 && m->part==0) c.y+=50.0f;
+    if (!(m->blue || PATH_BLUE_DISC_TEST) && m->step==1) c.x+=50.0f;
+    if (!(m->blue || PATH_BLUE_DISC_TEST) && m->step==0 && m->part==0) {c.x+=50.0f;c.y+=50.0f;}
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;
@@ -55,7 +56,7 @@ static bool emit_arc(PathMission *m)
         c.y = 180.0f - c.y; c.angle = -c.angle;
         c.start_speed*=BLUE_START_TURN_SPEED_SCALE; /* Match the opening turn exit. */
     }
-    if (!(m->blue || PATH_BLUE_DISC_TEST)) {c.y=21.6057608f;c.angle=-c.y;}
+    if (!(m->blue || PATH_BLUE_DISC_TEST)) {c.y=20.9936228f;c.angle=-c.y;}
     if (m->send(m->context, &c))
         return true;
     m->result = PATH_ERROR;

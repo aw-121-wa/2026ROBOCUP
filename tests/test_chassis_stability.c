@@ -165,6 +165,15 @@ int main(int argc,char **argv) {
         assert(Chassis_ExitOrbit(-25,0,180,996,153.2f,845,845));
         assert(fabsf(planner.distance-25)<.001f && path_blend);
         Chassis_Hold();wait_stop();
+        /* Red exit: ten millimetres cannot accelerate to the old 30 rpm boundary. */
+        state.yaw_rad=92.68f*RAD;path_yaw.continuous=state.yaw_rad;
+        assert(Chassis_Body(-330,0,-1));
+        state.velocity[0]=-330;state.velocity[1]=0;
+        assert(!Chassis_ExitOrbit(-10,0,180,996,153.2f,845,845));
+        assert(path_body);
+        assert(Chassis_ExitOrbit(-10,0,180,996,76.6f,845,845));
+        assert(planner.active && path_blend);
+        Chassis_Hold();wait_stop();
         state.yaw_rad=280*RAD;path_yaw.continuous=state.yaw_rad;
         assert(Chassis_Body(-318,0,-1));
         state.velocity[0]=-318;state.velocity[1]=0;
