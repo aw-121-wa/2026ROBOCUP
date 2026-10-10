@@ -164,7 +164,7 @@ static int chassis_only(void) {
     CHECK(m.step==8 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==1 && count(&p,PC_TURN)==0);
     bool orbit=false;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+80.94114f)<0.001f && p.commands[i].speed==-58.653f) orbit=true;
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+80.94114f*1.05f)<0.001f && p.commands[i].speed==-58.653f*1.05f) orbit=true;
     CHECK(orbit);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6;
     in.ir=true; in.settled=false;
@@ -194,7 +194,7 @@ static int chassis_only(void) {
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={260,360,260,110,-30,200,200};
+    const float expected[]={260,390,230,110,-30,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<7 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;

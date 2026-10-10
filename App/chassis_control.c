@@ -351,7 +351,7 @@ bool Chassis_ReturnHome(unsigned leg)
         float distance=hypotf(x,y);
         float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
         float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
-        travel=1500.0f;
+        travel=1600.0f;
         home_right_target=current_y+-1*(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
         home_return_ready=true;
     } else {

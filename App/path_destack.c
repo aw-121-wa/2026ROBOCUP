@@ -90,7 +90,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     }
     if (!m->destack.enabled) return false;
     if (m->phase==WAREHOUSE_SELECT_BALL && !m->destack.scanned) {
-        if (!in->settled) return true;
+        if (!in->settled && m->point==6) return true; /* Third column begins stationary arm work. */
         unsigned col=m->point/3;
         float p=position(m,in);
         if (col>2 || !isfinite(p) || (col && (p-m->destack.position[col-1]<50 ||
@@ -120,7 +120,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
             else if (digit>=1 && digit<=3) {
                 if (m->destack.occupied&(1U<<digit)) {fail(m);break;}
                 m->destack.target=(uint8_t)digit;enter(m,DESTACK_PICK,now);
-            } else if (digit==0) enter(m,DESTACK_CHECK,now); /* Unknown: retry this row, never skip it. */
+            } else if (digit==0) next_row(m,now,in); /* Recognition budget exhausted: skip this cell. */
             else fail(m);
         }
         break;
@@ -151,7 +151,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         if (move(m,now,in,m->destack.position[m->destack.column])) {
             m->destack.row=3;
             enter(m,m->destack.cleared ?
-                (m->destack.first_unload_offset ? WAREHOUSE_SELECT_BALL : WAREHOUSE_DESTACK_UNLOAD_OFFSET) :
+                WAREHOUSE_SELECT_BALL :
                 DESTACK_POSE,now);
         }
         break;

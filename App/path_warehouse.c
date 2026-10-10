@@ -197,20 +197,6 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         (m->phase==WAREHOUSE_MOVE && m->point==0 && in->warehouse_vision))) return;
     switch(m->phase)
     {
-    case WAREHOUSE_DESTACK_UNLOAD_OFFSET:
-        /* One body-right offset after all destacking, before the first turn. */
-        if (!m->waiting) {
-            if (!in->settled) break;
-            m->entered=now;
-            m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.y=-100,.speed=30,
-                .acceleration=300,.deceleration=300,.timeout_ms=10000});
-        } else if ((uint32_t)(now-m->entered)>=10000U) fail(m,PATH_TIMEOUT);
-        else if (in->settled) {
-            m->destack.first_unload_offset=true;
-            m->destack.first_unload_align=true;
-            m->waiting=false;m->phase=WAREHOUSE_SELECT_BALL;m->entered=now;
-        }
-        break;
     case WAREHOUSE_ENTRY_BACK:
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=5000U) { fail(m,PATH_TIMEOUT); break; }
         if (!in->settled) break;
@@ -222,13 +208,20 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_FIRST_OFFSET:
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT); break; }
-        if (!in->settled || !PathHeading_Ready(m,now,in)) break;
+        if (!(m->destack.enabled && !m->destack.scanned && m->point==3 && !in->settled) &&
+            (!in->settled || !PathHeading_Ready(m,now,in))) break;
         m->waiting=false;
         if (in->warehouse_vision && m->warehouse_mode!=WAREHOUSE_DEFAULT_ORDER) {
             m->entered=now;
             m->warehouse_query=emit(m,(PathCommand){.kind=PC_WAREHOUSE_DIGIT,
                 .argument=m->warehouse_used,.timeout_ms=PATH_WAREHOUSE_DIGIT_TIMEOUT_MS});
-            if (m->warehouse_query) m->phase=WAREHOUSE_WAIT_CAMERA;
+            if (m->warehouse_query) {
+                m->phase=WAREHOUSE_WAIT_CAMERA;
+                /* Start scanning travel immediately; camera readiness must not add a pause. */
+                if (in->settled) emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
+                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
+                    .deceleration=650,.timeout_ms=PATH_WAREHOUSE_CREEP_TIMEOUT_MS});
+            }
         } else {
             m->warehouse_mode=WAREHOUSE_DEFAULT_ORDER;
             begin_lateral_alignment(m,now);
@@ -242,15 +235,10 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case WAREHOUSE_WAIT_CAMERA:
-        /* Recognition is stationary after the first map-right offset. */
+        /* Camera acknowledgement arrives while the scanning move is already active. */
         if (in->warehouse_digit_reply!=PATH_WAIT || in->warehouse_ready ||
             (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=PATH_WAREHOUSE_DIGIT_GUARD_MS))
             m->phase=WAREHOUSE_FIRST_DIGIT;
-        if (in->warehouse_ready && in->warehouse_digit_reply==PATH_WAIT &&
-            m->phase==WAREHOUSE_FIRST_DIGIT)
-            emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
-                .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
-                .deceleration=650,.timeout_ms=PATH_WAREHOUSE_CREEP_TIMEOUT_MS});
         break;
     case WAREHOUSE_FIRST_DIGIT: /* First-column result selects the mode once for the whole warehouse. */
         if (PATH_WAREHOUSE_UNTIMED(m)) {
@@ -275,13 +263,13 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             remember_digit(m,in->warehouse_digit);
         } else m->warehouse_mode=WAREHOUSE_DEFAULT_ORDER;
         m->warehouse_query=false;
-        if (m->warehouse_mode==WAREHOUSE_DIGIT_ORDER) {
-            if (emit(m,(PathCommand){.kind=PC_FINISH_FORWARD,.x=PATH_WAREHOUSE_DIGIT_ADVANCE_MM,
-                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
-                    .deceleration=650,.timeout_ms=5000})) {
-                m->waiting=true; m->phase=WAREHOUSE_BRAKE; m->entered=now;
-            }
-        } else brake_for_unload(m,now);
+        if (in->destack_enabled && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
+            !m->destack.scanned && m->point<6) {
+            m->phase=WAREHOUSE_SELECT_BALL;
+            PathDestack_Tick(m,now,in); /* Record the detected column without braking between scans. */
+            break;
+        }
+        brake_for_unload(m,now); /* Stop at recognition; no extra forward positioning leg. */
         break;
     case WAREHOUSE_BRAKE:
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=5000) { fail(m,PATH_TIMEOUT); break; }
@@ -323,12 +311,15 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             break;
         }
         if (!m->waiting) {
-            if (!in->settled || !PathHeading_Ready(m,now,in)) break;
+            bool scanning=m->destack.enabled && !m->destack.scanned &&
+                m->warehouse_mode==WAREHOUSE_DIGIT_ORDER;
+            if (!scanning && (!in->settled || !PathHeading_Ready(m,now,in))) break;
             m->entered=now;
             uint8_t first=m->warehouse_columns[0], second=m->warehouse_columns[1];
             if (m->point==6 && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
                 first>=1 && first<=3 && second>=1 && second<=3 && first!=second) {
-                if (emit(m,(PathCommand){.kind=PC_MOVE,.x=m->blue ? PATH_WAREHOUSE_COLUMN_SPACING_MM : PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM,
+                if (emit(m,(PathCommand){.kind=scanning && !in->settled ? PC_FINISH_FORWARD : PC_MOVE,
+                        .x=m->blue ? PATH_WAREHOUSE_COLUMN_SPACING_MM : PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM,
                         .speed=120,.acceleration=850,.deceleration=850,.timeout_ms=30000})) {
                     remember_digit(m,(uint8_t)(6-first-second));
                     m->warehouse_query=false;
@@ -360,8 +351,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_ALIGN_LINE: /* Default-order fallback retains lateral line alignment. */
         if (PathLine_AlignFour(m,now,in)) {
-            m->phase=m->destack.first_unload_align ? WAREHOUSE_UNLOAD : WAREHOUSE_SELECT_BALL;
-            m->destack.first_unload_align=false;
+            m->phase=WAREHOUSE_SELECT_BALL;
             m->waiting=false;
             m->entered=now;
         } else if (m->result!=PATH_RUNNING && m->inventory.occupied) {
@@ -408,11 +398,6 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_UNLOAD:
         if (!in->settled) { fail(m,PATH_ERROR); break; }
-        if (m->destack.first_unload_align) {
-            /* The selected pocket is now in place. Reacquire gray before G109-111. */
-            begin_lateral_alignment(m,now);
-            break;
-        }
         if (!m->waiting)
         {
             m->entered=now;

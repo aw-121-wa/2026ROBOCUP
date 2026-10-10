@@ -256,7 +256,7 @@ int main(int argc,char **argv) {
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=0;
         assert(Chassis_ReturnHome(0));
         float k=(hypotf(1000,500)+100)/hypotf(1000,500);
-        float ex=1500, length=ex;
+        float ex=1600, length=ex;
         assert(fabsf(planner.distance-length)<0.01f);
         assert(fabsf(dx+ex/length)<1e-5f);
         assert(fabsf(dy)<1e-5f);
@@ -279,7 +279,7 @@ int main(int argc,char **argv) {
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;state.yaw_rad=map_yaw;
-        assert(Chassis_ReturnHome(0) && planner.distance==1500);
+        assert(Chassis_ReturnHome(0) && planner.distance==1600);
         Chassis_Hold();wait_stop();
         assert(Chassis_Move(200,0,65,250,650));
         segment_progress=70; state.velocity[0]=60; state.velocity[1]=0;
@@ -352,6 +352,11 @@ int main(int argc,char **argv) {
         assert(PathPolicy_CommandBoost(9,PC_BODY)==1);
         assert(PathPolicy_CommandBoost(13,PC_MAP_SEARCH)==1);
         assert(PathPolicy_CommandBoost(8,PC_ARC)==1);
+        assert(fabsf(PathPolicy_TransitScale(5,PC_MOVE_ROTATE)-16.0f/9.0f)<.001f);
+        assert(PathPolicy_TransitScale(9,PC_MOVE)==1);
+        assert(PathPolicy_TransitScale(13,PC_MOVE)==1);
+        assert(PathPolicy_TransitScale(8,PC_BODY)==1);
+        assert(PathPolicy_TransitScale(6,PC_ORBIT_ARC)==1);
         for(unsigned step=0;step<=13;step++) {
             ChassisRoutePolicy red=PathPolicy_Chassis(false,PATH_RUNNING,step,24);
             ChassisRoutePolicy blue=PathPolicy_Chassis(true,PATH_RUNNING,step,24);

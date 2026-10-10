@@ -38,11 +38,14 @@ class BlockDetector:
         image = cv2.imread(str(root / settings['empty_reference']), cv2.IMREAD_GRAYSCALE)
         if image is None: raise ValueError('missing empty-cell reference')
         x,y,w,h = self.roi
+        if image.shape == (480,640): image=image[y:y+h,x:x+w]
         if image.shape != (h,w): raise ValueError('empty reference must exactly match ROI')
         self.empty = image.astype(np.float32)
         self.empty_samples = [self.empty]
         for name in settings.get('empty_references', []):
             reference = cv2.imread(str(root / name), cv2.IMREAD_GRAYSCALE)
+            if reference is not None and reference.shape == (480,640):
+                reference=reference[y:y+h,x:x+w]
             if reference is None or reference.shape != (h, w):
                 raise ValueError(f'invalid additional empty reference: {name}')
             self.empty_samples.append(reference.astype(np.float32))
@@ -120,7 +123,8 @@ class BlockDetector:
             if glyph is None: continue
             scores = sorted(((float(np.count_nonzero(glyph & template))/max(1,np.count_nonzero(glyph | template)),digit)
                              for digit,template in self.templates), reverse=True)
-            if scores[0][0]>=self.settings.get('min_score',.75) and scores[0][0]-scores[1][0]>=.15:
+            if (scores[0][0]>=self.settings.get('min_score',.75) and
+                    scores[0][0]-scores[1][0]>=self.settings.get('min_margin',.15)):
                 found.append(scores[0][1])
         return found
 
@@ -183,4 +187,4 @@ def run_block_check(project_root, row, camera_session, *, color='red', cancel):
     camera=camera_session.borrow(config.camera,cancelled=cancel.is_set)
     camera.start()
     if not camera.wait_until_ready(config.camera.startup_timeout_ms): raise TimeoutError('block camera startup failed')
-    return confirm_loop(camera,detector,cancel)
+    return confirm_loop(camera,detector,cancel,timeout_s=1.5)

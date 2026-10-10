@@ -43,11 +43,19 @@ static void leave_pillar(PathMission *m, uint32_t now, const PathInput *in)
     m->step=8; m->phase=m->blue ? 4 : 0; m->waiting=false; m->stable=false; m->entered=now;
     PathChassis_Tick(m,now,in); /* Same tick, no stop or stationary-angle admission. */
 }
-/* Keep reduced translation speed; angular speed / 1.05 enlarges radius by 5%. */
+/* Raise both translation and angular speed by 5%, preserving the orbit radius. */
+static void pillar_capture(PathMission *m,uint32_t now,float x,float turn)
+{
+    if (m->blue) hold(m);
+    else if (!emit(m,PC_BODY,x*PATH_PILLAR_GRAB_SPEED_SCALE,0,
+                   turn*PATH_PILLAR_GRAB_SPEED_SCALE,1,60000)) return;
+    m->phase=5;m->entered=now;
+}
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
     const float orbit_degrees=m->blue ? 530.0f : 358.0f;
-    const float orbit_x=m->blue ? -76.89408f : -80.94114f;
+    const float orbit_x=(m->blue ? -76.89408f : -80.94114f)*1.05f;
+    const float orbit_turn=-58.653f*1.05f;
     const uint32_t orbit_limit=m->blue ? 25000U : 15000U;
     if ((PATH_COLLECTION_VISION_ENABLE && in->reply == PATH_FAILED) ||
         (m->phase >= 4 && (uint32_t)(now - m->entered) >=
@@ -104,7 +112,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->orbit_yaw = in->yaw_deg;
                 m->orbit_ms = 0;
                 m->previous = now;
-                if (emit(m, PC_BODY, orbit_x, 0, -58.653f, 0, orbit_limit)) m->phase = 2;
+                if (emit(m, PC_BODY, orbit_x, 0, orbit_turn, 0, orbit_limit)) m->phase = 2;
                 break;
             }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
@@ -121,9 +129,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_TIMEOUT);
         else if (PATH_COLLECTION_VISION_ENABLE && in->ball_index > m->grabs)
         {
-            hold(m);
-            m->phase = 5;
-            m->entered = now;
+            pillar_capture(m,now,orbit_x,orbit_turn);
         }
         else if (m->orbit_yaw - in->yaw_deg >= orbit_degrees)
         {
@@ -132,7 +138,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case 3:
         if (PATH_COLLECTION_VISION_ENABLE && in->ball_index>m->grabs) {
-            hold(m);m->phase=5;m->entered=now;
+            pillar_capture(m,now,orbit_x,orbit_turn);
         } else leave_pillar(m,now,in);
         break;
     case 4:
@@ -143,15 +149,15 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->previous = now;
             if (PATH_COLLECTION_VISION_ENABLE && in->ball_index > m->grabs)
             {
-                hold(m);
-                m->phase = 5;
-                m->entered = now;
+                pillar_capture(m,now,orbit_x,orbit_turn);
             }
-            else if (emit(m, PC_BODY, orbit_x, 0, -58.653f, 0, orbit_limit)) m->phase = 2;
+            else if (emit(m, PC_BODY, orbit_x, 0, orbit_turn, 0, orbit_limit)) m->phase = 2;
         }
         break;
     case 5:
-        if (in->settled && emit(m, PC_PILLAR_STOPPED, 0, 0, 0, in->ball_index, 0))
+        if ((m->blue ? in->settled : isfinite(in->travel_rpm) &&
+             in->travel_rpm<=PATH_PILLAR_GRAB_MAX_RPM) &&
+            emit(m, PC_PILLAR_STOPPED, 0, 0, 0, in->ball_index, 0))
         {
             m->phase = 6;
             m->entered = now;
@@ -164,13 +170,11 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->previous = now;
             if (PATH_COLLECTION_VISION_ENABLE && in->ball_index > m->grabs)
             {
-                hold(m);
-                m->phase = 5;
-                m->entered = now;
+                pillar_capture(m,now,orbit_x,orbit_turn);
             }
             else if (m->orbit_yaw - in->yaw_deg >= orbit_degrees)
                 leave_pillar(m,now,in);
-            else if (emit(m, PC_BODY, orbit_x, 0, -58.653f, 0, orbit_limit - m->orbit_ms)) m->phase = 2;
+            else if (emit(m, PC_BODY, orbit_x, 0, orbit_turn, 0, orbit_limit - m->orbit_ms)) m->phase = 2;
         }
         break;
     case 7:
@@ -201,7 +205,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 280.0f : 260.0f, 500, m->blue ? 675.0f : 620.0f, m->blue ? 900.0f : 880.0f};
+    const float ends[] = {m->blue ? 280.0f : 260.0f, 500, m->blue ? 675.0f : 650.0f, m->blue ? 900.0f : 880.0f};
     if (m->phase >= 20 && m->phase != 30 && m->phase != 31) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;

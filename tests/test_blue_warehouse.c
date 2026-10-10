@@ -24,7 +24,7 @@ int main(void) {
   }
   assert(m.result==PATH_DONE && m.point==9);
   assert(queries==(mode==6?1U:2U));
-  assert(moves==(mode==6?2U:3U));
+  assert(moves==3U);
   if(mode<6) for(unsigned i=0;i<3;i++) assert(m.warehouse_columns[i]==orders[mode][i]);
  }
  PathMission m;Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=13;m.point=9;

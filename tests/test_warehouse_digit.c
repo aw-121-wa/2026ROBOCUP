@@ -36,7 +36,7 @@ static int run(bool fallback,const unsigned digits[3]) {
  }
  CHECK(m.result==PATH_DONE && groups==9 && !m.inventory.occupied);
  if(!fallback) CHECK(searches==0);
- CHECK(queries==(fallback?1:2) && moves==(fallback?2U:3U) && offsets==1);
+ CHECK(queries==(fallback?1:2) && moves==3U && offsets==1);
  for(unsigned i=0;i<9;i++) CHECK((codes[i]&15)==(fallback?i/3+1:digits[i/3]));
  return 0;
 }
@@ -53,17 +53,17 @@ static int moving_stop(void) {
  init(); m.point=3; m.warehouse_ignore_line=false; m.warehouse_mode=2; m.warehouse_columns[0]=3; m.warehouse_used=1U<<3;
  PathInput in={.armed=true,.settled=true,.gray=0,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
  Path_Tick(&m,0,&in); CHECK(offsets==0 && moves==0 && queries==0 && m.phase==11);
- Path_Tick(&m,5,&in); CHECK(queries==1 && m.phase==10);
+ Path_Tick(&m,5,&in); CHECK(queries==1 && moves==1 && m.phase==10);
  in.warehouse_ready=true; Path_Tick(&m,10,&in); CHECK(moves==1 && m.phase==8);
  in.settled=false; in.warehouse_digit_reply=PATH_OK; in.warehouse_digit=1;
- Path_Tick(&m,15,&in); CHECK(last.kind==PC_FINISH_FORWARD && last.x==25 && holds==0 && groups==0);
+ Path_Tick(&m,15,&in); CHECK(last.kind==PC_HOLD && holds==1 && groups==0);
  Path_Tick(&m,20,&in); CHECK(m.phase==9);
- Path_Tick(&m,25,&in); CHECK(m.phase==9 && last.kind==PC_FINISH_FORWARD && last.x==25 && groups==0);
+ Path_Tick(&m,25,&in); CHECK(m.phase==9 && last.kind==PC_HOLD && groups==0);
  in.settled=false; Path_Tick(&m,26,&in); CHECK(m.phase==9 && groups==0);
  in.settled=true; Path_Tick(&m,27,&in); CHECK(m.phase==WAREHOUSE_SELECT_BALL);
  in.turn_reply=PATH_OK;
  for(unsigned t=30;t<330 && !groups;t+=5) Path_Tick(&m,t,&in);
- CHECK(groups==1 && in.gray==0 && searches==0 && holds==0);
+ CHECK(groups==1 && in.gray==0 && searches==0 && holds==1);
 
  return 0;
 }
@@ -76,8 +76,8 @@ static int first_column_creep(void) {
  in.settled=true; Path_Tick(&m,10,&in); CHECK(queries==1 && m.phase==10);
  in.warehouse_ready=true; Path_Tick(&m,15,&in); CHECK(moves==1 && m.phase==8);
  in.warehouse_digit_reply=PATH_OK; in.warehouse_digit=2;
- Path_Tick(&m,20,&in); CHECK(holds==0 && m.phase==9 && m.warehouse_mode==2 && last.kind==PC_FINISH_FORWARD && last.x==25);
- in.settled=false; Path_Tick(&m,25,&in); CHECK(m.phase==9 && last.kind==PC_FINISH_FORWARD && last.x==25 && groups==0);
+ Path_Tick(&m,20,&in); CHECK(holds==1 && m.phase==9 && m.warehouse_mode==2 && last.kind==PC_HOLD);
+ in.settled=false; Path_Tick(&m,25,&in); CHECK(m.phase==9 && last.kind==PC_HOLD && groups==0);
  in.settled=true;
  Path_Tick(&m,30,&in); CHECK(m.phase==WAREHOUSE_SELECT_BALL && groups==0 && searches==0);
  return 0;
@@ -111,7 +111,7 @@ static int inferred_column(void) {
  m.warehouse_columns[0]=3; m.warehouse_columns[1]=1; m.warehouse_used=(1U<<3)|(1U<<1);
  PathInput in={.armed=true,.settled=true,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
  Path_Tick(&m,0,&in);
- CHECK(last.kind==PC_MOVE && last.x==215 && queries==0 && m.warehouse_columns[2]==2);
+ CHECK(last.kind==PC_MOVE && last.x==240 && queries==0 && m.warehouse_columns[2]==2);
  CHECK(m.phase==WAREHOUSE_INFERRED_MOVE && groups==0);
  in.settled=false; Path_Tick(&m,10000,&in); CHECK(groups==0 && m.phase==WAREHOUSE_INFERRED_MOVE);
  in.settled=true; Path_Tick(&m,10005,&in); CHECK(m.phase==WAREHOUSE_SELECT_BALL && queries==0);

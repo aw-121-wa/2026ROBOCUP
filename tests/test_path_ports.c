@@ -78,14 +78,14 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    /* Both route scales can occur before diagnostics publishes the new step. */
-    bool unscaled=(fabsf(a-650)<.01f || fabsf(a-850)<.01f || fabsf(a-300)<.01f || fabsf(a-250)<.01f);
-    bool scaled=(fabsf(a-845)<.01f || fabsf(a-1105)<.01f || fabsf(a-390)<.01f || fabsf(a-325)<.01f);
-    bool boosted=(fabsf(a-1098.5f)<.02f || fabsf(a-1436.5f)<.02f || fabsf(a-507)<.02f || fabsf(a-422.5f)<.02f);
-    bool retuned=(fabsf(a-714.999f)<.03f || fabsf(a-935)<.03f || fabsf(a-1428.05f)<.03f);
-    if(!unscaled && !scaled && !boosted && !retuned) return false;
-    if(!(fabsf(d-650)<.01f || fabsf(d-850)<.01f || fabsf(d-300)<.01f ||
-         fabsf(d-765)<.03f || fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
+    /* Accept task profiles and transit profiles independently of stale diagnostic step. */
+    const float bases[]={650,850,300,250,845,1105,390,325,1098.5f,1436.5f,507,422.5f,715,935,1428.05f,765};
+    bool valid_a=false,valid_d=false;
+    for(unsigned i=0;i<sizeof(bases)/sizeof(bases[0]);++i) {
+        valid_a |= fabsf(a-bases[i])<.05f || fabsf(a-bases[i]*16/9)<.05f;
+        valid_d |= fabsf(d-bases[i])<.05f || fabsf(d-bases[i]*16/9)<.05f;
+    }
+    if(!valid_a || !valid_d) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }
@@ -449,7 +449,7 @@ int main(int argc, char **argv) {
             CHECK(!moving && path_diagnostics.result==PATH_RUNNING && path_diagnostics.phase==4);
         }
         reply("PILLAR_READY\r\n"); tick(); CHECK(moving);
-        yaw=-2.0f; reply("PILLAR_BALL 1\r\n"); tick(); CHECK(!moving);
+        yaw=-2.0f; reply("PILLAR_BALL 1\r\n"); tick(); CHECK(moving==!test_blue);
         tick(); tick(); CHECK(!strcmp(wire,"PILLAR_STOPPED 1\r\n"));
         id(99); tick(); CHECK(path_diagnostics.rfid_count==5);
         reply("PILLAR_ACTION_DONE 1\r\n"); tick();
@@ -458,11 +458,11 @@ int main(int argc, char **argv) {
         if(missing_ids) { now+=PATH_RFID_WAIT_MS; tick(); tick(); }
         else { id(99); tick(); }
         finish_store(); CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
-        CHECK(!moving && path_diagnostics.rfid_count==(missing_ids?5:6));
+        CHECK(moving==!test_blue && path_diagnostics.rfid_count==(missing_ids?5:6));
         reply("PILLAR_RESUME 1\r\n"); tick(); CHECK(moving);
         if(extra) {
             reply("PILLAR_BALL 2\r\n"); tick(); tick(); tick();
-            CHECK(!strcmp(wire,"PILLAR_STOPPED 2\r\n") && !moving);
+            CHECK(!strcmp(wire,"PILLAR_STOPPED 2\r\n") && moving==!test_blue);
             reply("PILLAR_ACTION_DONE 2\r\n"); tick();
             id(103); tick(); finish_store();
             CHECK(!strcmp(wire,"PILLAR_RFID_OK 2\r\n"));

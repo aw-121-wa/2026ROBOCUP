@@ -110,7 +110,6 @@ typedef struct
     bool warehouse_query;
     struct {
         bool enabled, scanned, cleared, carrying;
-        bool first_unload_offset, first_unload_align;
         uint8_t column, row, target, occupied, unloaded;
         float position[3], axis;
     } destack;

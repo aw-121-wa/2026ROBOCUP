@@ -33,15 +33,16 @@ int main(void) {
     Path_Tick(&m,40,&in); Path_Tick(&m,70,&in); Path_Tick(&m,75,&in);
     CHECK(last.kind==PC_VISION); /* RDK prepares G103 before reporting READY. */
     in.reply=PATH_WAIT; in.vision_ready=true;
-    Path_Tick(&m,80,&in); CHECK(last.kind==PC_BODY && m.phase==2 && last.x==-80.94114f && last.speed==-58.653f);
+    Path_Tick(&m,80,&in); CHECK(last.kind==PC_BODY && m.phase==2 && last.x==-80.94114f*1.05f && last.speed==-58.653f*1.05f);
     in.settled=false; in.ball_index=1; in.yaw_deg=-120;
-    Path_Tick(&m,85,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
-    Path_Tick(&m,90,&in); CHECK(last.kind==PC_HOLD);
-    in.settled=true; Path_Tick(&m,95,&in);
+    Path_Tick(&m,85,&in); CHECK(last.kind==PC_BODY && m.phase==5 &&
+        last.x==-80.94114f*1.05f*0.1f && last.speed==-58.653f*1.05f*0.1f);
+    in.travel_rpm=50;Path_Tick(&m,90,&in); CHECK(last.kind==PC_BODY && m.phase==5);
+    in.travel_rpm=8;Path_Tick(&m,95,&in);
     CHECK(last.kind==PC_PILLAR_STOPPED && last.argument==1 && m.phase==6);
     Path_RecordId(&m,0x12345678); CHECK(m.id_count==1);
     Path_Tick(&m,20000,&in); CHECK(m.phase==6); /* RFID wait is not orbit time. */
-    in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-80.94114f && last.speed==-58.653f);
+    in.resume_index=1; Path_Tick(&m,20005,&in); CHECK(m.phase==2 && last.kind==PC_BODY && last.x==-80.94114f*1.05f && last.speed==-58.653f*1.05f);
     in.yaw_deg=-351; Path_Tick(&m,20010,&in); CHECK(m.phase==2);
     in.yaw_deg=-357.9f; Path_Tick(&m,20014,&in); CHECK(m.phase==2);
     in.gray=0; in.yaw_deg=-358.0f; Path_Tick(&m,20015,&in); CHECK(m.step==8 && last.kind==PC_ORBIT_EXIT && m.pillar_depart_pending);
@@ -71,8 +72,8 @@ int main(void) {
     CHECK(r.locked && !strcmp(wire,"DISC_CANCEL\r\n"));
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=6; m.phase=4;
     in.reply=PATH_WAIT; in.vision_ready=true; in.ball_index=1; in.resume_index=0;
-    Path_Tick(&m,100,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
+    Path_Tick(&m,100,&in); CHECK(last.kind==PC_BODY && last.argument==1 && m.phase==5);
     m.phase=6; in.resume_index=1; in.ball_index=2;
-    Path_Tick(&m,105,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
+    Path_Tick(&m,105,&in); CHECK(last.kind==PC_BODY && last.argument==1 && m.phase==5);
     puts("action sequence passed"); return 0;
 }

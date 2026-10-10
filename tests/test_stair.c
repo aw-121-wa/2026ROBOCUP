@@ -62,7 +62,7 @@ int main(void) {
     Path_Tick(&m,0,&in); CHECK(last.kind==PC_BODY && last.timeout_ms==50000);
     CHECK(last.x==0 && last.y==90 && last.speed==0);
     in.y_mm=599; Path_Tick(&m,95,&in); CHECK(last.y==90);
-    in.y_mm=600; Path_Tick(&m,100,&in); CHECK(last.y==30);
+    in.y_mm=620; Path_Tick(&m,100,&in); CHECK(last.y==30);
     in.y_mm=0; Path_Tick(&m,105,&in); CHECK(last.y==30); /* Slow mode latches. */
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);
     Path_Tick(&m,50000,&in); CHECK(m.result==PATH_TIMEOUT);

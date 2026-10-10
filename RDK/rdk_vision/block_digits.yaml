@@ -1,94 +1,76 @@
 red:
   1:
     calibrated: true
-    roi: &id001
-    - 255
-    - 155
-    - 150
-    - 135
+    roi: [240, 140, 180, 165]
     templates: block_samples/shared/row1
-    empty_reference: block_samples/shared/row1/empty.png
+    empty_reference: block_samples/shared/row1/empty-scene.png
     min_digit_height: 20
-    min_score: 0.75
+    min_score: 0.70
+    min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
     empty_references:
-    - block_samples/shared/row1/empty-column3.png
-    digit_window:
-    - 75
-    - 58
+    - block_samples/shared/row1/empty-column3-scene.png
+    digit_window: [75, 58]
   2:
     calibrated: true
-    roi: &id002
-    - 260
-    - 190
-    - 120
-    - 106
+    roi: [245, 175, 150, 136]
     templates: block_samples/shared/row2
-    empty_reference: block_samples/shared/row2/empty.png
+    empty_reference: block_samples/shared/row2/empty-scene.png
     min_digit_height: 20
-    min_score: 0.75
+    min_score: 0.70
+    min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
     empty_references:
-    - block_samples/shared/row2/empty-column3.png
-    digit_window:
-    - 100
-    - 86
+    - block_samples/shared/row2/empty-column3-scene.png
+    digit_window: [100, 86]
   3:
     calibrated: true
-    roi: &id003
-    - 265
-    - 170
-    - 120
-    - 115
+    roi: [250, 155, 150, 145]
     templates: block_samples/shared/row3
-    empty_reference: block_samples/shared/row3/empty.png
+    empty_reference: block_samples/shared/row3/empty-scene.png
     min_digit_height: 20
-    min_score: 0.75
+    min_score: 0.70
+    min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
-    digit_window:
-    - 100
-    - 95
+    digit_window: [100, 95]
 blue:
   1:
     calibrated: true
-    roi: *id001
+    roi: [240, 140, 180, 165]
     templates: block_samples/shared/row1
-    empty_reference: block_samples/shared/row1/empty.png
+    empty_reference: block_samples/shared/row1/empty-scene.png
     min_digit_height: 20
-    min_score: 0.75
+    min_score: 0.70
+    min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
     empty_references:
-    - block_samples/shared/row1/empty-column3.png
-    digit_window:
-    - 75
-    - 58
+    - block_samples/shared/row1/empty-column3-scene.png
+    digit_window: [75, 58]
   2:
     calibrated: true
-    roi: *id002
+    roi: [245, 175, 150, 136]
     templates: block_samples/shared/row2
-    empty_reference: block_samples/shared/row2/empty.png
+    empty_reference: block_samples/shared/row2/empty-scene.png
     min_digit_height: 20
-    min_score: 0.75
+    min_score: 0.70
+    min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
     empty_references:
-    - block_samples/shared/row2/empty-column3.png
-    digit_window:
-    - 100
-    - 86
+    - block_samples/shared/row2/empty-column3-scene.png
+    digit_window: [100, 86]
   3:
     calibrated: true
-    roi: *id003
+    roi: [250, 155, 150, 145]
     templates: block_samples/shared/row3
-    empty_reference: block_samples/shared/row3/empty.png
+    empty_reference: block_samples/shared/row3/empty-scene.png
     min_digit_height: 20
-    min_score: 0.75
+    min_score: 0.70
+    min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
-    digit_window:
-    - 100
-    - 95
+    digit_window: [100, 95]

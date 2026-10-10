@@ -77,23 +77,35 @@ static void integration(void) {
 int main(void) {
  integration();
  {
-  PathMission m={.send=send,.result=PATH_RUNNING,.step=13,.phase=WAREHOUSE_DESTACK_UNLOAD_OFFSET};
+  PathMission m={.send=send,.result=PATH_RUNNING,.step=13,.phase=WAREHOUSE_FIRST_DIGIT};
+  PathInput in={.armed=true,.settled=false,.destack_enabled=true,.warehouse_vision=true,
+      .warehouse_digit_reply=PATH_OK,.warehouse_digit=1};
+  unsigned before=issued;
+  PathWarehouse_Tick(&m,0,&in);
+  assert(m.point==3 && m.phase==WAREHOUSE_MOVE && issued==before);
+  PathWarehouse_Tick(&m,1,&in);
+  assert(m.phase==WAREHOUSE_FIRST_OFFSET && issued==before);
+  in.warehouse_digit_reply=PATH_WAIT;
+  PathWarehouse_Tick(&m,2,&in);
+  assert(last.kind==PC_WAREHOUSE_DIGIT && issued==before+1);
+  in.warehouse_ready=true;PathWarehouse_Tick(&m,3,&in);
+  in.x_mm=200;in.warehouse_digit_reply=PATH_OK;in.warehouse_digit=2;
+  PathWarehouse_Tick(&m,4,&in);
+  assert(m.point==6 && m.phase==WAREHOUSE_MOVE && issued==before+1);
+  PathWarehouse_Tick(&m,5,&in);
+  assert(last.kind==PC_FINISH_FORWARD && last.x==240 && m.phase==WAREHOUSE_INFERRED_MOVE);
+ }
+ {
+  PathMission m={.send=send,.result=PATH_RUNNING,.step=13,.phase=WAREHOUSE_SELECT_BALL};
   m.destack.enabled=m.destack.scanned=m.destack.cleared=true;
   assert(BallInventory_Record(&m.inventory,1,0x11)==BALL_ADDED);
   m.inventory.current=1;
   PathInput in={.armed=true,.settled=true,.gray=0,.turn_reply=PATH_WAIT};
-  PathWarehouse_Tick(&m,0,&in);assert(last.kind==PC_MOVE && last.y==-100);
-  in.settled=false;unsigned before=issued;PathWarehouse_Tick(&m,1,&in);assert(issued==before);
-  in.settled=true;PathWarehouse_Tick(&m,2,&in);assert(m.phase==WAREHOUSE_SELECT_BALL);
-  PathWarehouse_Tick(&m,3,&in);assert(last.kind==PC_TURN && m.phase==WAREHOUSE_TURN);
-  before=issued;PathWarehouse_Tick(&m,4,&in);assert(issued==before && m.phase==WAREHOUSE_TURN);
+  PathWarehouse_Tick(&m,0,&in);assert(last.kind==PC_TURN && m.phase==WAREHOUSE_TURN);
+  unsigned before=issued;PathWarehouse_Tick(&m,4,&in);assert(issued==before && m.phase==WAREHOUSE_TURN);
   m.inventory.current=0;in.turn_reply=PATH_OK;
   PathWarehouse_Tick(&m,5,&in);PathWarehouse_Tick(&m,6,&in);PathWarehouse_Tick(&m,7,&in);
-  assert(m.phase==WAREHOUSE_ALIGN_LINE && m.destack.first_unload_align);
-  PathWarehouse_Tick(&m,8,&in);assert(m.phase==WAREHOUSE_ALIGN_LINE);
-  in.gray=6;PathWarehouse_Tick(&m,9,&in);
-  assert(m.phase==WAREHOUSE_UNLOAD && !m.destack.first_unload_align);
-  PathWarehouse_Tick(&m,10,&in);assert(last.kind==PC_GROUP && last.argument==111);
+  assert(m.phase==WAREHOUSE_UNLOAD && last.kind==PC_GROUP && last.argument==111);
  }
  for(unsigned blue=0;blue<2;blue++) for(unsigned source=1;source<=3;source++) for(unsigned digit=1;digit<=3;digit++) {
   PathMission m={.send=send,.blue=blue,.result=PATH_RUNNING,.step=13,.phase=WAREHOUSE_SELECT_BALL};
@@ -122,15 +134,15 @@ int main(void) {
   assert(m.phase==DESTACK_NEXT && m.destack.column==1);
   m.destack.cleared=true;m.destack.column=0;m.point=2;in.x_mm=0;assert(PathDestack_Advance(&m,30));assert(m.point==3 && m.destack.column==1);
   tick(&m,&in,31);assert(last.kind==PC_MOVE && fabsf(last.x-200)<.01f);
-  in.x_mm=(blue?-1:1)*200;tick(&m,&in,32);assert(m.phase==WAREHOUSE_DESTACK_UNLOAD_OFFSET && m.destack.row==3);
+  in.x_mm=(blue?-1:1)*200;tick(&m,&in,32);assert(m.phase==WAREHOUSE_SELECT_BALL && m.destack.row==3);
   m.destack.column=2;m.destack.unloaded=3;m.point=8;in.x_mm=(blue?-1:1)*400;
   before=issued;assert(PathDestack_Advance(&m,40));tick(&m,&in,41);
   assert(issued==before && m.phase==WAREHOUSE_ALIGN_HOME && m.point==9);
  }
  PathMission m={.send=send,.result=PATH_RUNNING,.phase=DESTACK_CHECK};m.destack.enabled=true;m.destack.row=3;
  PathInput in={.settled=true,.warehouse_digit_reply=PATH_OK};
- tick(&m,&in,0);in.warehouse_digit=0;tick(&m,&in,1);assert(m.phase==DESTACK_CHECK && m.destack.row==3 && !m.waiting);
- m.phase=DESTACK_CHECK; tick(&m,&in,2);in.warehouse_digit=4;tick(&m,&in,3);assert(m.destack.row==2 && m.phase==DESTACK_POSE);
+ tick(&m,&in,0);in.warehouse_digit=0;tick(&m,&in,1);assert(m.phase==DESTACK_POSE && m.destack.row==2 && !m.waiting);
+ m.phase=DESTACK_CHECK; tick(&m,&in,2);in.warehouse_digit=4;tick(&m,&in,3);assert(m.destack.row==1 && m.phase==DESTACK_POSE);
  m.phase=DESTACK_CHECK;m.waiting=true;m.destack.occupied=2;in.warehouse_digit=1;
  tick(&m,&in,4);assert(m.result==PATH_ERROR && last.kind==PC_CANCEL);
  m.result=PATH_RUNNING;m.phase=DESTACK_PICK;m.waiting=true;in.reply=PATH_FAILED;

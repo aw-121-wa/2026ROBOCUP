@@ -20,6 +20,15 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
         .suppress_lateral_comp=false};
 }
 /* Boundary speeds remain unchanged so entry into search/orbit stays continuous. */
+static inline float PathPolicy_TransitScale(unsigned step, PathCommandKind kind)
+{
+    if (step!=0 && step!=1 && step!=5 && step!=8 && step!=11) return 1.0f;
+    switch (kind) {
+    case PC_MOVE: case PC_MOVE_ROTATE: case PC_ARC: case PC_ORBIT_EXIT:
+    case PC_ORBIT_ARC: case PC_FINISH_FORWARD: return 16.0f/9.0f;
+    default: return 1.0f;
+    }
+}
 static inline float PathPolicy_CommandBoost(unsigned step, PathCommandKind kind)
 {
     if (step==6 || step==9 || step==12 || step==13) return 1.0f;
