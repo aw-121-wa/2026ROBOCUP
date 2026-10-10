@@ -15,6 +15,7 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
         .mirror_map_y=blue,
         .use_start_turn_kp=running && blue && step==0,
         .stationary_hold=running && step>=8 && step<=10,
+        .force_stair_heading=running && step==9,
         .hold_during_action=running && step==9 && phase==24,
         .suppress_lateral_comp=false};
 }

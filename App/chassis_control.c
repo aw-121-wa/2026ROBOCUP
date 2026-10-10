@@ -350,9 +350,8 @@ bool Chassis_ReturnHome(unsigned leg)
         float x=home_x-state.x_mm, y=home_y-state.y_mm;
         float distance=hypotf(x,y);
         float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
-        float mx=(cosf(map_yaw)*x+sinf(map_yaw)*y)*scale;
         float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
-        travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM-route_policy.home_x_extra_trim_mm);
+        travel=1500.0f;
         home_right_target=current_y+-1*(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
         home_return_ready=true;
     } else {
@@ -967,6 +966,9 @@ void Chassis_Update(void)
     bool blending_this_cycle = path_blend;
     float vx = speed * dx, vy = speed * dy, wz = 0;
     float lateral_direction = dy;
+    if (route_policy.force_stair_heading && path_heading_enabled &&
+        !path_rotation && !path_blend)
+        route_heading=heading=Angle_Wrap(map_yaw+route_policy.stair_target_deg*RAD);
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
     bool translating = !zero_output && !path_rotation &&
                        (planner.active || (path_body && body_w == 0 && !line_search));
@@ -1068,7 +1070,8 @@ void Chassis_Update(void)
     float stair_hold_error = Angle_Wrap(map_yaw + route_policy.stair_target_deg * RAD - state.yaw_rad);
     bool stair_hold = state.armed && !state.fault && path_heading_enabled &&
                       zero_output && !normal_stopping && route_policy.stationary_hold &&
-                      (route_policy.hold_during_action || fabsf(stair_hold_error)<HEADING_HOLD_ENTRY);
+                      (route_policy.force_stair_heading || route_policy.hold_during_action ||
+                       fabsf(stair_hold_error)<HEADING_HOLD_ENTRY);
     if (zero_output || !state.armed) {
         vx=vy=0;
         yaw_request.mode=HEADING_OFF;

@@ -156,13 +156,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
     }
     if (m->point==9 && m->phase==WAREHOUSE_HOME_BRAKE) {
         if (in->settled) {
-            float current=home_map_y(in);
-            float remaining=20.0f-(m->home_line_y-current);
-            if (remaining<=0.5f) m->result=PATH_DONE;
-            else if (!isfinite(remaining)) fail(m,PATH_ERROR);
-            else if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,.y=m->blue ? remaining : -remaining,.timeout_ms=5000})) {
-                m->phase=WAREHOUSE_HOME_ADVANCE; m->entered=now;
-            }
+            m->result=PATH_DONE;
         }
         else if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=3000U) fail(m,PATH_TIMEOUT);
         return;
@@ -203,6 +197,20 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         (m->phase==WAREHOUSE_MOVE && m->point==0 && in->warehouse_vision))) return;
     switch(m->phase)
     {
+    case WAREHOUSE_DESTACK_UNLOAD_OFFSET:
+        /* One body-right offset after all destacking, before the first turn. */
+        if (!m->waiting) {
+            if (!in->settled) break;
+            m->entered=now;
+            m->waiting=emit(m,(PathCommand){.kind=PC_MOVE,.y=-100,.speed=30,
+                .acceleration=300,.deceleration=300,.timeout_ms=10000});
+        } else if ((uint32_t)(now-m->entered)>=10000U) fail(m,PATH_TIMEOUT);
+        else if (in->settled) {
+            m->destack.first_unload_offset=true;
+            m->destack.first_unload_align=true;
+            m->waiting=false;m->phase=WAREHOUSE_SELECT_BALL;m->entered=now;
+        }
+        break;
     case WAREHOUSE_ENTRY_BACK:
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=5000U) { fail(m,PATH_TIMEOUT); break; }
         if (!in->settled) break;
@@ -352,7 +360,9 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_ALIGN_LINE: /* Default-order fallback retains lateral line alignment. */
         if (PathLine_AlignFour(m,now,in)) {
-            m->phase=WAREHOUSE_SELECT_BALL;
+            m->phase=m->destack.first_unload_align ? WAREHOUSE_UNLOAD : WAREHOUSE_SELECT_BALL;
+            m->destack.first_unload_align=false;
+            m->waiting=false;
             m->entered=now;
         } else if (m->result!=PATH_RUNNING && m->inventory.occupied) {
             m->inventory.uncertain=true;
@@ -398,6 +408,11 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         break;
     case WAREHOUSE_UNLOAD:
         if (!in->settled) { fail(m,PATH_ERROR); break; }
+        if (m->destack.first_unload_align) {
+            /* The selected pocket is now in place. Reacquire gray before G109-111. */
+            begin_lateral_alignment(m,now);
+            break;
+        }
         if (!m->waiting)
         {
             m->entered=now;

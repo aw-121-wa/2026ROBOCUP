@@ -48,13 +48,28 @@ static bool move(PathMission *m,uint32_t now,const PathInput *in,float target)
         .speed=60,.acceleration=500,.deceleration=500,.timeout_ms=ARM_TIMEOUT_MS});
     return false;
 }
-static void next_row(PathMission *m,uint32_t now)
+static void nearest_column(PathMission *m,uint32_t now,float current)
+{
+    unsigned nearest=3;float best=INFINITY;
+    for(unsigned col=0;col<3;++col) {
+        float distance=fabsf(m->destack.position[col]-current);
+        if (!(m->destack.unloaded&(1U<<col)) && distance<best) {best=distance;nearest=col;}
+    }
+    if(nearest==3) {m->point=9;enter(m,DESTACK_HOME,now);return;}
+    m->destack.column=(uint8_t)nearest;m->point=nearest*3;
+    enter(m,DESTACK_NEXT,now);
+}
+static void next_row(PathMission *m,uint32_t now,const PathInput *in)
 {
     if (--m->destack.row) enter(m,DESTACK_POSE,now);
     else {
         /* Finish all columns before admitting any ball-unload action. */
         if (m->destack.column) --m->destack.column;
-        else {m->destack.cleared=true;m->destack.column=2;}
+        else {
+            m->destack.cleared=true;
+            nearest_column(m,now,position(m,in));
+            return;
+        }
         m->point=m->destack.column*3;
         enter(m,DESTACK_NEXT,now);
     }
@@ -62,10 +77,8 @@ static void next_row(PathMission *m,uint32_t now)
 bool PathDestack_Advance(PathMission *m,uint32_t now)
 {
     if (!m->destack.enabled || !m->destack.scanned || !m->destack.cleared || m->point%3!=2) return false;
-    if (m->destack.column) {
-        --m->destack.column;m->point=m->destack.column*3;
-        enter(m,DESTACK_NEXT,now);
-    } else {m->point=9;enter(m,DESTACK_HOME,now);}
+    m->destack.unloaded|=(uint8_t)(1U<<m->destack.column);
+    nearest_column(m,now,m->destack.position[m->destack.column]);
     return true;
 }
 bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
@@ -103,7 +116,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         } else if (in->warehouse_digit_reply==PATH_FAILED || (uint32_t)(now-m->entered)>=11000) fail(m);
         else if (in->warehouse_digit_reply==PATH_OK) {
             unsigned digit=in->warehouse_digit;
-            if (digit==4) next_row(m,now); /* Explicit EMPTY, never a missing numeric result. */
+            if (digit==4) next_row(m,now,in); /* Explicit EMPTY, never a missing numeric result. */
             else if (digit>=1 && digit<=3) {
                 if (m->destack.occupied&(1U<<digit)) {fail(m);break;}
                 m->destack.target=(uint8_t)digit;enter(m,DESTACK_PICK,now);
@@ -122,20 +135,28 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     case DESTACK_PLACE:
         if (arm(m,now,in,123-3*m->destack.target)) {
             m->destack.carrying=false;m->destack.occupied|=(uint8_t)(1U<<m->destack.target);
-            enter(m,DESTACK_RETURN,now);
+            if (!m->destack.column) {
+                m->destack.row=1;next_row(m,now,in); /* All blocks moved: stay near column 4. */
+            } else enter(m,DESTACK_RETURN,now);
         }
         break;
     case DESTACK_RETURN:
-        if (move(m,now,in,m->destack.position[m->destack.column])) next_row(m,now);
+        if (move(m,now,in,m->destack.position[m->destack.column])) {
+            /* Exactly one block per source column: lower rows are now clear. */
+            m->destack.row=1;
+            next_row(m,now,in);
+        }
         break;
     case DESTACK_NEXT:
         if (move(m,now,in,m->destack.position[m->destack.column])) {
             m->destack.row=3;
-            enter(m,m->destack.cleared ? WAREHOUSE_SELECT_BALL : DESTACK_POSE,now);
+            enter(m,m->destack.cleared ?
+                (m->destack.first_unload_offset ? WAREHOUSE_SELECT_BALL : WAREHOUSE_DESTACK_UNLOAD_OFFSET) :
+                DESTACK_POSE,now);
         }
         break;
     case DESTACK_HOME:
-        if (move(m,now,in,m->destack.position[2])) {
+        if (in->settled) {
             if (BallInventory_HasKnown(&m->inventory) || m->inventory.uncertain) {fail(m);break;}
             enter(m,WAREHOUSE_ALIGN_HOME,now);
         }

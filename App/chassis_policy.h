@@ -9,6 +9,7 @@ typedef struct {
     bool mirror_map_y;
     bool use_start_turn_kp;
     bool stationary_hold;
+    bool force_stair_heading;
     bool hold_during_action;
     bool suppress_lateral_comp;
 } ChassisRoutePolicy;

@@ -32,7 +32,7 @@ int main(void) {
         Path_Init(&m,send,0);m.blue=blue;m.result=PATH_RUNNING;m.step=9;m.phase=22;
         in.settled=true;in.x_mm=in.y_mm=0;
         PathChassis_Tick(&m,3000,&in);
-        assert(last.kind==PC_MOVE && last.x==(blue?280:160));
+        assert(last.kind==PC_MOVE && last.x==(blue?280:260));
     }
     Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=6;m.phase=3;
     in.motion_done=false;in.map_yaw_deg=280;

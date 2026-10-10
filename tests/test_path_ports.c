@@ -117,6 +117,12 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *u) {
 
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n",__LINE__,#x); return 1; } } while(0)
 static void tick(void) {
+    if (!test_blue && !PATH_BLUE_STAIR_TEST && path_diagnostics.step==9) {
+        if (path_diagnostics.phase==30) gray_line=false;
+        else if (path_diagnostics.phase==31) gray_line=true;
+        else if (path_diagnostics.phase==22 && path_diagnostics.point==4) gray_line=false;
+    }
+    if (!test_blue && !PATH_BLUE_STAIR_TEST && path_diagnostics.step==10) gray_line=true;
     if(!moving) { state.x_mm+=pending_x*cosf(yaw)-pending_y*sinf(yaw);
         state.y_mm+=pending_x*sinf(yaw)+pending_y*cosf(yaw);pending_x=pending_y=0; }
     now += 5; PathPorts_Tick();

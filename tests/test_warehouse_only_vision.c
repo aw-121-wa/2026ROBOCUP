@@ -29,4 +29,16 @@ int main(void)
         PathChassis_Tick(&m,4,&in);assert(m.step==11 && last.kind==PC_GROUP && last.argument==3);
     }
     assert(groups==2);
+    PathMission m;Path_Init(&m,send,0);m.result=PATH_RUNNING;m.step=9;m.phase=30;
+    PathInput in={.armed=true,.settled=true,.gray=6};
+    PathChassis_Tick(&m,10,&in);assert(last.kind==PC_BODY && last.x==-20);
+    in.gray=4;in.settled=false;PathChassis_Tick(&m,11,&in);
+    assert(last.kind==PC_HOLD && m.phase==31);
+    in.settled=true;PathChassis_Tick(&m,12,&in);assert(m.phase==20);
+    m.phase=22;m.point=3;m.waiting=false;in.gray=4;in.x_mm=650;
+    PathChassis_Tick(&m,13,&in);assert(m.phase==22 && last.kind==PC_MOVE);
+    in.gray=2;in.settled=false;PathChassis_Tick(&m,14,&in);
+    assert(m.phase==22);
+    in.settled=true;in.x_mm=880;
+    PathChassis_Tick(&m,15,&in);assert(m.phase==27 && last.kind==PC_HOLD);
 }

@@ -201,7 +201,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 280.0f : 160.0f, 500, m->blue ? 675.0f : 600.0f, m->blue ? 900.0f : 860.0f};
+    const float ends[] = {m->blue ? 280.0f : 260.0f, 500, m->blue ? 675.0f : 620.0f, m->blue ? 900.0f : 880.0f};
     if (m->phase >= 20 && m->phase != 30 && m->phase != 31) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;
@@ -245,24 +245,14 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             m->phase=30; m->waiting=false;
         }
         break;
-    case 30: /* Blue backs up only while the rear PD1 gray probe remains on the line. */
-        if (m->blue) {
+    case 30: /* Back up until one active probe leaves the line; blue retains rear PD1 admission. */
+        {
             if (!m->waiting) { m->entered=now;m->waiting=true; }
             if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT);break; }
-            if (!(in->gray&2U)) { hold(m);m->phase=31;break; }
+            if (m->blue ? !(in->gray&2U) : ((in->gray&6U)!=6U)) { hold(m);m->phase=31;break; }
             (void)emit(m,PC_BODY,-20,0,0,0,10000);
             break;
         }
-        if (!m->waiting) {
-            if (!in->settled || !PathHeading_Ready(m,now,in)) break;
-            m->waiting=emit(m,PC_MOVE,PATH_STAIR_ENTRY_ADVANCE_MM,0,20,0,5000); m->entered=now;
-        } else if ((uint32_t)(now-m->entered)>=5000U) fail(m,PATH_TIMEOUT);
-        else if (in->settled) {
-            m->stair_origin_x=in->x_mm; m->stair_origin_y=in->y_mm;
-            m->stair_distance=0; m->stair_started=now;
-            m->phase=20; m->waiting=false;
-        }
-        break;
     case 31:
         if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT);break; }
         if (in->settled) {
