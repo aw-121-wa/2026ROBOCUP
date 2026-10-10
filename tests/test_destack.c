@@ -87,13 +87,13 @@ int main(void) {
   assert(m.phase==WAREHOUSE_FIRST_OFFSET && issued==before);
   in.warehouse_digit_reply=PATH_WAIT;
   PathWarehouse_Tick(&m,2,&in);
-  assert(last.kind==PC_WAREHOUSE_DIGIT && issued==before+1);
+  assert(last.kind==PC_FINISH_FORWARD && last.x==300 && issued==before+2);
   in.warehouse_ready=true;PathWarehouse_Tick(&m,3,&in);
   in.x_mm=200;in.warehouse_digit_reply=PATH_OK;in.warehouse_digit=2;
   PathWarehouse_Tick(&m,4,&in);
-  assert(m.point==6 && m.phase==WAREHOUSE_MOVE && issued==before+1);
+  assert(m.point==6 && m.phase==WAREHOUSE_MOVE && issued==before+2);
   PathWarehouse_Tick(&m,5,&in);
-  assert(last.kind==PC_FINISH_FORWARD && last.x==240 && m.phase==WAREHOUSE_INFERRED_MOVE);
+  assert(last.kind==PC_FINISH_FORWARD && last.x==270 && m.phase==WAREHOUSE_INFERRED_MOVE);
  }
  {
   PathMission m={.send=send,.result=PATH_RUNNING,.step=13,.phase=WAREHOUSE_SELECT_BALL};

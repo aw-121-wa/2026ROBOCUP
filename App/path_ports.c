@@ -339,7 +339,7 @@ static bool send(void *ctx, const PathCommand *c)
                           c->speed * scale /
                               (chassis_config.half_track_mm + chassis_config.half_wheelbase_mm)))
             return false;
-        if (!motion_pending || (mission.step==6 && (c->argument==1 || mission.phase==6)))
+        if (!motion_pending)
         {
             motion_since = now;
             motion_timeout = c->timeout_ms ? c->timeout_ms : 5000;
@@ -357,7 +357,7 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_BLOCK_CHECK:
         return mission.step==13 && Chassis_IsSettled() &&
                c->argument>=1 && c->argument<=3 &&
-               Rdk_BlockBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
+               Rdk_BlockBeginCell(&rdk,(uint8_t)c->argument,mission.destack.column+1,now,c->timeout_ms);
     case PC_WAREHOUSE_DIGIT:
         return mission.step==13 && c->argument<=14 &&
                Rdk_WarehouseBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
@@ -397,11 +397,7 @@ static bool send(void *ctx, const PathCommand *c)
         disc_action_done_index = disc_rfid_confirmed_index = 0;
         return true;
     case PC_PILLAR_STOPPED:
-        /* Red capture permission now means slow orbit, not a stationary chassis. */
-        return (Chassis_IsSettled() || (!mission.blue && mission.step==6 && mission.phase==5 &&
-                hypotf(Chassis_GetState()->velocity[0],Chassis_GetState()->velocity[1])*60.0f /
-                (2.0f*3.141592654f*chassis_config.wheel_radius_mm)<=PATH_PILLAR_GRAB_MAX_RPM)) &&
-               Rdk_PillarStopped(&rdk, (uint8_t)c->argument);
+        return Chassis_IsSettled() && Rdk_PillarStopped(&rdk, (uint8_t)c->argument);
     case PC_PILLAR_END:
         return Rdk_PillarEnd(&rdk); /* Protocol still requires all grab/resume handshakes complete. */
     case PC_DISC:

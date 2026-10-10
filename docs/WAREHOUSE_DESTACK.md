@@ -37,7 +37,7 @@ python3 tools/calibrate_block_digits.py --side red --row 3 --enable
 
 ## 协议与遥测
 
-- STM32发送 `BLOCK_CHECK <token> <row>`，RDK回复 `BLOCK_RESULT <token> <value>`。
+- STM32发送 `BLOCK_CHECK <token> <row> <column>`，RDK回复 `BLOCK_RESULT <token> <value>`；RDK兼容旧的省略列号请求。
 - value：0未知、1/2/3数字、4确认空仓、5故障；只接受当前请求标记。旧回包及底部列号回包不能完成方块检查。
 - 未知停稳重试；故障停止。夹取/放置和移动各保留30秒限时；数字检查10秒通信限时。
 - 遥测phase：32识别姿态、33识别、34夹取、35去第四列、36放置、37返回原列、38去上一列、39回第三列接返程。
@@ -47,6 +47,12 @@ python3 tools/calibrate_block_digits.py --side red --row 3 --enable
 
 主机：`cmake --build build/host-path -j4`，`ctest --test-dir build/host-path --output-on-failure`。
 固件：`cmake --build build/Release-Size-Audit -j4`。
-RDK：新 `block_digits.py`、`block_digits.yaml`、样本目录，以及更新的 `tools/rdk_stm32_bridge.py` 必须一起部署。桥接代码更新需重启服务。旧RDK不识别BLOCK_CHECK，不能与新倒垛固件混跑。
+RDK：`block_digits.py`、`block_digits.yaml`、`cell_capture.py`、样本目录，以及更新的 `tools/rdk_stm32_bridge.py` 必须一起部署。桥接代码更新需重启服务。旧RDK不能接收包含列号的新请求，必须同步更新STM32和RDK。
+
+## 仓位照片
+
+每个实际检查的仓位在识别开始后保存首张有效完整画面，与识别共用同一帧；每列已搬走方块而跳过的行不拍照。照片位于RDK项目下的 `captures/destack/<本轮时间>/red-col3-row2-token123.png`，蓝方使用 `blue` 前缀。物理列号从1到3，行号从下往上1到3。
+
+照片通过有界后台队列写入，不等待磁盘完成；队列满或写入失败只记录日志，不中断识别。相机没有有效画面时无法生成照片。一轮最多9张，下一次出发准备动作会开始新的照片目录。
 
 本次代码没有自动部署、烧录或实跑。未标定时不能宣称方块视觉已可用。

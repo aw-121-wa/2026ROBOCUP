@@ -58,6 +58,17 @@ class PathActions(unittest.TestCase):
             self.assertEqual(order, ['ready',('stop',1),('rfid',1)] if permission else ['ready',('stop',1)])
             self.assertEqual(rc, 0 if permission else 1)
 
+    def test_second_pillar_action_sends_g2_without_waiting(self):
+        board=FakeBoard(); camera=FakeCamera([snapshot(i) for i in range(8)])
+        settings=args(2);settings.prep_group=103;settings.trigger_group=104
+        settings.followup_after_action=2;settings.followup_group=2
+        rc=run_disc_task(settings,config=config(),detector=FakeDetector(),
+            trigger=FakeTrigger(['TRIGGER_VALID','TRIGGER_VALID']),camera=camera,board=board,
+            clock=lambda:float(camera.index-1),sleep_fn=lambda seconds:None,max_idle_iterations=6)
+        self.assertEqual(rc,0)
+        self.assertEqual(board.started,[(104,1),(104,1),(2,1)])
+        self.assertEqual([group for group,timeout in board.waited],[104,104])
+
     def test_pillar_waits_for_stopped_then_rfid_before_resuming(self):
         tx, action, waiting = [], threading.Event(), threading.Event()
         def pillar(**kw):

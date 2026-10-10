@@ -32,6 +32,15 @@ class BlockTests(unittest.TestCase):
  def test_uncalibrated_never_empty(self):
   detector=BlockDetector(self.root,dict(self.settings,calibrated=False))
   self.assertEqual(detector.detect(self.empty),UNKNOWN)
+ def test_score_cache_keeps_digit_and_unreadable_results(self):
+  detector=BlockDetector(self.root,self.settings)
+  self.assertEqual(detector.detect(self.images[2]),2)
+  count=len(detector._glyph_scores)
+  self.assertGreater(count,0)
+  self.assertEqual(detector.detect(self.images[2]),2)
+  self.assertEqual(len(detector._glyph_scores),count)
+  image=self.empty.copy();cv2.putText(image,'?',(45,130),cv2.FONT_HERSHEY_SIMPLEX,3,0,6)
+  self.assertEqual(detector.detect(image),UNKNOWN)
  def test_empty_with_lighting_gradient_and_shift(self):
   shifted=cv2.warpAffine(self.empty,np.float32([[1,0,3],[0,1,3]]),(160,180),borderMode=cv2.BORDER_REPLICATE)
   gradient=np.linspace(-12,12,160)[None,:]
@@ -73,8 +82,25 @@ class BlockTests(unittest.TestCase):
   (self.root/'2.png').unlink()
   with self.assertRaises(ValueError):BlockDetector(self.root,self.settings)
   with self.assertRaises(ValueError):BlockDetector(self.root,dict(self.settings,roi=[-1,0,160,180]))
+ def test_red_upper_offset_digit_and_empty_column(self):
+  import yaml
+  root=ROOT/'rdk_vision'
+  settings=yaml.safe_load((root/'block_digits.yaml').read_text())['red'][3]
+  detector=BlockDetector(root,settings)
+  for name,value in [('3-offset-scene.png',3),('empty-column1-scene.png',EMPTY),
+                     ('empty-column3-latest-scene.png',EMPTY),('empty-column2-latest-scene.png',EMPTY)]:
+   image=cv2.imread(str(root/settings['templates']/name))
+   self.assertEqual(detector.detect(image),value)
+ def test_red_right_offset_digits(self):
+  import yaml
+  root=ROOT/'rdk_vision'
+  settings=yaml.safe_load((root/'block_digits.yaml').read_text())['red']
+  for row,name,value in [(1,'1-right-scene.png',1),(3,'2-right-scene.png',2)]:
+   detector=BlockDetector(root,settings[row])
+   image=cv2.imread(str(root/settings[row]['templates']/name))
+   self.assertEqual(detector.detect(image),value)
  def test_frame_confirmation_empty_slower_than_digit(self):
-  for result,minimum in ((2,.15),(EMPTY,.55)):
+  for result,minimum in ((2,.15),(EMPTY,.35)):
    now=[0.0];serial=[0]
    def get():
     now[0]+=.05;serial[0]+=1
@@ -90,6 +116,21 @@ class BlockTests(unittest.TestCase):
   result=confirm_loop(SimpleNamespace(get_latest=get),SimpleNamespace(detect=lambda _:1),threading.Event(),
                      timeout_s=.5,clock=lambda:now[0],sleep=lambda _:None)
   self.assertEqual(result,UNKNOWN)
+ def test_snapshot_uses_first_fresh_frame_once(self):
+  now=[0.0];shots=[];frame=self.images[1]
+  def get():
+   now[0]+=.05
+   return SimpleNamespace(frame_id=round(now[0]*100),timestamp=now[0],frame=frame)
+  result=confirm_loop(SimpleNamespace(get_latest=get),SimpleNamespace(detect=lambda _:1),threading.Event(),
+      clock=lambda:now[0],sleep=lambda _:None,on_first_frame=shots.append)
+  self.assertEqual(result,1);self.assertEqual(len(shots),1);self.assertIs(shots[0],frame)
+ def test_snapshot_error_does_not_interrupt_recognition(self):
+  now=[0.0]
+  def get():
+   now[0]+=.05;return SimpleNamespace(frame_id=round(now[0]*100),timestamp=now[0],frame=self.images[1])
+  def failed(frame):raise OSError('disk full')
+  self.assertEqual(confirm_loop(SimpleNamespace(get_latest=get),SimpleNamespace(detect=lambda _:1),
+      threading.Event(),clock=lambda:now[0],sleep=lambda _:None,on_first_frame=failed),1)
  def test_stale_frames_raise_not_empty(self):
   now=[1.0]
   def get():
@@ -142,6 +183,16 @@ class BlockBridgeTests(unittest.TestCase):
   def run(*args,**kwargs):raise OSError('camera unavailable')
   core=BridgeCore(tx.append,lambda **kw:0,run_block=run)
   core.handle('BLOCK_CHECK 1 2');self.wait(core);self.assertEqual(tx,['BLOCK_RESULT 1 5'])
+ def test_column_and_round_metadata(self):
+  tx=[];calls=[]
+  def run(row,**kwargs):calls.append((row,kwargs));return EMPTY
+  core=BridgeCore(tx.append,lambda **kw:0,run_block=run)
+  core.handle('BLOCK_CHECK 123 3 2');self.wait(core)
+  core.handle('BLOCK_CHECK 124 2 2');self.wait(core)
+  self.assertEqual(calls[0][0],3);self.assertEqual(calls[0][1]['column'],2)
+  self.assertEqual(calls[0][1]['capture_token'],123)
+  self.assertEqual(calls[0][1]['capture_run'],calls[1][1]['capture_run'])
+  self.assertEqual(tx,['BLOCK_RESULT 123 4','BLOCK_RESULT 124 4'])
  def test_cancel_and_busy(self):
   tx=[];entered=threading.Event();release=threading.Event();groups=[]
   def run(*args,**kwargs):entered.set();release.wait(1);return EMPTY

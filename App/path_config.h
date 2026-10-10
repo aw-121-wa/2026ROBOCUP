@@ -8,8 +8,6 @@
 #endif
 #define PATH_RFID_WAIT_MS 1000U
 #define PATH_TRAVEL_BOOST 1.3f
-#define PATH_PILLAR_GRAB_SPEED_SCALE 0.1f
-#define PATH_PILLAR_GRAB_MAX_RPM 10.0f
 #define PATH_WAREHOUSE_UNTIMED(m) ((m)->step==12 || ((m)->step==13 && (m)->point<9))
 /* Full blue material flow; set to 0 only for collection-without-storage tests. */
 #ifndef PATH_BLUE_MATERIAL_ENABLE
@@ -31,7 +29,7 @@
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
 #define PATH_WAREHOUSE_TARGET_DEG(blue) ((blue) ? 180.0f : 0.0f)
 #define PATH_WAREHOUSE_COLUMN_SPACING_MM 200.0f
-#define PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM 240.0f
+#define PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM 270.0f
 #define PATH_WAREHOUSE_ENTRY_BACK_MM 30.0f
 #define PATH_WAREHOUSE_FIRST_RIGHT_MM 19.0f
 #define PATH_WAREHOUSE_CREEP_LIMIT_MM 300.0f

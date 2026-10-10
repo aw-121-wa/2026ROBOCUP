@@ -1,7 +1,8 @@
 red:
   1:
     calibrated: true
-    roi: [240, 140, 180, 165]
+    roi: [240, 140, 240, 165]
+    additional_templates: {1: 1-right.png}
     templates: block_samples/shared/row1
     empty_reference: block_samples/shared/row1/empty-scene.png
     min_digit_height: 20
@@ -27,7 +28,8 @@ red:
     digit_window: [100, 86]
   3:
     calibrated: true
-    roi: [250, 155, 150, 145]
+    roi: [240, 150, 270, 150]
+    block_evidence_top: 40
     templates: block_samples/shared/row3
     empty_reference: block_samples/shared/row3/empty-scene.png
     min_digit_height: 20
@@ -35,6 +37,8 @@ red:
     min_margin: 0.10
     empty_mean_error: 4.0
     empty_changed_fraction: 0.01
+    empty_references:
+    - block_samples/shared/row3/empty-column1-scene.png
     digit_window: [100, 95]
 blue:
   1:

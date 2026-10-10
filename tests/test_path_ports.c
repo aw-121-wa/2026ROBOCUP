@@ -72,7 +72,7 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (test_blue && path_diagnostics.step==0 && fabsf(x)>100 && y!=0) assert(x>0 && y<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-765);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-755);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
@@ -281,7 +281,7 @@ int main(int argc, char **argv) {
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3 && !moving && blend_moves==1);
 #else
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==0 && map_headings==8 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==0 && map_headings==9 && zero_aligns==0 && path_diagnostics.rfid_count==0);
 #endif
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
@@ -449,7 +449,7 @@ int main(int argc, char **argv) {
             CHECK(!moving && path_diagnostics.result==PATH_RUNNING && path_diagnostics.phase==4);
         }
         reply("PILLAR_READY\r\n"); tick(); CHECK(moving);
-        yaw=-2.0f; reply("PILLAR_BALL 1\r\n"); tick(); CHECK(moving==!test_blue);
+        yaw=-2.0f; reply("PILLAR_BALL 1\r\n"); tick(); CHECK(!moving);
         tick(); tick(); CHECK(!strcmp(wire,"PILLAR_STOPPED 1\r\n"));
         id(99); tick(); CHECK(path_diagnostics.rfid_count==5);
         reply("PILLAR_ACTION_DONE 1\r\n"); tick();
@@ -458,11 +458,11 @@ int main(int argc, char **argv) {
         if(missing_ids) { now+=PATH_RFID_WAIT_MS; tick(); tick(); }
         else { id(99); tick(); }
         finish_store(); CHECK(!strcmp(wire,"PILLAR_RFID_OK 1\r\n"));
-        CHECK(moving==!test_blue && path_diagnostics.rfid_count==(missing_ids?5:6));
+        CHECK(!moving && path_diagnostics.rfid_count==(missing_ids?5:6));
         reply("PILLAR_RESUME 1\r\n"); tick(); CHECK(moving);
         if(extra) {
             reply("PILLAR_BALL 2\r\n"); tick(); tick(); tick();
-            CHECK(!strcmp(wire,"PILLAR_STOPPED 2\r\n") && moving==!test_blue);
+            CHECK(!strcmp(wire,"PILLAR_STOPPED 2\r\n") && !moving);
             reply("PILLAR_ACTION_DONE 2\r\n"); tick();
             id(103); tick(); finish_store();
             CHECK(!strcmp(wire,"PILLAR_RFID_OK 2\r\n"));
@@ -472,12 +472,14 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));
         reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==8);
         gray_line=false;
-        for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
-        CHECK(!strcmp(wire,"GROUP 2\r\n"));
-        gray_line=false;
-        for(unsigned i=0;i<4 && !moving;i++) tick();
-        CHECK(moving); /* G2 completion does not block approach. */
-        reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
+        if (!extra) {
+            for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
+            CHECK(!strcmp(wire,"GROUP 2\r\n"));
+            gray_line=false;
+            for(unsigned i=0;i<4 && !moving;i++) tick();
+            CHECK(moving); /* G2 completion does not block approach. */
+            reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
+        }
         for(unsigned i=0;i<30 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"GROUP 105\r\n"));
         reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();

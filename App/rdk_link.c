@@ -162,6 +162,14 @@ bool Rdk_BlockBegin(RdkLink *r, uint8_t row, uint32_t now, uint32_t timeout)
     command(r->warehouse_request,sizeof(r->warehouse_request),"BLOCK_CHECK",r->warehouse_token,row);
     return true;
 }
+bool Rdk_BlockBeginCell(RdkLink *r,uint8_t row,uint8_t column,uint32_t now,uint32_t timeout)
+{
+    if(column<1 || column>3 || !Rdk_BlockBegin(r,row,now,timeout)) return false;
+    size_t n=strlen(r->warehouse_request)-2;
+    r->warehouse_request[n++]=' ';r->warehouse_request[n++]=(char)('0'+column);
+    r->warehouse_request[n++]='\r';r->warehouse_request[n++]='\n';r->warehouse_request[n]=0;
+    return true;
+}
 void Rdk_Feed(RdkLink *r, uint8_t b)
 {
     if (b == '\r')

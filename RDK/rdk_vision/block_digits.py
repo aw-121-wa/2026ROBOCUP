@@ -23,13 +23,16 @@ class BlockDetector:
         if x<0 or y<0 or w<=0 or h<=0 or x+w>640 or y+h>480:
             raise ValueError('invalid block ROI')
         self.templates = []
+        self._glyph_scores = {}
         self.empty = None
         self.ready = False
         if not settings.get('calibrated', False): return
         root = Path(root)
         # Samples must come from this camera/pose, not bottom-camera templates.
-        for digit in (1, 2, 3):
-            path = root / settings['templates'] / f'{digit}.png'
+        samples=[(digit, f'{digit}.png') for digit in (1,2,3)]
+        samples.extend((int(digit), name) for digit, name in settings.get('additional_templates', {}).items())
+        for digit, name in samples:
+            path = root / settings['templates'] / name
             image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
             if image is None: raise ValueError(f'missing block glyph sample: {path}')
             glyph = _normalize((image < 128).astype(np.uint8))
@@ -63,6 +66,10 @@ class BlockDetector:
         basis = np.stack([np.ones_like(xx), xx, yy], axis=-1).reshape(-1, 3)
         inverse = np.linalg.pinv(basis)
         for reference in self.empty_samples:
+            # JPEG/PNG grayscale decode and BGR conversion can differ by one
+            # level at an edge; accept an otherwise identical labeled empty view.
+            if np.max(np.abs(current-reference)) <= 3:
+                return True
             for dy in (0, -3, 3, -6, 6):
                 for dx in (0, -3, 3, -6, 6):
                     aligned = cv2.warpAffine(reference, np.float32([[1, 0, dx], [0, 1, dy]]),
@@ -93,6 +100,10 @@ class BlockDetector:
         if not window:
             return True
         ww, hh = window
+        top = self.settings.get('block_evidence_top', 0)
+        if top:
+            gray=gray[top:]
+            hh=min(hh,gray.shape[0])
         h, w = gray.shape
         for top in sorted(set(range(0, h - hh + 1, 8)) | {max(0, h - hh)}):
             for left in sorted(set(range(0, w - ww + 1, 8)) | {max(0, w - ww)}):
@@ -121,8 +132,17 @@ class BlockDetector:
                     d<self.settings.get('min_digit_height',20) or not .12<c/d<1.3): continue
             glyph = _normalize(mask[b:b+d,a:a+c])
             if glyph is None: continue
-            scores = sorted(((float(np.count_nonzero(glyph & template))/max(1,np.count_nonzero(glyph | template)),digit)
-                             for digit,template in self.templates), reverse=True)
+            # Overlapping windows often produce the same normalized glyph.
+            # Cache only template scores; all windows and ambiguity checks still run.
+            key= glyph.tobytes()
+            scores=self._glyph_scores.get(key)
+            if scores is None:
+                best={digit:0.0 for digit in (1,2,3)}
+                for digit,template in self.templates:
+                    best[digit]=max(best[digit],float(np.count_nonzero(glyph & template))/max(1,np.count_nonzero(glyph | template)))
+                scores=sorted(((score,digit) for digit,score in best.items()),reverse=True)
+                if len(self._glyph_scores)>=256: self._glyph_scores.clear()
+                self._glyph_scores[key]=scores
             if (scores[0][0]>=self.settings.get('min_score',.75) and
                     scores[0][0]-scores[1][0]>=self.settings.get('min_margin',.15)):
                 found.append(scores[0][1])
@@ -139,13 +159,17 @@ class BlockDetector:
         window = self.settings.get('digit_window')
         if window:
             ww, hh = window
-            found = []
+            # Keep complete glyphs found in the full ROI. A near-claw digit can
+            # be cut by every small window even though the full ROI is readable.
             for top in sorted(set(range(0, h-hh+1, 8)) | set(range(10, h-hh+1, 8)) | {h-hh}):
                 for left in sorted(set(range(0, w-ww+1, 8)) | set(range(10, w-ww+1, 8)) | {w-ww}):
                     found.extend(self._digits(gray[top:top+hh,left:left+ww]))
             found = sorted(set(found))
         if len(found)==1: return found[0]
-        if found: return UNKNOWN
+        if found:
+            # Background edges can match several glyphs; calibrated empty
+            # references resolve that ambiguity without treating unreadable as empty.
+            return EMPTY if self._matches_empty(gray) else UNKNOWN
         # A blank cell has no tall central glyph.  If there is no card-shaped
         # evidence, accept EMPTY even when the shelf background moved.
         if not self._has_block_evidence(gray): return EMPTY
@@ -154,7 +178,8 @@ class BlockDetector:
         return UNKNOWN
 
 
-def confirm_loop(camera, detector, cancel, *, timeout_s=3.0, clock=time.monotonic, sleep=time.sleep):
+def confirm_loop(camera, detector, cancel, *, timeout_s=3.0, clock=time.monotonic, sleep=time.sleep,
+                 on_first_frame=None):
     requested = clock(); last_id = None; last_time = requested
     candidate = UNKNOWN; count = 0; first = requested; saw_fresh = False
     while not cancel.is_set() and clock()-requested<timeout_s:
@@ -164,6 +189,9 @@ def confirm_loop(camera, detector, cancel, *, timeout_s=3.0, clock=time.monotoni
                 (saw_fresh and snapshot.timestamp<=last_time)):
             sleep(.005); continue
         if snapshot.timestamp-last_time>.25: count=0
+        if not saw_fresh and on_first_frame is not None:
+            try: on_first_frame(snapshot.frame)
+            except Exception as exc: print(f'CELL SNAPSHOT skipped: {exc!r}',flush=True)
         last_id=snapshot.frame_id;last_time=snapshot.timestamp;saw_fresh=True
         result=detector.detect(snapshot.frame)
         if clock()-snapshot.timestamp>.25:
@@ -171,13 +199,14 @@ def confirm_loop(camera, detector, cancel, *, timeout_s=3.0, clock=time.monotoni
         if result==UNKNOWN: candidate=UNKNOWN;count=0;continue
         if candidate!=result: candidate=result;count=0;first=now
         count+=1
-        if count>=(10 if result==EMPTY else 3) and (result!=EMPTY or now-first>=.5): return result
+        if count>=(6 if result==EMPTY else 3) and (result!=EMPTY or now-first>=.3): return result
     if cancel.is_set(): return UNKNOWN
     if not saw_fresh: raise TimeoutError('block camera produced no fresh frame')
     return UNKNOWN
 
 
-def run_block_check(project_root, row, camera_session, *, color='red', cancel):
+def run_block_check(project_root, row, camera_session, *, color='red', cancel,
+                    column=None, capture_run=None, capture_token=None):
     if row not in (1,2,3) or color not in ('red','blue'): raise ValueError('invalid block row/side')
     root=Path(project_root)/'rdk_vision'
     settings=yaml.safe_load((root/'block_digits.yaml').read_text(encoding='utf-8'))
@@ -187,4 +216,9 @@ def run_block_check(project_root, row, camera_session, *, color='red', cancel):
     camera=camera_session.borrow(config.camera,cancelled=cancel.is_set)
     camera.start()
     if not camera.wait_until_ready(config.camera.startup_timeout_ms): raise TimeoutError('block camera startup failed')
-    return confirm_loop(camera,detector,cancel,timeout_s=1.5)
+    capture=None
+    if column in (1,2,3) and capture_run is not None:
+        from .cell_capture import writer
+        path=Path(project_root)/'captures'/'destack'/capture_run/f'{color}-col{column}-row{row}-token{capture_token}.png'
+        capture=lambda frame:writer.submit(path,frame)
+    return confirm_loop(camera,detector,cancel,timeout_s=1.5,on_first_frame=capture)

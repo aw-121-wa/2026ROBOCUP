@@ -45,7 +45,7 @@ static bool move(PathMission *m,uint32_t now,const PathInput *in,float target)
     if (fabsf(delta)<0.5f) return true;
     m->entered=now;
     m->waiting=send(m,(PathCommand){.kind=PC_MOVE,.x=delta*cosf(angle),.y=delta*sinf(angle),
-        .speed=60,.acceleration=500,.deceleration=500,.timeout_ms=ARM_TIMEOUT_MS});
+        .speed=80,.acceleration=700,.deceleration=700,.timeout_ms=ARM_TIMEOUT_MS});
     return false;
 }
 static void nearest_column(PathMission *m,uint32_t now,float current)
@@ -57,6 +57,7 @@ static void nearest_column(PathMission *m,uint32_t now,float current)
     }
     if(nearest==3) {m->point=9;enter(m,DESTACK_HOME,now);return;}
     m->destack.column=(uint8_t)nearest;m->point=nearest*3;
+    if (m->destack.cleared) m->warehouse_plan_ready=false;
     enter(m,DESTACK_NEXT,now);
 }
 static void next_row(PathMission *m,uint32_t now,const PathInput *in)

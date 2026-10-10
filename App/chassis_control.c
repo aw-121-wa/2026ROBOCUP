@@ -30,7 +30,7 @@
 ChassisConfig chassis_config = {.wheel_radius_mm = 37.5f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
-                                .rpm_limit = 200.0f,
+                                .rpm_limit = 260.0f,
                                 .kp = 4.0f,
                                 .ki = 0.00f,
                                 .gyro_damping = 0.15f,
@@ -991,6 +991,23 @@ void Chassis_Update(void)
         yaw_request.mode=HEADING_DYNAMIC;
         yaw_request.error=error;
         yaw_request.feedforward=feedforward;
+        if (route_policy.brake_turn_endpoint) {
+            float remaining=blend_yaw+blend_turn-path_yaw.continuous;
+            float direction=blend_turn>0 ? 1.0f : -1.0f;
+            bool blue=route_policy.mirror_map_y;
+            float projected=remaining*direction;
+            if(!blue) projected-=fmaxf(0,gyro_rad_s*direction)*CHASSIS_BLEND_END_LOOKAHEAD_S;
+            float distance=blue ? fabsf(remaining) : fmaxf(0,projected);
+            float limit=sqrtf(2.0f*(blue ? 1.5f : CHASSIS_BLEND_END_BRAKE_RAD_S2)*distance);
+            yaw_config.limit=fminf(yaw_config.limit,fmaxf(HEADING_FINE_LIMIT,limit));
+            if(!blue) yaw_config.damping=fmaxf(yaw_config.damping,CHASSIS_BLEND_END_DAMPING);
+            if (projected<=0) {
+                if(!blue) integral=0;
+                yaw_request.feedforward=0;
+                yaw_request.error=remaining;state.yaw_error=remaining;
+            } else yaw_request.feedforward=fmaxf(-yaw_config.limit,
+                                      fminf(yaw_config.limit,yaw_request.feedforward));
+        }
         if (blend_continuous && !planner.active)
         {
             /* Keep this cycle's end speed; next tick emits the arc without Hold.
@@ -1126,6 +1143,8 @@ void Chassis_Update(void)
         /* Stair capture strengthens translation braking only; orbit/yaw stay unchanged. */
         float capture_scale = route_policy.stationary_hold ?
             CHASSIS_STAIR_CAPTURE_BRAKE_SCALE : CHASSIS_CAPTURE_BRAKE_SCALE;
+        if (route_policy.stationary_hold && !route_policy.mirror_map_y)
+            capture_scale=3.0f;
         Motion_SlewVelocity(body_output, target, dt,
                             (normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? capture_scale : 1.0f) : BODY_ACCEL_MM_S2) * route_policy.travel_speed_scale,
                             normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : YAW_ACCEL_RAD_S2);

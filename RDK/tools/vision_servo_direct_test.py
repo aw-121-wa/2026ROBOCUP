@@ -404,6 +404,11 @@ def run_disc_task(
             )
             finished_ns = time.monotonic_ns()
             action_count = next_action
+            if action_count == getattr(args, 'followup_after_action', 0):
+                followup = args.followup_group
+                tx_followup = board.start_group(followup, repeat_count=1)
+                print(f'FOLLOWUP G{followup} sent after G{args.trigger_group}; '
+                      f'completion not awaited; tx={tx_followup.hex(" ")}', flush=True)
             print(
                 f"ACTION COMPLETE #{action_count} G{args.trigger_group}; "
                 f"detect_to_complete_ms={(finished_ns - detected_ns) / 1_000_000.0:.1f}; "

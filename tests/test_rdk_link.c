@@ -190,5 +190,9 @@ int main(void) {
     CHECK(connect(&r)==0);r.sequence=0xfffffffeU;CHECK(Rdk_BlockBegin(&r,2,0,10000));Rdk_Tick(&r,0);
     CHECK(!strcmp(wire,"BLOCK_CHECK 4294967295 2\r\n"));
     feed(&r,"BLOCK_RESULT 4294967295 5\r\n");CHECK(r.warehouse_reply==PATH_FAILED);
+    CHECK(connect(&r)==0);CHECK(!Rdk_BlockBeginCell(&r,3,0,0,10000));
+    CHECK(Rdk_BlockBeginCell(&r,3,2,0,10000));Rdk_Tick(&r,0);
+    snprintf(result,sizeof result,"BLOCK_CHECK %u 3 2\r\n",r.warehouse_token);
+    CHECK(!strcmp(wire,result));
     puts("ZHY link tests passed"); return 0;
 }

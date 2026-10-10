@@ -39,6 +39,6 @@ int main(void)
     PathChassis_Tick(&m,13,&in);assert(m.phase==22 && last.kind==PC_MOVE);
     in.gray=2;in.settled=false;PathChassis_Tick(&m,14,&in);
     assert(m.phase==22);
-    in.settled=true;in.x_mm=880;
+    in.settled=true;in.x_mm=890;
     PathChassis_Tick(&m,15,&in);assert(m.phase==27 && last.kind==PC_HOLD);
 }

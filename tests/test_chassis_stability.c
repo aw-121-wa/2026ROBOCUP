@@ -98,6 +98,28 @@ int main(int argc,char **argv) {
         float expected=HeadingControl_Update(&request,&config,.005f,&test_integral);
         assert(fabsf(chassis_heading_diagnostics.requested_rad_s-expected)<1e-5f);
         assert(fabsf(expected)<.5f); /* Uncapped 1000 mm/s would saturate the yaw output. */
+    } else if(!strcmp(argv[1],"warehouse_turn")) {
+        path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=11;
+        for(unsigned side=0;side<2;++side) {
+            Chassis_HoldImmediate();tick();
+            float sign=side ? -1.0f : 1.0f;
+            path_yaw.continuous=0;route_heading=heading=0;
+            assert(Chassis_MoveRotateBoundary(1000,0,sign*180,600,650,650,0,100));
+            path_yaw.continuous=sign*181*RAD;segment_progress=900;
+            float x,y;Motion_FixedDirection(1,0,sign*181*RAD,&x,&y);
+            Mecanum_Inverse(geometry(),x*400,y*400,0,state.rpm_applied);
+            memcpy(state.rpm_pending,state.rpm_applied,sizeof(state.rpm_applied));
+            memcpy(state.rpm_inflight,state.rpm_applied,sizeof(state.rpm_applied));
+            pending_valid=tx_busy=tx_done=false;tx_part=0;tick();
+            assert(chassis_heading_diagnostics.requested_rad_s*sign<0);
+            assert(fabsf(chassis_heading_diagnostics.requested_rad_s)<.24f);
+            assert(planner.active && path_blend && !normal_stopping);
+            path_yaw.continuous=sign*179*RAD;fake_imu.gz_dps=sign*10;
+            tick();
+            assert(chassis_heading_diagnostics.requested_rad_s*sign<0);
+            assert(planner.active && !normal_stopping); /* Brake yaw before crossing the final target. */
+            fake_imu.gz_dps=0;
+        }
     } else if(!strcmp(argv[1],"entry_arc")) {
         assert(Chassis_MoveRotateBoundary(-1640,0,180,550,550,550,0,165));
         fake_imu.yaw_deg=180; segment_progress=1640; tick();

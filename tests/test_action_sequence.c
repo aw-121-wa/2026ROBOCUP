@@ -35,10 +35,9 @@ int main(void) {
     in.reply=PATH_WAIT; in.vision_ready=true;
     Path_Tick(&m,80,&in); CHECK(last.kind==PC_BODY && m.phase==2 && last.x==-80.94114f*1.05f && last.speed==-58.653f*1.05f);
     in.settled=false; in.ball_index=1; in.yaw_deg=-120;
-    Path_Tick(&m,85,&in); CHECK(last.kind==PC_BODY && m.phase==5 &&
-        last.x==-80.94114f*1.05f*0.1f && last.speed==-58.653f*1.05f*0.1f);
-    in.travel_rpm=50;Path_Tick(&m,90,&in); CHECK(last.kind==PC_BODY && m.phase==5);
-    in.travel_rpm=8;Path_Tick(&m,95,&in);
+    Path_Tick(&m,85,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
+    Path_Tick(&m,90,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
+    in.settled=true;Path_Tick(&m,95,&in);
     CHECK(last.kind==PC_PILLAR_STOPPED && last.argument==1 && m.phase==6);
     Path_RecordId(&m,0x12345678); CHECK(m.id_count==1);
     Path_Tick(&m,20000,&in); CHECK(m.phase==6); /* RFID wait is not orbit time. */
@@ -72,8 +71,8 @@ int main(void) {
     CHECK(r.locked && !strcmp(wire,"DISC_CANCEL\r\n"));
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=6; m.phase=4;
     in.reply=PATH_WAIT; in.vision_ready=true; in.ball_index=1; in.resume_index=0;
-    Path_Tick(&m,100,&in); CHECK(last.kind==PC_BODY && last.argument==1 && m.phase==5);
+    Path_Tick(&m,100,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
     m.phase=6; in.resume_index=1; in.ball_index=2;
-    Path_Tick(&m,105,&in); CHECK(last.kind==PC_BODY && last.argument==1 && m.phase==5);
+    Path_Tick(&m,105,&in); CHECK(last.kind==PC_HOLD && m.phase==5);
     puts("action sequence passed"); return 0;
 }

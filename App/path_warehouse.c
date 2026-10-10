@@ -17,11 +17,24 @@ static void plan_warehouse(PathMission *m)
     for(unsigned col=0;col<3;col++)
         for(unsigned row=0;row<3;row++)
             slots[col*3+row]=BallInventory_Find(&m->inventory,(uint8_t)(((row+1)<<4)|column_code(m,col)));
-    unsigned best=~0U, chosen=0;
+    unsigned best=~0U, chosen=0, visits[3], count=0;
+    if (m->destack.cleared) {
+        unsigned col=m->point/3, used=m->destack.unloaded;
+        while(col<3 && !(used&(1U<<col))) {
+            visits[count++]=col;used|=1U<<col;
+            unsigned next=3;float best_distance=INFINITY;
+            for(unsigned other=0;other<3;++other) {
+                float distance=fabsf(m->destack.position[other]-m->destack.position[col]);
+                if(!(used&(1U<<other)) && distance<best_distance) {next=other;best_distance=distance;}
+            }
+            col=next;
+        }
+    } else for(unsigned col=m->point/3;col<3;++col) visits[count++]=col;
+    static const unsigned weights[3]={1,6,36};
     for(unsigned candidate=0;candidate<216;candidate++) {
-        unsigned current=m->inventory.current, cost=0, order=candidate;
-        for(unsigned col=0;col<3;col++,order/=6) {
-            if(col<m->point/3) continue;
+        unsigned current=m->inventory.current, cost=0;
+        for(unsigned visit=0;visit<count;++visit) {
+            unsigned col=visits[visit], order=candidate/weights[col];
             for(unsigned i=0;i<3;i++) {
                 int slot=slots[col*3+orders[order%6][i]-1];
                 if(slot<0) continue;
@@ -218,7 +231,8 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (m->warehouse_query) {
                 m->phase=WAREHOUSE_WAIT_CAMERA;
                 /* Start scanning travel immediately; camera readiness must not add a pause. */
-                if (in->settled) emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
+                emit(m,(PathCommand){.kind=in->settled ? PC_MOVE : PC_FINISH_FORWARD,
+                    .x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
                     .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
                     .deceleration=650,.timeout_ms=PATH_WAREHOUSE_CREEP_TIMEOUT_MS});
             }
@@ -300,14 +314,9 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
                     m->phase=WAREHOUSE_FIRST_OFFSET;
                 break;
             }
-            /* Retreat along map -X, independently of residual body yaw. */
-            float yaw=in->map_yaw_deg*0.01745329252f;
-            if (!isfinite(yaw)) { fail(m,PATH_ERROR); break; }
-            if (emit(m,(PathCommand){.kind=PC_MOVE,
-                    .x=-PATH_WAREHOUSE_ENTRY_BACK_MM*cosf(yaw),
-                    .y=PATH_WAREHOUSE_ENTRY_BACK_MM*sinf(yaw),
-                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=300,.deceleration=300,.timeout_ms=5000}))
-                m->phase=WAREHOUSE_ENTRY_BACK;
+            if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,
+                    .y=-PATH_WAREHOUSE_FIRST_RIGHT_MM,.timeout_ms=10000}))
+                m->phase=WAREHOUSE_FIRST_OFFSET;
             break;
         }
         if (!m->waiting) {

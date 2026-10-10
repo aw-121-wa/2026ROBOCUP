@@ -34,13 +34,13 @@ static void run(unsigned balls) {
    if(last.x==5 && last.speed==20) { in.x_mm+=5; continue; }
    assert(last.speed==(m.grabs>=2 && !m.stair_scanning ? PATH_STAIR_FAST_SPEED_RPM : PATH_STAIR_SCAN_SPEED_RPM) && last.x>0);
    if(got<balls) { in.x_mm+=40;in.settled=false;in.ball_index++;event=true; }
-   else { in.x_mm+=m.point==3 ? 880-in.x_mm : last.x;in.settled=true;
+   else { in.x_mm+=m.point==3 ? 890-in.x_mm : last.x;in.settled=true;
           if(m.point==3) in.gray=2; }
   }
   if(event && last.kind==PC_HOLD) { in.x_mm+=2;in.settled=true; }
   if(last.kind==PC_PILLAR_STOPPED) { got++;in.resume_index=in.ball_index;event=false; }
  }
- assert(m.step==11 && fabsf(in.x_mm-880)<.1f);
+ assert(m.step==11 && fabsf(in.x_mm-890)<.1f);
  assert(g4==(balls==2?0U:1U) && g3==1 && stopped==balls && m.grabs==balls);
  assert(scans==(balls==2?1:3));
  assert(headings==(balls==2?1U:3U)); /* Full inventory skips intermediate line alignment. */
@@ -98,9 +98,9 @@ static void early_warehouse_prep(void) {
   assert(g3==1 && g4==0 && m.point==3 && m.phase==22 && m.prep_pending);
   assert(m.warehouse_prep_started && !m.stair_scanning);
   in.reply=PATH_WAIT; Path_Tick(&m,8,&in);
-  assert(last.kind==PC_MOVE && last.x==(blue?850:830) && last.speed==PATH_STAIR_FAST_SPEED_RPM);
+  assert(last.kind==PC_MOVE && last.x==(blue?850:840) && last.speed==PATH_STAIR_FAST_SPEED_RPM);
   assert(m.prep_pending); /* Travel does not wait for G3. */
-  in.x_mm=blue?900:880;if(!blue) in.gray=2; Path_Tick(&m,9,&in); assert(m.phase==27);
+  in.x_mm=blue?900:890;if(!blue) in.gray=2; Path_Tick(&m,9,&in); assert(m.phase==27);
   Path_Tick(&m,10,&in); Path_Tick(&m,11,&in);
   assert(m.step==11 && g3==1 && g4==0 && m.prep_pending);
   in.reply=PATH_FAILED; Path_Tick(&m,12,&in); assert(m.result==PATH_ERROR);

@@ -44,9 +44,9 @@ static int prep_gate(void) {
  init(); m.prep_pending=true;
  PathInput in={.armed=true,.settled=true,.gray=6,.reply=PATH_WAIT,.warehouse_vision=true};
  Path_Tick(&m,0,&in); CHECK(queries==0 && m.phase==0);
- in.reply=PATH_OK; Path_Tick(&m,4,&in); CHECK(last.kind==PC_MOVE && last.x==-30 && offsets==0 && queries==0);
- Path_Tick(&m,5,&in); CHECK(queries==0 && offsets==1 && m.phase==11);
- Path_Tick(&m,10,&in); CHECK(queries==1 && m.phase==10);
+ in.reply=PATH_OK; Path_Tick(&m,4,&in); CHECK(last.kind==PC_MAP_LATERAL && last.y==-19 && offsets==1 && queries==0);
+ in.settled=false;Path_Tick(&m,5,&in); CHECK(queries==0 && m.phase==11);
+ in.settled=true;Path_Tick(&m,10,&in); CHECK(queries==1 && m.phase==10);
  return 0;
 }
 static int moving_stop(void) {
@@ -70,8 +70,8 @@ static int moving_stop(void) {
 static int first_column_creep(void) {
  init();
  PathInput in={.armed=true,.settled=true,.gray=6,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
- Path_Tick(&m,0,&in); CHECK(last.kind==PC_MOVE && last.x==-30 && offsets==0 && queries==0);
- Path_Tick(&m,1,&in); CHECK(offsets==1 && queries==0 && m.phase==11);
+ Path_Tick(&m,0,&in); CHECK(last.kind==PC_MAP_LATERAL && last.y==-19 && offsets==1 && queries==0);
+ in.settled=false;Path_Tick(&m,1,&in); CHECK(offsets==1 && queries==0 && m.phase==11);
  in.settled=false; Path_Tick(&m,5,&in); CHECK(queries==0);
  in.settled=true; Path_Tick(&m,10,&in); CHECK(queries==1 && m.phase==10);
  in.warehouse_ready=true; Path_Tick(&m,15,&in); CHECK(moves==1 && m.phase==8);
@@ -86,9 +86,9 @@ static int first_column_creep(void) {
 static int offset_line_check(void) {
  init();
  PathInput in={.armed=true,.settled=true,.gray=0,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
- Path_Tick(&m,0,&in); CHECK(last.kind==PC_MOVE && last.x==-30 && offsets==0 && queries==0);
- Path_Tick(&m,1,&in); CHECK(offsets==1 && queries==0);
- Path_Tick(&m,5,&in); CHECK(m.phase==10 && queries==1);
+ Path_Tick(&m,0,&in); CHECK(last.kind==PC_MAP_LATERAL && offsets==1 && queries==0);
+ in.settled=false;Path_Tick(&m,1,&in); CHECK(offsets==1 && queries==0);
+ in.settled=true;Path_Tick(&m,5,&in); CHECK(m.phase==10 && queries==1);
  in.warehouse_ready=true; Path_Tick(&m,10,&in); CHECK(moves==1 && m.phase==8);
  return 0;
 }
@@ -96,14 +96,13 @@ static int entry_back(void) {
  init();
  PathInput in={.armed=true,.settled=true,.gray=6,.warehouse_vision=true,.map_yaw_deg=90};
  Path_Tick(&m,0,&in);
- CHECK(last.kind==PC_MOVE && fabsf(last.x)<0.001f && fabsf(last.y-30)<0.001f);
- CHECK(m.phase==WAREHOUSE_ENTRY_BACK && queries==0 && offsets==0);
- in.settled=false;Path_Tick(&m,100,&in);CHECK(queries==0 && offsets==0);
- in.settled=true;Path_Tick(&m,200,&in);CHECK(offsets==1 && queries==0 && last.y==-19);
- in.settled=false;Path_Tick(&m,205,&in);CHECK(queries==0);
+ CHECK(last.kind==PC_MAP_LATERAL && last.y==-19);
+ CHECK(m.phase==WAREHOUSE_FIRST_OFFSET && queries==0 && offsets==1);
+ in.settled=false;Path_Tick(&m,100,&in);CHECK(queries==0 && offsets==1);
+ Path_Tick(&m,205,&in);CHECK(queries==0);
  in.settled=true;Path_Tick(&m,210,&in);CHECK(queries==1);
  init();in.map_yaw_deg=0;Path_Tick(&m,0,&in);in.settled=false;
- Path_Tick(&m,5000,&in);CHECK(m.result==PATH_RUNNING && offsets==0 && queries==0);
+ Path_Tick(&m,5000,&in);CHECK(m.result==PATH_RUNNING && offsets==1 && queries==0);
  return 0;
 }
 static int inferred_column(void) {
@@ -111,7 +110,7 @@ static int inferred_column(void) {
  m.warehouse_columns[0]=3; m.warehouse_columns[1]=1; m.warehouse_used=(1U<<3)|(1U<<1);
  PathInput in={.armed=true,.settled=true,.warehouse_vision=true,.warehouse_digit_reply=PATH_WAIT};
  Path_Tick(&m,0,&in);
- CHECK(last.kind==PC_MOVE && last.x==240 && queries==0 && m.warehouse_columns[2]==2);
+ CHECK(last.kind==PC_MOVE && last.x==270 && queries==0 && m.warehouse_columns[2]==2);
  CHECK(m.phase==WAREHOUSE_INFERRED_MOVE && groups==0);
  in.settled=false; Path_Tick(&m,10000,&in); CHECK(groups==0 && m.phase==WAREHOUSE_INFERRED_MOVE);
  in.settled=true; Path_Tick(&m,10005,&in); CHECK(m.phase==WAREHOUSE_SELECT_BALL && queries==0);
