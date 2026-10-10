@@ -68,7 +68,7 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
 {
     /* Work-area gray acquisition never requests a stationary rotation.
      * The existing gyro controller retains heading during lateral motion. */
-    if (m->step==9 || m->step==12 || (m->step==13 && m->point<9))
+    if (m->step==9 || (m->step==12 && m->phase!=3) || (m->step==13 && m->point<9))
         return in->settled;
     float tolerance = m->step <= 9 ? STAIR_HEADING_TOLERANCE_DEG : PATH_WAREHOUSE_HEADING_TOLERANCE_DEG;
     float target = PathPolicy_Target(m);
@@ -104,7 +104,7 @@ static LinePolicy line_policy(const PathMission *m)
 {
     bool stair=m->step==9, warehouse=m->step==13;
     return (LinePolicy){
-        .accepted_patterns=(1U<<6),
+        .accepted_patterns=(1U<<6) | ((m->step==12 || warehouse) ? (1U<<4) : 0),
         .bidirectional=true,
         .lateral_mm_s=stair ? PATH_STAIR_LINE_MM_S : PATH_WAREHOUSE_LINE_MM_S,
         .first_ms=stair || warehouse ? PATH_LINE_SWEEP_MS : PATH_LINE_ENTRY_SWEEP_MS,
@@ -153,7 +153,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
             return false;
         }
         if (!in->settled) { m->stable = false; return false; }
-        /* Braking may change gray; only strict 0110 permits admission. */
+        /* Recheck the station's accepted pattern after braking. */
         if (!PathLine_Aligned(m, in->gray)) return false;
         if (!m->stable) { m->stable = true; m->stable_since = now; }
         if ((uint32_t)(now-m->stable_since) < PATH_LINE_STABLE_MS) return false;

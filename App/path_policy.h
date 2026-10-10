@@ -14,6 +14,7 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
         .travel_speed_scale=(running && step!=6) ? (step==9 ? 1.0f : 1.3f) : 1.0f,
         .mirror_map_y=blue,
         .use_start_turn_kp=running && blue && step==0,
+        .soften_disc_approach_kp=running && !blue && step<=3,
         .brake_turn_endpoint=running && step==11,
         .stationary_hold=running && step>=8 && step<=10,
         .force_stair_heading=running && step==9,

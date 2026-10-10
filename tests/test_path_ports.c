@@ -49,6 +49,7 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
     if(path_diagnostics.blue && path_diagnostics.step==9 && path_diagnostics.phase==30 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
+    if(!path_diagnostics.blue && path_diagnostics.step==12 && path_diagnostics.phase==2 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
     if(path_diagnostics.step==13 && path_diagnostics.phase==5 && pin!=GPIO_PIN_10) return GPIO_PIN_SET;
     return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
             (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||

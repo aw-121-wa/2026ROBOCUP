@@ -8,6 +8,7 @@ typedef struct {
     float travel_speed_scale;
     bool mirror_map_y;
     bool use_start_turn_kp;
+    bool soften_disc_approach_kp;
     bool brake_turn_endpoint;
     bool stationary_hold;
     bool force_stair_heading;

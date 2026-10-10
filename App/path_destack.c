@@ -99,6 +99,12 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         m->destack.position[col]=p;
         if (col<2) {m->point+=3;enter(m,WAREHOUSE_MOVE,now);}
         else {
+            if (!m->blue) {
+                /* Anchor all unloading positions to the correctly aligned third column. */
+                float spacing=PATH_WAREHOUSE_SPACING_MM(m->blue);
+                m->destack.position[1]=p-spacing;
+                m->destack.position[0]=p-2*spacing;
+            }
             m->destack.scanned=true;m->destack.column=2;m->destack.row=3;
             enter(m,DESTACK_POSE,now);
         }
@@ -131,20 +137,21 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         }
         break;
     case DESTACK_TO_FOURTH:
-        if (move(m,now,in,m->destack.position[2]+PATH_WAREHOUSE_COLUMN_SPACING_MM)) enter(m,DESTACK_PLACE,now);
+        if (move(m,now,in,m->destack.position[2]+PATH_WAREHOUSE_SPACING_MM(m->blue))) enter(m,DESTACK_PLACE,now);
         break;
     case DESTACK_PLACE:
         if (arm(m,now,in,123-3*m->destack.target)) {
             m->destack.carrying=false;m->destack.occupied|=(uint8_t)(1U<<m->destack.target);
-            if (!m->destack.column) {
-                m->destack.row=1;next_row(m,now,in); /* All blocks moved: stay near column 4. */
+            if (!m->destack.column && (m->blue || m->destack.row==1)) {
+                if (m->blue) m->destack.row=1;
+                next_row(m,now,in); /* Final source cell complete: stay near column 4. */
             } else enter(m,DESTACK_RETURN,now);
         }
         break;
     case DESTACK_RETURN:
-        if (move(m,now,in,m->destack.position[m->destack.column])) {
-            /* Exactly one block per source column: lower rows are now clear. */
-            m->destack.row=1;
+        if (move(m,now,in,m->destack.position[m->destack.column]-(m->blue ? 0 : 20.0f))) {
+            /* Random placement can leave another block in this same column. */
+            if (m->blue) m->destack.row=1; /* Preserve the existing blue workflow. */
             next_row(m,now,in);
         }
         break;

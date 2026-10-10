@@ -14,7 +14,7 @@ typedef struct {
  PathMission *m;PathInput *in;
  unsigned queries, checks, picked, placed, balls, admitted;
  unsigned order[3], unload_columns[9];
- bool fallback;
+ bool fallback, stacked;
 } Simulation;
 static bool simulated_send(void *ctx,const PathCommand *c) {
  Simulation *s=ctx;PathMission *m=s->m;PathInput *in=s->in;
@@ -27,9 +27,10 @@ static bool simulated_send(void *ctx,const PathCommand *c) {
  }
  if(c->kind==PC_BLOCK_CHECK) {
   assert(m->destack.scanned && m->destack.row==c->argument);
-  assert(m->destack.column==2-s->checks);
+  assert(m->destack.column==2-s->checks/(m->blue?1:3));
   s->checks++;in->warehouse_digit_reply=PATH_OK;
-  in->warehouse_digit=c->argument==3 ? m->destack.column+1 : 4;
+  in->warehouse_digit=s->stacked ? (m->destack.column==2 ? c->argument : 4) :
+      (c->argument==3 ? m->destack.column+1U : 4U);
  }
  if(c->kind==PC_MOVE || c->kind==PC_FINISH_FORWARD) {
   in->x_mm+=direction*c->x;in->y_mm+=direction*c->y;
@@ -40,7 +41,7 @@ static bool simulated_send(void *ctx,const PathCommand *c) {
    if((c->argument-112)%3==1) {s->picked++;assert(!m->destack.carrying);}
    if((c->argument-112)%3==2) {s->placed++;assert(m->destack.carrying);}
   } else if(c->argument>=109 && c->argument<=111) {
-   assert(m->destack.cleared && s->checks==3 && s->placed==3);
+   assert(m->destack.cleared && s->checks==(m->blue?3U:9U) && s->placed==3);
    assert((m->inventory.code[m->inventory.current]&15)==(s->fallback?m->destack.column+1U:s->order[m->destack.column]));
    s->unload_columns[s->balls++]=m->destack.column;
   }
@@ -56,7 +57,7 @@ static void integration(void) {
  for(unsigned blue=0;blue<2;blue++) for(unsigned order=0;order<7;order++) {
   PathMission m={.result=PATH_RUNNING,.step=13,.phase=WAREHOUSE_FIRST_OFFSET,.send=simulated_send};
   PathInput in={.settled=true,.armed=true,.destack_enabled=true,.warehouse_vision=true,.gray=6,.reply=PATH_OK,.turn_reply=PATH_OK};
-  Simulation sim={.m=&m,.in=&in,.fallback=order==6};m.context=&sim;m.blue=blue;
+  Simulation sim={.m=&m,.in=&in,.fallback=order==6,.stacked=!blue && (order%2)!=0};m.context=&sim;m.blue=blue;
   in.map_yaw_deg=in.yaw_deg=blue?180:0;
   for(unsigned i=0;i<3;i++) sim.order[i]=orders[order%6][i];
   for(unsigned col=1;col<=3;col++) for(unsigned row=1;row<=3;row++) {
@@ -67,11 +68,11 @@ static void integration(void) {
   while(t<10000 && !(m.point==9 && m.phase==WAREHOUSE_ALIGN_HOME)) {
    PathWarehouse_Tick(&m,t++,&in);assert(m.result==PATH_RUNNING);
   }
-  assert(t<10000 && sim.checks==3 && sim.picked==3 && sim.placed==3 && sim.balls==9);
+  assert(t<10000 && sim.checks==(blue?3U:9U) && sim.picked==3 && sim.placed==3 && sim.balls==9);
   assert(sim.queries==(order==6?1U:2U)); /* Third identity inferred, position still visited. */
-  for(unsigned i=0;i<9;i++) assert(sim.unload_columns[i]==2-i/3);
+  for(unsigned i=0;i<9;i++) assert(sim.unload_columns[i]==(blue?2-i/3:i/3));
   assert(!m.destack.carrying && m.destack.occupied==14 && !m.inventory.occupied);
-  assert(fabsf((blue?-1.0f:1.0f)*in.x_mm-m.destack.position[0])<.01f);
+  assert(fabsf((blue?-1.0f:1.0f)*in.x_mm-m.destack.position[blue?0:2])<.01f);
  }
 }
 int main(void) {
@@ -124,17 +125,22 @@ int main(void) {
   tick(&m,&in,14);assert(m.phase==DESTACK_PICK);
   tick(&m,&in,15);assert(last.argument==122-3*source);
   tick(&m,&in,16);assert(m.destack.carrying && m.phase==DESTACK_TO_FOURTH);
-  tick(&m,&in,17);assert(last.kind==PC_MOVE && fabsf(last.x-200)<.01f);
+  float spacing=blue?200:190;
+  assert(fabsf(m.destack.position[2]-m.destack.position[1]-spacing)<.01f);
+  assert(fabsf(m.destack.position[1]-m.destack.position[0]-spacing)<.01f);
+  tick(&m,&in,17);assert(last.kind==PC_MOVE && fabsf(last.x-spacing)<.01f);
   in.settled=false;before=issued;tick(&m,&in,18);assert(issued==before);
-  in.settled=true;in.x_mm=(blue?-1:1)*600;tick(&m,&in,19);
+  in.settled=true;in.x_mm=(blue?-1:1)*(400+spacing);tick(&m,&in,19);
   tick(&m,&in,20);assert(last.kind==PC_GROUP && last.argument==123-3*digit);
   tick(&m,&in,21);assert(!m.destack.carrying && (m.destack.occupied&(1U<<digit)));
-  tick(&m,&in,22);assert(last.kind==PC_MOVE && fabsf(last.x+200)<.01f);
-  in.x_mm=(blue?-1:1)*400;tick(&m,&in,23);
-  assert(m.phase==DESTACK_NEXT && m.destack.column==1);
+  tick(&m,&in,22);assert(last.kind==PC_MOVE && fabsf(last.x+spacing+(blue?0:20))<.01f);
+  in.x_mm=(blue?-1:1)*(400-(blue?0:20));tick(&m,&in,23);
+  assert(m.phase==(!blue && source>1 ? DESTACK_POSE : DESTACK_NEXT));
+  if(!blue && source>1) assert(m.destack.column==2 && m.destack.row==source-1);
+  else assert(m.destack.column==1);
   m.destack.cleared=true;m.destack.column=0;m.point=2;in.x_mm=0;assert(PathDestack_Advance(&m,30));assert(m.point==3 && m.destack.column==1);
-  tick(&m,&in,31);assert(last.kind==PC_MOVE && fabsf(last.x-200)<.01f);
-  in.x_mm=(blue?-1:1)*200;tick(&m,&in,32);assert(m.phase==WAREHOUSE_SELECT_BALL && m.destack.row==3);
+  tick(&m,&in,31);assert(last.kind==PC_MOVE && fabsf(last.x-(400-spacing))<.01f);
+  in.x_mm=(blue?-1:1)*(400-spacing);tick(&m,&in,32);assert(m.phase==WAREHOUSE_SELECT_BALL && m.destack.row==3);
   m.destack.column=2;m.destack.unloaded=3;m.point=8;in.x_mm=(blue?-1:1)*400;
   before=issued;assert(PathDestack_Advance(&m,40));tick(&m,&in,41);
   assert(issued==before && m.phase==WAREHOUSE_ALIGN_HOME && m.point==9);

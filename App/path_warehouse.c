@@ -339,7 +339,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             /* Later columns are reached by forward digit scanning, without a right shift.
              * Default order retains the fixed forward column spacing. */
             if (m->warehouse_mode==WAREHOUSE_DEFAULT_ORDER &&
-                !emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,.speed=120,
+                !emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_SPACING_MM(m->blue),.speed=120,
                     .acceleration=850,.deceleration=850,.timeout_ms=30000})) break;
             m->phase=WAREHOUSE_FIRST_OFFSET;
         }

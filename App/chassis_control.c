@@ -351,7 +351,7 @@ bool Chassis_ReturnHome(unsigned leg)
         float distance=hypotf(x,y);
         float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
         float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
-        travel=1600.0f;
+        travel=1650.0f;
         home_right_target=current_y+-1*(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
         home_return_ready=true;
     } else {
@@ -1102,6 +1102,8 @@ void Chassis_Update(void)
     /* Only the final selected mode evaluates the angle loop. */
     if (yaw_request.mode==HEADING_DYNAMIC && route_policy.use_start_turn_kp)
         yaw_config.kp=HEADING_START_TURN_KP;
+    if (route_policy.soften_disc_approach_kp)
+        yaw_config.kp*=0.9f;
     wz=HeadingControl_Update(&yaw_request,&yaw_config,dt,&integral);
     chassis_heading_diagnostics.mode=yaw_request.mode;
     chassis_heading_diagnostics.requested_rad_s=wz;

@@ -29,6 +29,7 @@
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
 #define PATH_WAREHOUSE_TARGET_DEG(blue) ((blue) ? 180.0f : 0.0f)
 #define PATH_WAREHOUSE_COLUMN_SPACING_MM 200.0f
+#define PATH_WAREHOUSE_SPACING_MM(blue) ((blue) ? PATH_WAREHOUSE_COLUMN_SPACING_MM : 190.0f)
 #define PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM 270.0f
 #define PATH_WAREHOUSE_ENTRY_BACK_MM 30.0f
 #define PATH_WAREHOUSE_FIRST_RIGHT_MM 19.0f

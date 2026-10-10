@@ -278,7 +278,7 @@ int main(int argc,char **argv) {
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=0;
         assert(Chassis_ReturnHome(0));
         float k=(hypotf(1000,500)+100)/hypotf(1000,500);
-        float ex=1600, length=ex;
+        float ex=1650, length=ex;
         assert(fabsf(planner.distance-length)<0.01f);
         assert(fabsf(dx+ex/length)<1e-5f);
         assert(fabsf(dy)<1e-5f);
@@ -301,7 +301,7 @@ int main(int argc,char **argv) {
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;state.yaw_rad=map_yaw;
-        assert(Chassis_ReturnHome(0) && planner.distance==1600);
+        assert(Chassis_ReturnHome(0) && planner.distance==1650);
         Chassis_Hold();wait_stop();
         assert(Chassis_Move(200,0,65,250,650));
         segment_progress=70; state.velocity[0]=60; state.velocity[1]=0;

@@ -46,7 +46,17 @@ static int exit_route(void) {
     CHECK(m.result==PATH_RUNNING && m.step==12 && m.phase==0);
     in.gray=14; Path_Tick(&m,2080,&in);CHECK(last.kind==PC_MAP_SEARCH);
     in.gray=6;Path_Tick(&m,2085,&in);Path_Tick(&m,2090,&in);Path_Tick(&m,2190,&in);
-    for(unsigned t=2195;t<2600 && m.step==12;t+=5) Path_Tick(&m,t,&in);
+    for(unsigned t=2195;t<2600 && m.step==12 && m.phase!=2;t+=5) Path_Tick(&m,t,&in);
+    CHECK(m.step==12 && m.phase==2);
+    in.gray=6;Path_Tick(&m,2600,&in);CHECK(last.kind==PC_BODY && last.x==-10 && m.step==12);
+    in.gray=4;in.settled=false;Path_Tick(&m,2605,&in);CHECK(last.kind==PC_HOLD && m.step==12);
+    Path_Tick(&m,2610,&in);CHECK(m.step==12);
+    in.settled=true;Path_Tick(&m,2615,&in);
+    CHECK(m.step==12 && m.phase==3);
+    in.map_yaw_deg=2;Path_Tick(&m,2620,&in);
+    CHECK(last.kind==PC_HOME_ALIGN && last.x==0 && m.step==12);
+    in.settled=false;Path_Tick(&m,2625,&in);CHECK(m.step==12);
+    in.map_yaw_deg=0.05f;in.settled=true;Path_Tick(&m,2630,&in);
     CHECK(m.step==13 && m.result==PATH_RUNNING);
     Path_Init(&m,send,0); m.result=PATH_RUNNING; m.step=12; in.gray=0;
     Path_Tick(&m,49999,&in); CHECK(m.result==PATH_RUNNING);

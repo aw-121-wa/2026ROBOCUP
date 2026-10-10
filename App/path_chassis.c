@@ -533,14 +533,28 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->entered = now;
             }
         }
+        else if (m->phase==2) {
+            if (m->line_stopping) {
+                if (!in->settled) break;
+                m->line_stopping=false;m->phase=3;m->heading_align_active=false;
+            } else if (!(in->gray & 2U)) {
+                hold(m);m->line_stopping=true;
+            } else {
+                (void)emit(m,PC_BODY,-10,0,0,0,30000);
+            }
+        }
+        else if (m->phase==3) {
+            if (PathHeading_Ready(m,now,in)) { m->point=0;next(m,now); }
+        }
         else if (PathLine_AlignFour(m, now, in))
         {
             if (PATH_STOP_AT_WAREHOUSE_LINE) {
                 hold(m); m->result=PATH_DONE;
                 break;
             }
-            m->point = 0;
-            next(m, now);
+            if (!m->blue) {
+                m->phase=2;m->line_stopping=false;m->entered=now;
+            } else { m->phase=3;m->heading_align_active=false; }
         }
         break;
     case 13:
