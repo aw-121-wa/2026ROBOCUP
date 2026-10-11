@@ -627,6 +627,14 @@ void PathPorts_Error(UART_HandleTypeDef *u)
     else if (u == PINCFG_RFID_UART)
         rfid_fault |= 16;
 }
+static __attribute__((noinline)) void update_route_policy(unsigned gray)
+{
+    ChassisRoutePolicy warehouse_policy=PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase);
+    warehouse_policy.warehouse_follow=!mission.blue && mission.result==PATH_RUNNING &&
+        mission.step==13 && mission.point<9 && mission.phase!=WAREHOUSE_ALIGN_HOME;
+    warehouse_policy.warehouse_gray=gray;
+    Chassis_SetRoutePolicy(warehouse_policy);
+}
 void PathPorts_Tick(void)
 {
     if (!initialized)
@@ -765,6 +773,11 @@ void PathPorts_Tick(void)
         gray |= 4;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_1) == GPIO_PIN_RESET)
         gray |= 2;
+    /* Newly installed outer sensors qualify red warehouse lateral position only. */
+    if (!mission.blue && (mission.step == 12 || mission.step == 13)) {
+        if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3) == GPIO_PIN_RESET) gray |= 8;
+        if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_RESET) gray |= 1;
+    }
     bool disc_deadline = mission.result == PATH_RUNNING && mission.step == 3 &&
                          mission.phase == 1 &&
                          (uint32_t)(now - mission.entered) >= DISC_TASK_TIMEOUT_MS;
@@ -813,7 +826,7 @@ void PathPorts_Tick(void)
                     .turn_reply = turn.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;
-    Chassis_SetRoutePolicy(PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase));
+    update_route_policy(gray);
     Path_Tick(&mission, now, &in);
     if (stationary && phase == 99 && mission.phase == 0 && mission.result == PATH_RUNNING)
     {
@@ -841,7 +854,7 @@ void PathPorts_Tick(void)
         if (PATH_RDK_ENABLE && !rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
-    Chassis_SetRoutePolicy(PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase));
+    update_route_policy(gray);
     service_turn(now);
     path_diagnostics = (PathDiagnostics){.result = mission.result,
                                          .inventory_fault = inventory_fault,

@@ -104,7 +104,7 @@ static LinePolicy line_policy(const PathMission *m)
 {
     bool stair=m->step==9, warehouse=m->step==13;
     return (LinePolicy){
-        .accepted_patterns=(1U<<6) | ((m->step==12 || warehouse) ? (1U<<4) : 0),
+        .accepted_patterns=(1U<<6) | ((m->blue && (m->step==12 || warehouse)) ? (1U<<4) : 0),
         .bidirectional=true,
         .lateral_mm_s=stair ? PATH_STAIR_LINE_MM_S : PATH_WAREHOUSE_LINE_MM_S,
         .first_ms=stair || warehouse ? PATH_LINE_SWEEP_MS : PATH_LINE_ENTRY_SWEEP_MS,

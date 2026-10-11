@@ -15,7 +15,7 @@ int main(void) {
         assert(PathLine_Aligned(&m,gray)==(gray==6));
     for(unsigned step=12;step<=13;step++) {
         m.step=step;
-        for(unsigned gray=0;gray<16;++gray) assert(PathLine_Aligned(&m,gray)==(gray==6 || gray==4));
+        for(unsigned gray=0;gray<16;++gray) assert(PathLine_Aligned(&m,gray)==(gray==6));
     }
     m.step=9;
     PathInput in={.settled=true,.map_yaw_deg=180};

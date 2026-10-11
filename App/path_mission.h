@@ -108,9 +108,10 @@ typedef struct
     uint8_t warehouse_mode; /* WarehouseMode values; see path_warehouse.h. */
     uint8_t warehouse_columns[3], warehouse_used;
     bool warehouse_query;
+    float warehouse_origin;
     struct {
         bool enabled, scanned, cleared, carrying;
-        uint8_t column, row, target, occupied, unloaded;
+        uint8_t column, row, target, occupied, unloaded, completed_rows;
         float position[3], axis;
     } destack;
     bool warehouse_ignore_line; /* Latched only after the first acknowledged unload. */

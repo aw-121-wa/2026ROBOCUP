@@ -96,14 +96,16 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         float p=position(m,in);
         if (col>2 || !isfinite(p) || (col && (p-m->destack.position[col-1]<50 ||
             p-m->destack.position[col-1]>500))) {fail(m);return true;}
-        m->destack.position[col]=p;
+        m->destack.position[col]=m->blue ? p : m->warehouse_origin+
+            PATH_WAREHOUSE_RED_FIRST_COLUMN_MM+col*PATH_WAREHOUSE_SPACING_MM(false);
         if (col<2) {m->point+=3;enter(m,WAREHOUSE_MOVE,now);}
         else {
             if (!m->blue) {
                 /* Anchor all unloading positions to the correctly aligned third column. */
+                p=m->destack.position[2];
                 float spacing=PATH_WAREHOUSE_SPACING_MM(m->blue);
                 m->destack.position[1]=p-spacing;
-                m->destack.position[0]=p-2*spacing;
+                m->destack.position[0]=m->destack.position[1]-spacing;
             }
             m->destack.scanned=true;m->destack.column=2;m->destack.row=3;
             enter(m,DESTACK_POSE,now);
@@ -113,6 +115,9 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     if (m->phase<DESTACK_POSE) return false;
     switch(m->phase) {
     case DESTACK_POSE:
+        if (!m->blue && (m->destack.completed_rows & (1U<<m->destack.row))) {
+            next_row(m,now,in);break;
+        }
         if (arm(m,now,in,121-3*m->destack.row)) enter(m,DESTACK_CHECK,now);
         break;
     case DESTACK_CHECK:
@@ -142,6 +147,10 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     case DESTACK_PLACE:
         if (arm(m,now,in,123-3*m->destack.target)) {
             m->destack.carrying=false;m->destack.occupied|=(uint8_t)(1U<<m->destack.target);
+            if (!m->blue) m->destack.completed_rows|=(uint8_t)(1U<<m->destack.row);
+            if (!m->blue && m->destack.completed_rows==14U) {
+                m->destack.cleared=true;nearest_column(m,now,position(m,in));break;
+            }
             if (!m->destack.column && (m->blue || m->destack.row==1)) {
                 if (m->blue) m->destack.row=1;
                 next_row(m,now,in); /* Final source cell complete: stay near column 4. */
@@ -149,7 +158,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         }
         break;
     case DESTACK_RETURN:
-        if (move(m,now,in,m->destack.position[m->destack.column]-(m->blue ? 0 : 20.0f))) {
+        if (move(m,now,in,m->destack.position[m->destack.column])) {
             /* Random placement can leave another block in this same column. */
             if (m->blue) m->destack.row=1; /* Preserve the existing blue workflow. */
             next_row(m,now,in);

@@ -49,10 +49,11 @@ static int exit_route(void) {
     for(unsigned t=2195;t<2600 && m.step==12 && m.phase!=2;t+=5) Path_Tick(&m,t,&in);
     CHECK(m.step==12 && m.phase==2);
     in.gray=6;Path_Tick(&m,2600,&in);CHECK(last.kind==PC_BODY && last.x==-10 && m.step==12);
-    in.gray=4;in.settled=false;Path_Tick(&m,2605,&in);CHECK(last.kind==PC_HOLD && m.step==12);
+    in.gray=2;in.settled=false;Path_Tick(&m,2605,&in);CHECK(last.kind==PC_HOLD && m.step==12);
     Path_Tick(&m,2610,&in);CHECK(m.step==12);
     in.settled=true;Path_Tick(&m,2615,&in);
-    CHECK(m.step==12 && m.phase==3);
+    CHECK(m.step==12 && m.phase==4 && last.kind==PC_MOVE && last.x==50);
+    Path_Tick(&m,2616,&in);CHECK(m.phase==3);
     in.map_yaw_deg=2;Path_Tick(&m,2620,&in);
     CHECK(last.kind==PC_HOME_ALIGN && last.x==0 && m.step==12);
     in.settled=false;Path_Tick(&m,2625,&in);CHECK(m.step==12);

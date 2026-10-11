@@ -1103,7 +1103,7 @@ void Chassis_Update(void)
     if (yaw_request.mode==HEADING_DYNAMIC && route_policy.use_start_turn_kp)
         yaw_config.kp=HEADING_START_TURN_KP;
     if (route_policy.soften_disc_approach_kp)
-        yaw_config.kp*=0.9f;
+        yaw_config.kp=route_policy.soften_start_straight_kp ? 3.5f : yaw_config.kp*0.9f;
     wz=HeadingControl_Update(&yaw_request,&yaw_config,dt,&integral);
     chassis_heading_diagnostics.mode=yaw_request.mode;
     chassis_heading_diagnostics.requested_rad_s=wz;
@@ -1127,6 +1127,17 @@ void Chassis_Update(void)
                           (path_heading_active() && route_policy.suppress_lateral_comp)
                               ? 0.0f : chassis_config.forward_lateral_comp);
     if (!blending_this_cycle) vy = forward_comp.vy_final;
+    /* Preserve forward distance while restoring warehouse lateral position. */
+    static uint32_t warehouse_lost_since;
+    static bool warehouse_lost;
+    if (route_policy.warehouse_follow && planner.active && !path_blend && !path_rotation &&
+        route_policy.warehouse_gray!=6U) {
+        if (!warehouse_lost) {warehouse_lost=true;warehouse_lost_since=HAL_GetTick();}
+        unsigned sweep=(HAL_GetTick()-warehouse_lost_since)/2000U;
+        float correction=(sweep&1U ? 1.0f : -1.0f)*PATH_WAREHOUSE_LINE_MM_S;
+        float angle=map_yaw-state.yaw_rad;
+        vx=-sinf(angle)*correction;vy=cosf(angle)*correction;
+    } else warehouse_lost=false;
     if (!config_valid())
     {
         Chassis_Stop();

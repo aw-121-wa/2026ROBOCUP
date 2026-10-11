@@ -191,7 +191,7 @@ static int chassis_only(void) {
     for(unsigned t=0;t<10000 && m.result==PATH_RUNNING;t+=10) {
         in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; in.motion_done=true; unsigned before=p.n;
         if(m.step==9) in.gray=m.phase==30 ? 4 : (m.phase==22 && m.point==3) ? 2 : 6;
-        if(m.step==12) in.gray=m.phase==2?4:6;
+        if(m.step==12) in.gray=m.phase==2?2:6;
         if(m.step==13 && m.point<9) in.gray=6;
         if(m.step==13 && m.point==9) in.gray=m.phase==5?0:6;
         Path_Tick(&m,t,&in);
@@ -199,18 +199,18 @@ static int chassis_only(void) {
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={260,390,240,170,190,190};
+    const float expected[]={260,390,240,170,50,130,180,180};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE && p.commands[i].x!=0) {
-        CHECK(n<6 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
+        CHECK(n<8 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
     }
-    CHECK(n==6);
-    CHECK(count(&p,PC_MAP_LATERAL)==1);
+    CHECK(n==8);
+    CHECK(count(&p,PC_MAP_LATERAL)==0);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==12) in.gray=m.phase==2?4:6; if(m.step==13) in.gray=m.point==9 && m.phase==5?0:6; Path_Tick(&m,t,&in); }
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==12) in.gray=m.phase==2?2:6; if(m.step==13) in.gray=m.point==9 && m.phase==5?0:6; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
-    CHECK(count(&p,PC_MAP_LATERAL)==1 && count(&p,PC_MOVE)==2 && count(&p,PC_ROTATE)==0);
+    CHECK(count(&p,PC_MAP_LATERAL)==0 && count(&p,PC_MOVE)==4 && count(&p,PC_ROTATE)==0);
     return 0;
 }
 static int chassis_errors(void) {

@@ -536,12 +536,16 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (m->phase==2) {
             if (m->line_stopping) {
                 if (!in->settled) break;
-                m->line_stopping=false;m->phase=3;m->heading_align_active=false;
-            } else if (!(in->gray & 2U)) {
+                m->line_stopping=false;
+                if (emit(m,PC_MOVE,50,0,40,0,5000)) m->phase=4;
+            } else if ((in->gray & 15U)==2U) {
                 hold(m);m->line_stopping=true;
             } else {
                 (void)emit(m,PC_BODY,-10,0,0,0,30000);
             }
+        }
+        else if (m->phase==4) {
+            if (in->settled) { m->phase=3;m->heading_align_active=false; }
         }
         else if (m->phase==3) {
             if (PathHeading_Ready(m,now,in)) { m->point=0;next(m,now); }

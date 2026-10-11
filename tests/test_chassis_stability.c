@@ -23,7 +23,11 @@ void HostUart_Flush(void) { }
 void HostUart_Error(UART_HandleTypeDef *u) { (void)u; }
 void HostUart_RxComplete(UART_HandleTypeDef *u) { (void)u; }
 void PathPorts_Init(void) { }
-void PathPorts_Tick(void) { Chassis_SetRoutePolicy(PathPolicy_Chassis(path_diagnostics.blue, path_diagnostics.result, path_diagnostics.step, path_diagnostics.phase)); }
+void PathPorts_Tick(void) {
+ ChassisRoutePolicy p=PathPolicy_Chassis(path_diagnostics.blue,path_diagnostics.result,path_diagnostics.step,path_diagnostics.phase);
+ p.warehouse_follow=!path_diagnostics.blue && path_diagnostics.result==PATH_RUNNING && path_diagnostics.step==13;
+ p.warehouse_gray=path_diagnostics.gray;Chassis_SetRoutePolicy(p);
+}
 void PathPorts_Cancel(void) { path_busy=false; }
 bool PathPorts_Busy(void) { return path_busy; }
 bool PathPorts_Start(void) { return false; }
@@ -401,6 +405,21 @@ int main(int argc,char **argv) {
         for(unsigned n=0;n<30;n++)tick();
         assert(state.armed && state.fault==0);
         assert(state.x_mm!=before); /* Distance remains command-integrated without position feedback. */
+        Chassis_Stop();wait_stop();assert(Chassis_IsSettled());
+        assert(Chassis_Arm());
+        path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=13;path_diagnostics.gray=6;
+        assert(Chassis_Move(2000,0,40,250,650));
+        for(unsigned n=0;n<80;n++)tick();
+        assert(planner.active && state.velocity[0]>0);
+        path_diagnostics.gray=7;
+        for(unsigned n=0;n<80;n++)tick();
+        assert(planner.active && fabsf(state.velocity[0])<1);
+        float side=state.velocity[1];assert(fabsf(side)>1);
+        for(unsigned n=0;n<420;n++)tick();
+        assert(planner.active && side*state.velocity[1]<0);
+        path_diagnostics.gray=6;
+        for(unsigned n=0;n<80;n++)tick();
+        assert(planner.active && state.velocity[0]>0);
         Chassis_Stop();wait_stop();assert(Chassis_IsSettled());
     } else { assert(0); }
     puts("ok");return 0;
