@@ -8,7 +8,6 @@ import re
 import sys
 import threading
 import time
-from datetime import datetime
 from typing import Callable, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,7 +31,6 @@ from rdk_vision.config import load_config
 from shared_task_camera import SharedTaskCamera
 from rdk_vision.warehouse_digits import load_number_config, recognize_number, NumberCameraSession
 from stair_scan import run_stair_scan
-from rdk_vision.block_digits import run_block_check
 
 DEFAULT_DISC_TIMEOUT_S = 60.0
 
@@ -44,8 +42,6 @@ def run_pillar_in_process(project_root: Path, *, camera_session=None, color='red
     args = build_disc_arguments(project_root, color)
     args.prep_group = 103
     args.trigger_group = 104
-    args.followup_after_action = 2
-    args.followup_group = 2
     args.max_actions = 59  # Remaining entries in the STM32 64-UID result buffer.
     config = load_config(project_root / 'rdk_vision' / ('pillar_blue.yaml' if color=='blue' else 'pillar_runtime.yaml'))
     on_camera_wait = kwargs.pop('on_camera_wait', None)
@@ -140,7 +136,6 @@ class BridgeCore:
         close_camera=lambda: None,
         run_scan=None,
         run_number=None,
-        run_block=None,
         prepare_number=lambda: None,
         close_number=lambda: None,
         select_color=None,
@@ -161,13 +156,11 @@ class BridgeCore:
         self._prepare_number = prepare_number
         self._close_number = close_number
         self._run_number = run_number
-        self._run_block = run_block
         self._close_camera = close_camera
         self._scan_level = None
         self._stair_point = 0
         self._mode = None
         self._cancel = threading.Event()
-        self._capture_run=None
         self._finish = threading.Event()
         self._stopped = threading.Event()
         self._ball = 0
@@ -187,25 +180,6 @@ class BridgeCore:
             self._worker=self._mode=None
             if not self._cancel.is_set(): self._send_line(f'WAREHOUSE_DIGIT {token} {digit}')
 
-    def _block_main(self, token, row, column=None):
-        # 0 UNKNOWN, 1..3 digit, 4 EMPTY, 5 ERROR. No result is never EMPTY.
-        result = 5
-        try:
-            self._close_number()
-            if self._run_block is not None:
-                kwargs={'cancel':self._cancel}
-                if column is not None:
-                    if self._capture_run is None: self._capture_run=datetime.now().strftime('%Y%m%d-%H%M%S-%f')
-                    kwargs.update(column=column,capture_run=self._capture_run,capture_token=token)
-                result = self._run_block(row, **kwargs)
-                if result not in range(5): result = 5
-        except Exception as exc:
-            print(f'BLOCK row={row} failed: {exc!r}', flush=True)
-            self._close_camera()
-        with self._lock:
-            self._worker = self._mode = None
-            if not self._cancel.is_set(): self._send_line(f'BLOCK_RESULT {token} {result}')
-
     def _send_number_ready(self, token):
         with self._lock:
             if not self._cancel.is_set():
@@ -213,7 +187,6 @@ class BridgeCore:
 
     def _group_main(self, group):
         try:
-            if group in (0,100): self._capture_run=None
             if group in (0, 3):
                 self._close_camera()
             if group == 0:
@@ -363,17 +336,6 @@ class BridgeCore:
         if command == "PING":
             self._send_line("PONG")
             return
-        match = re.fullmatch(r'BLOCK_CHECK ([1-9][0-9]{0,9}) ([1-3])(?: ([1-3]))?', command)
-        if match:
-            token, row = map(int, match.groups()[:2])
-            column=int(match.group(3)) if match.group(3) else None
-            if token > 0xffffffff: return
-            with self._lock:
-                if self._worker is not None: return
-                self._cancel.clear(); self._mode = 'block'
-                self._worker = threading.Thread(target=self._block_main, args=(token,row,column), daemon=True)
-                self._worker.start()
-            return
         match=re.fullmatch(r'WAREHOUSE_CHECK ([1-9][0-9]{0,9}) ([0-9]{1,2})',command)
         if match:
             token,excluded=map(int,match.groups())
@@ -384,7 +346,7 @@ class BridgeCore:
                 self._worker=threading.Thread(target=self._number_main,args=(token,excluded),daemon=True)
                 self._worker.start()
             return
-        match = re.fullmatch(r'GROUP (0|1|2|3|4|100|105|109|11[0-9]|120)', command)
+        match = re.fullmatch(r'GROUP (0|1|2|3|4|100|105|109|110|111)', command)
         if match:
             with self._lock:
                 if self._worker is not None: return
@@ -596,7 +558,6 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
                     camera_session=camera_session,color=color,**kwargs),
                 close_camera=camera_session.close,
                 run_number=number_session.recognize,
-                run_block=lambda row, **kwargs: run_block_check(project_root, row, camera_session, color=color, **kwargs),
                 prepare_number=number_session.start,
                 close_number=number_session.close,
                 select_color=select_color,

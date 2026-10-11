@@ -178,7 +178,7 @@ target_include_directories(test_chassis_stability PRIVATE chassis_stubs path_por
 target_compile_definitions(test_chassis_stability PRIVATE CHASSIS_TELEMETRY_ENABLE=0)
 target_compile_options(test_chassis_stability PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_chassis_stability PRIVATE m)
-foreach(case heading blend start_turn dynamic_rate entry_arc warehouse_turn orbit orbit_exit capture slew stop fault manual align immediate line map home map_search policy open_loop)
+foreach(case heading blend start_turn dynamic_rate entry_arc orbit orbit_exit capture slew stop fault manual align immediate line map home map_search policy open_loop)
     add_test(NAME chassis_stability_${case} COMMAND test_chassis_stability ${case})
 endforeach()
 
@@ -241,33 +241,3 @@ add_test(NAME path_ports_missing_ids_full_route COMMAND test_path_ports full_pat
 add_test(NAME path_ports_ir_start_blue COMMAND test_path_ports ir_start_blue)
 
 add_test(NAME path_ports_no_id_continue_blue COMMAND test_path_ports no_id_continue_blue)
-
-# Warehouse sub-state machine is required by every route-linked host target.
-get_property(host_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
-foreach(target IN LISTS host_targets)
-    get_target_property(sources ${target} SOURCES)
-    if("${sources}" MATCHES "path_warehouse.c")
-        target_sources(${target} PRIVATE ../App/path_destack.c)
-    endif()
-endforeach()
-
-# Existing capture fixtures exercise the legacy ball-only route; dedicated destack tests enable it.
-foreach(target IN LISTS host_targets)
-    get_target_property(sources ${target} SOURCES)
-    if("${sources}" MATCHES "path_ports.c")
-        target_compile_definitions(${target} PRIVATE PATH_DESTACK_ENABLE=0)
-    endif()
-endforeach()
-add_executable(test_destack test_destack.c ../App/path_destack.c ../App/path_warehouse.c ../App/ball_inventory.c)
-target_include_directories(test_destack PRIVATE ../App)
-target_compile_options(test_destack PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(test_destack PRIVATE m)
-add_test(NAME destack COMMAND test_destack)
-add_executable(test_warehouse_only_vision test_warehouse_only_vision.c
-    ../App/path_mission.c ../App/path_chassis.c ../App/path_line.c
-    ../App/path_warehouse.c ../App/path_destack.c ../App/ball_inventory.c)
-target_include_directories(test_warehouse_only_vision PRIVATE ../App)
-target_compile_definitions(test_warehouse_only_vision PRIVATE PATH_WAREHOUSE_ONLY_VISION=1)
-target_compile_options(test_warehouse_only_vision PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(test_warehouse_only_vision PRIVATE m)
-add_test(NAME warehouse_only_vision COMMAND test_warehouse_only_vision)

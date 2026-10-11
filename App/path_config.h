@@ -3,9 +3,6 @@
 #include "heading_tuning.h"
 /* Extra cruise/acceleration gain; line search and pillar orbit are excluded. */
 /* Read briefly after completed capture; missing RFID must not block the route. */
-#ifndef PATH_DESTACK_ENABLE
-#define PATH_DESTACK_ENABLE 1
-#endif
 #define PATH_RFID_WAIT_MS 1000U
 #define PATH_TRAVEL_BOOST 1.3f
 #define PATH_WAREHOUSE_UNTIMED(m) ((m)->step==12 || ((m)->step==13 && (m)->point<9))
@@ -29,24 +26,22 @@
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
 #define PATH_WAREHOUSE_TARGET_DEG(blue) ((blue) ? 180.0f : 0.0f)
 #define PATH_WAREHOUSE_COLUMN_SPACING_MM 200.0f
-#define PATH_WAREHOUSE_SPACING_MM(blue) ((blue) ? PATH_WAREHOUSE_COLUMN_SPACING_MM : 180.0f)
-#define PATH_WAREHOUSE_RED_FIRST_COLUMN_MM 130.0f
-#define PATH_WAREHOUSE_RED_INFERRED_ADVANCE_MM 180.0f
 #define PATH_WAREHOUSE_ENTRY_BACK_MM 30.0f
 #define PATH_WAREHOUSE_FIRST_RIGHT_MM 19.0f
 #define PATH_WAREHOUSE_CREEP_LIMIT_MM 300.0f
-#define PATH_WAREHOUSE_CREEP_SPEED_RPM 20.0f
+#define PATH_WAREHOUSE_CREEP_SPEED_RPM 16.0f
+#define PATH_WAREHOUSE_DIGIT_ADVANCE_MM 25.0f
 #define PATH_WAREHOUSE_CREEP_ACCEL 250.0f
 #define PATH_WAREHOUSE_DIGIT_TIMEOUT_MS 10000U
 #define PATH_WAREHOUSE_DIGIT_GUARD_MS 11000U
 #define PATH_WAREHOUSE_CREEP_TIMEOUT_MS 12000U
 #define PATH_STAIR_ENTRY_ADVANCE_MM 5.0f
-#define PATH_STAIR_SCAN_SPEED_RPM 49.5f
-#define PATH_STAIR_FAST_SPEED_RPM 148.5f
+#define PATH_STAIR_SCAN_SPEED_RPM 45.0f
+#define PATH_STAIR_FAST_SPEED_RPM 135.0f
 #define PATH_STAIR_FAST_ACCEL 850.0f
 
 /* Line acquisition and admission; lateral speeds are mm/s, approach speed rpm. */
-#define PATH_STAIR_SEARCH_FAST_DISTANCE_MM 620.0f
+#define PATH_STAIR_SEARCH_FAST_DISTANCE_MM 600.0f
 #define PATH_STAIR_SEARCH_FAST_RPM 90.0f
 #define PATH_STAIR_SEARCH_SLOW_RPM 30.0f
 #define PATH_STAIR_LINE_MM_S 40.0f
@@ -75,10 +70,6 @@
 #ifndef PATH_VISION_ENABLE
 #define PATH_VISION_ENABLE 1
 #endif
-#ifndef PATH_WAREHOUSE_ONLY_VISION
-#define PATH_WAREHOUSE_ONLY_VISION 0
-#endif
-#define PATH_COLLECTION_VISION_ENABLE (PATH_VISION_ENABLE && !PATH_WAREHOUSE_ONLY_VISION)
 #if PATH_VISION_ENABLE != 0 && PATH_VISION_ENABLE != 1
 #error "PATH_VISION_ENABLE must be 0 or 1"
 #endif

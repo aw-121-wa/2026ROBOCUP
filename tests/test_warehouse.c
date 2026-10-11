@@ -13,7 +13,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
     if(c->kind==PC_MOVE && c->x==-30 && c->y==0) return c->acceleration==300 && c->deceleration==300;
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=(moves==1 ? 130 : 180) || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
     if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }
@@ -63,7 +63,7 @@ static int run(unsigned mask) {
         if(m.point==9) in.gray=m.phase==5?0:6;
         Path_Tick(&m,t,&in);
     }
-    CHECK(m.result==PATH_DONE && moves==3 && calibrations==3 && homes==1 && !bad);
+    CHECK(m.result==PATH_DONE && moves==2 && calibrations==3 && homes==1 && !bad);
     CHECK(groups==expected && m.inventory.placed==expected && !m.inventory.occupied);
     unsigned seen=0, previous_col=0;
     for(unsigned n=0;n<groups;n++) {
@@ -121,7 +121,7 @@ static int errors(void) {
         if(m.point==9) in.gray=m.phase==5?0:6;
         Path_Tick(&m,t,&in);
     }
-    CHECK(m.result==PATH_DONE && moves==3 && groups==1 && m.inventory.occupied==0 && m.inventory.inferred==1);
+    CHECK(m.result==PATH_DONE && moves==2 && groups==1 && m.inventory.occupied==0 && m.inventory.inferred==1);
     return 0;
 }
 static int home_line_stop(void) {
@@ -145,7 +145,9 @@ static int home_line_stop(void) {
    CHECK(m.phase==14 && last.kind==PC_HOLD && m.result==PATH_RUNNING);
    in.gray=0;Path_Tick(&m,20,&in);CHECK(m.phase==14);
    in.settled=true;Path_Tick(&m,25,&in);
-   CHECK(m.result==PATH_DONE && last.kind==PC_HOLD);
+   CHECK(m.result==PATH_RUNNING && last.kind==PC_MAP_LATERAL && last.y==-20);
+   in.settled=false;Path_Tick(&m,30,&in);CHECK(m.result==PATH_RUNNING);
+   in.settled=true;Path_Tick(&m,35,&in);CHECK(m.result==PATH_DONE);
   } else CHECK(m.phase==16 && m.result==PATH_RUNNING);
  }
  return 0;
@@ -157,7 +159,12 @@ static int home_advance_braking(void) {
   Path_Tick(&m,0,&in);CHECK(m.phase==14 && last.kind==PC_HOLD);
   in.y_mm=blue ? 100+slide : 100-slide;in.settled=true;
   Path_Tick(&m,100,&in);
-  CHECK(m.result==PATH_DONE && last.kind==PC_HOLD);
+  if(slide>=20) CHECK(m.result==PATH_DONE);
+  else {
+   CHECK(m.phase==18 && last.kind==PC_MAP_LATERAL && last.y==(blue ? 1 : -1)*(20.0f-slide));
+   in.settled=false;Path_Tick(&m,200,&in);CHECK(m.phase==18 && m.result==PATH_RUNNING);
+   Path_Tick(&m,5100,&in);CHECK(m.result==PATH_TIMEOUT);
+  }
  }
  return 0;
 }

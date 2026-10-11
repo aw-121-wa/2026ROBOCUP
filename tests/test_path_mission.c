@@ -98,7 +98,7 @@ static int post_disc_turn(void) {
     m.result=PATH_RUNNING; m.step=5; in.ir=false;
     Path_Tick(&m,0,&in);
     CHECK(p.n==1 && p.commands[0].kind==PC_MOVE_ROTATE);
-    CHECK(p.commands[0].x==-1425 && p.commands[0].y==-705);
+    CHECK(p.commands[0].x==-1425 && p.commands[0].y==-725);
     CHECK(p.commands[0].angle==90 && p.commands[0].speed==195);
     CHECK(p.commands[0].continuous && p.commands[0].end_speed==30);
     in.settled=false; in.motion_done=true; Path_Tick(&m,5,&in);
@@ -164,7 +164,7 @@ static int chassis_only(void) {
     CHECK(m.step==8 && m.result==PATH_RUNNING);
     CHECK(count(&p,PC_GROUP)==0 && count(&p,PC_VISION)==1 && count(&p,PC_TURN)==0);
     bool orbit=false;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+80.94114f*1.05f)<0.001f && p.commands[i].speed==-58.653f*1.05f) orbit=true;
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_BODY && fabsf(p.commands[i].x+80.94114f)<0.001f && p.commands[i].speed==-58.653f) orbit=true;
     CHECK(orbit);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6;
     in.ir=true; in.settled=false;
@@ -180,37 +180,31 @@ static int chassis_only(void) {
     m.orbit_yaw=100; in.yaw_deg=-251;
     Path_Tick(&m,100,&in); CHECK(m.phase==2 && p.n==0);
     in.yaw_deg=-258; Path_Tick(&m,105,&in); CHECK(m.step==8 && count(&p,PC_HOLD)==0 && count(&p,PC_ORBIT_EXIT)==1);
-    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-100 && p.commands[p.n-1].end_speed==25);
-    in.motion_done=true; Path_Tick(&m,110,&in);
-    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-10);
-    in.motion_done=false;
+    CHECK(p.commands[p.n-1].kind==PC_ORBIT_EXIT && p.commands[p.n-1].x==-10 && p.commands[p.n-1].end_speed==15);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=6; in.ir=false;
     Path_Tick(&m,0,&in); CHECK(p.n==1 && p.commands[0].kind==PC_BODY && p.commands[0].y==30);
     in.ir=true; in.yaw_deg=0;
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<10000 && m.result==PATH_RUNNING;t+=10) {
         in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; in.motion_done=true; unsigned before=p.n;
-        if(m.step==9) in.gray=m.phase==30 ? 4 : (m.phase==22 && m.point==3) ? 2 : 6;
-        if(m.step==12) in.gray=m.phase==2?2:6;
-        if(m.step==13 && m.point<9) in.gray=6;
         if(m.step==13 && m.point==9) in.gray=m.phase==5?0:6;
         Path_Tick(&m,t,&in);
         for(unsigned j=before;j<p.n;j++) if(p.commands[j].kind==PC_MOVE) in.x_mm+=p.commands[j].x;
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={260,390,240,170,50,130,180,180};
+    const float expected[]={5,160,440,260,110,-30,200,200};
     unsigned n=0;
-    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE && p.commands[i].x!=0) {
+    for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<8 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
     }
     CHECK(n==8);
-    CHECK(count(&p,PC_MAP_LATERAL)==0);
+    CHECK(count(&p,PC_MAP_LATERAL)==2);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==12) in.gray=m.phase==2?2:6; if(m.step==13) in.gray=m.point==9 && m.phase==5?0:6; Path_Tick(&m,t,&in); }
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==13 && m.point==9) in.gray=m.phase==5?0:6; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
-    CHECK(count(&p,PC_MAP_LATERAL)==0 && count(&p,PC_MOVE)==4 && count(&p,PC_ROTATE)==0);
+    CHECK(count(&p,PC_MAP_LATERAL)==2 && count(&p,PC_MOVE)==3 && count(&p,PC_ROTATE)==0);
     return 0;
 }
 static int chassis_errors(void) {

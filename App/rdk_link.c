@@ -1,25 +1,7 @@
 #include "rdk_link.h"
 #include <string.h>
+#include <stdio.h>
 #include <stdlib.h>
-/* This wire protocol only formats decimal integers. Avoid pulling the general
- * printf engine into the 64 KiB firmware; keep explicit capacity checks. */
-static size_t command(char *dst,size_t capacity,const char *verb,uint32_t first,int second)
-{
-    size_t used=strlen(verb);
-    if (used>=capacity) return 0;
-    memcpy(dst,verb,used);
-    unsigned count=second<0 ? 1 : 2;
-    for(unsigned field=0;field<count;field++) {
-        char digits[10];unsigned n=0;
-        uint32_t value=field ? (uint32_t)second : first;
-        do {digits[n++]=(char)('0'+value%10);value/=10;} while(value);
-        if (used+1+n+3>capacity) return 0;
-        dst[used++]=' ';
-        while(n) dst[used++]=digits[--n];
-    }
-    dst[used++]='\r';dst[used++]='\n';dst[used]=0;
-    return used;
-}
 static unsigned indexed(const char *line, const char *prefix)
 {
     size_t n = strlen(prefix);
@@ -92,15 +74,15 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
     }
     else if (!strcmp(v, "GROUP") && (r->stage == 2 || r->stage == 5) &&
              (a == 0 || a == 1 || a == 2 || a == 3 || a == 4 || a == 100 || a == 105 ||
-              (a >= 109 && a <= 120)))
+              a == 109 || a == 110 || a == 111))
     {
-        command(r->request,sizeof(r->request),"GROUP",a,-1);
+        snprintf(r->request, sizeof(r->request), "GROUP %lu\r\n", (unsigned long)a);
         r->group = a;
         r->stage = 7;
     }
     else if (!strcmp(v, "STAIR") && (r->stage == 2 || r->stage == 5) && a >= 1 && a <= 8)
     {
-        command(r->request,sizeof(r->request),"STAIR_CHECK",a,-1);
+        snprintf(r->request, sizeof(r->request), "STAIR_CHECK %lu\r\n", (unsigned long)a);
         r->group = a; /* Point token: stale replies cannot complete another point. */
         r->stage = 11;
         r->disc_action_done_index = r->disc_rfid_sent_index = 0;
@@ -112,7 +94,7 @@ bool Rdk_Begin(RdkLink *r, const char *v, uint32_t a, uint32_t n, uint32_t t)
     {
         r->stair_scan = !strcmp(v, "STAIR_SCAN");
         if (r->stair_scan)
-            command(r->request,sizeof(r->request),"STAIR_SCAN",a,-1);
+            snprintf(r->request,sizeof(r->request),"STAIR_SCAN %lu\r\n",(unsigned long)a);
         else strcpy(r->request, "PILLAR_START\r\n");
         r->stage = 9;
         r->pillar_ready = r->pillar_ending = r->camera_wait_event = false;
@@ -147,27 +129,12 @@ bool Rdk_WarehouseBegin(RdkLink *r, uint8_t excluded, uint32_t now, uint32_t tim
 {
     if (r->active || r->locked || r->warehouse_active || !timeout || (excluded & ~14U)) return false;
     if (++r->sequence==0) ++r->sequence;
-    r->block_query=false;
     r->warehouse_token = r->sequence;
-    command(r->warehouse_request,sizeof(r->warehouse_request),"WAREHOUSE_CHECK",r->warehouse_token,excluded);
+    snprintf(r->warehouse_request,sizeof(r->warehouse_request),"WAREHOUSE_CHECK %lu %u\r\n",
+             (unsigned long)r->warehouse_token,excluded);
     r->warehouse_started=now; r->warehouse_timeout=timeout;
     r->warehouse_active=true; r->warehouse_sent=false; r->warehouse_ready=false;
     r->warehouse_digit=0; r->warehouse_reply=PATH_WAIT;
-    return true;
-}
-bool Rdk_BlockBegin(RdkLink *r, uint8_t row, uint32_t now, uint32_t timeout)
-{
-    if (row<1 || row>3 || !Rdk_WarehouseBegin(r,0,now,timeout)) return false;
-    r->block_query=true;
-    command(r->warehouse_request,sizeof(r->warehouse_request),"BLOCK_CHECK",r->warehouse_token,row);
-    return true;
-}
-bool Rdk_BlockBeginCell(RdkLink *r,uint8_t row,uint8_t column,uint32_t now,uint32_t timeout)
-{
-    if(column<1 || column>3 || !Rdk_BlockBegin(r,row,now,timeout)) return false;
-    size_t n=strlen(r->warehouse_request)-2;
-    r->warehouse_request[n++]=' ';r->warehouse_request[n++]=(char)('0'+column);
-    r->warehouse_request[n++]='\r';r->warehouse_request[n++]='\n';r->warehouse_request[n]=0;
     return true;
 }
 void Rdk_Feed(RdkLink *r, uint8_t b)
@@ -198,7 +165,7 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
         char *end;
         unsigned long token=strtoul(r->line+16,&end,10);
         if (*end=='\0' && end!=r->line+16 &&
-            r->warehouse_active && !r->block_query && r->warehouse_sent && !r->locked && token==r->warehouse_token)
+            r->warehouse_active && r->warehouse_sent && !r->locked && token==r->warehouse_token)
             r->warehouse_ready=true;
         return;
     }
@@ -207,24 +174,13 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
             char *end;
             unsigned long token=strtoul(r->line+16,&end,10);
             if (*end==' ' && end[1]>='0' && end[1]<='3' && !end[2] &&
-                r->warehouse_active && !r->block_query && r->warehouse_sent && !r->locked && token==r->warehouse_token) {
+                r->warehouse_active && r->warehouse_sent && !r->locked && token==r->warehouse_token) {
                 r->warehouse_digit=(uint8_t)(end[1]-'0');
                 r->warehouse_reply=r->warehouse_digit ? PATH_OK : PATH_NONE;
                 r->warehouse_active=false;
             }
         }
         return; /* Optional/stale digit replies never enter the ball/action protocol. */
-    }
-    if (!strncmp(r->line,"BLOCK_RESULT ",13)) {
-        char *end;
-        unsigned long token=strtoul(r->line+13,&end,10);
-        if (end!=r->line+13 && *end==' ' && end[1]>='0' && end[1]<='5' && !end[2] &&
-            r->warehouse_active && r->block_query && r->warehouse_sent && !r->locked && token==r->warehouse_token) {
-            r->warehouse_digit=(uint8_t)(end[1]-'0');
-            r->warehouse_reply=r->warehouse_digit==5 ? PATH_FAILED : PATH_OK;
-            r->warehouse_active=false;
-        }
-        return;
     }
     if (!r->line[0] || r->locked)
         return;
@@ -344,8 +300,8 @@ void Rdk_Feed(RdkLink *r, uint8_t b)
 void Rdk_Tick(RdkLink *r, uint32_t n)
 {
     if (r->warehouse_active) {
-        if (r->locked || ((r->block_query || !r->no_timeout) && (uint32_t)(n-r->warehouse_started)>=r->warehouse_timeout)) {
-            r->warehouse_active=false; r->warehouse_reply=r->block_query ? PATH_FAILED : PATH_NONE; r->warehouse_digit=0;
+        if (r->locked || (!r->no_timeout && (uint32_t)(n-r->warehouse_started)>=r->warehouse_timeout)) {
+            r->warehouse_active=false; r->warehouse_reply=PATH_NONE; r->warehouse_digit=0;
         } else if (!r->warehouse_sent && r->transmit(r->context,r->warehouse_request,strlen(r->warehouse_request)))
             r->warehouse_sent=true;
     }
@@ -402,9 +358,9 @@ bool Rdk_SendDiscRfidOk(RdkLink *r, uint8_t index)
         index < 1 || index > (r->stage == 4 ? 5 : r->stage == 12 ? 1 : 59) || index != r->disc_action_done_index ||
         index != (uint8_t)(r->disc_rfid_sent_index + 1U))
         return false;
-    r->aux_length=command(r->aux_request,sizeof(r->aux_request),
-        r->stage==4 ? "DISC_RFID_OK" : r->stage==12 ? "STAIR_RFID_OK" : "PILLAR_RFID_OK",
-        r->stage==12 ? r->group : index,-1);
+    r->aux_length = (size_t)snprintf(r->aux_request, sizeof(r->aux_request), "%s_RFID_OK %u\r\n",
+                                   r->stage == 4 ? "DISC" : r->stage == 12 ? "STAIR" : "PILLAR",
+                                   r->stage == 12 ? (unsigned)r->group : index);
     r->aux_pending = true;
     r->cancel_after_aux = false;
     r->disc_rfid_sent_index = index;
@@ -415,7 +371,7 @@ bool Rdk_PillarStopped(RdkLink *r, uint8_t index)
 {
     if (!r->active || r->locked || r->stage != 10 || r->aux_pending ||
         !index || index != r->ball_index || index != r->stopped_index + 1U) return false;
-    r->aux_length=command(r->aux_request,sizeof(r->aux_request),"PILLAR_STOPPED",index,-1);
+    r->aux_length = (size_t)snprintf(r->aux_request, sizeof(r->aux_request), "PILLAR_STOPPED %u\r\n", index);
     r->aux_pending = true;
     r->stopped_index = index;
     return true;

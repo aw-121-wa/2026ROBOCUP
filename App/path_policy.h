@@ -14,24 +14,11 @@ static inline ChassisRoutePolicy PathPolicy_Chassis(bool blue, PathResult result
         .travel_speed_scale=(running && step!=6) ? (step==9 ? 1.0f : 1.3f) : 1.0f,
         .mirror_map_y=blue,
         .use_start_turn_kp=running && blue && step==0,
-        .soften_disc_approach_kp=running && !blue && step<=3,
-        .soften_start_straight_kp=running && !blue && step==1,
-        .brake_turn_endpoint=running && step==11,
         .stationary_hold=running && step>=8 && step<=10,
-        .force_stair_heading=running && step==9,
         .hold_during_action=running && step==9 && phase==24,
         .suppress_lateral_comp=false};
 }
 /* Boundary speeds remain unchanged so entry into search/orbit stays continuous. */
-static inline float PathPolicy_TransitScale(unsigned step, PathCommandKind kind)
-{
-    if (step!=0 && step!=1 && step!=5 && step!=8 && step!=11) return 1.0f;
-    switch (kind) {
-    case PC_MOVE: case PC_MOVE_ROTATE: case PC_ARC: case PC_ORBIT_EXIT:
-    case PC_ORBIT_ARC: case PC_FINISH_FORWARD: return 16.0f/9.0f;
-    default: return 1.0f;
-    }
-}
 static inline float PathPolicy_CommandBoost(unsigned step, PathCommandKind kind)
 {
     if (step==6 || step==9 || step==12 || step==13) return 1.0f;

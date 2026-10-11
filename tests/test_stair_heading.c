@@ -16,10 +16,9 @@ int main(void) {
    PathMission m;Path_Init(&m,send,0);m.blue=blue;m.step=step;m.result=PATH_RUNNING;
    PathInput in={.settled=true,.gray=gray,.map_yaw_deg=170};
    turns=0;
-   bool aligned=gray==6 || (blue && (step==12 || step==13) && gray==4);
-   assert(PathLine_Aligned(&m,gray)==aligned);
+   assert(PathLine_Aligned(&m,gray)==(gray==6));
    assert(!PathLine_AlignFour(&m,0,&in));
-   if(aligned) {
+   if(gray==6) {
     assert(last.kind==PC_HOLD);
     assert(!PathLine_AlignFour(&m,5,&in));
     assert(PathLine_AlignFour(&m,105,&in));

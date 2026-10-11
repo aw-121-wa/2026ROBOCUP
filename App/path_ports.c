@@ -261,28 +261,24 @@ static bool send(void *ctx, const PathCommand *c)
     float speed_scale = PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase).travel_speed_scale;
     float boost = PathPolicy_CommandBoost(mission.step,c->kind);
     float accel_scale = speed_scale * fminf(boost,PATH_TRAVEL_BOOST);
-    float transit_scale = PathPolicy_TransitScale(mission.step,c->kind);
-    boost *= transit_scale;
-    accel_scale *= transit_scale;
-    float decel_scale = speed_scale * transit_scale;
     float scale = speed_scale * 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
     switch (c->kind)
     {
     case PC_ORBIT_ARC:
-        if (!Chassis_ExitOrbitArc(c->x,c->angle,c->speed*scale*boost,PATH_MOVE_ACCEL_MM_S2*accel_scale,PATH_MOVE_DECEL_MM_S2*decel_scale)) return false;
+        if (!Chassis_ExitOrbitArc(c->x,c->angle,c->speed*scale*boost,PATH_MOVE_ACCEL_MM_S2*accel_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
         return motion_started(c,now,true);
     case PC_ORBIT_EXIT:
-        if (!Chassis_ExitOrbit(c->x,c->y,c->angle,c->speed*scale*boost,c->end_speed*scale,PATH_MOVE_ACCEL_MM_S2*accel_scale,PATH_MOVE_DECEL_MM_S2*decel_scale)) return false;
+        if (!Chassis_ExitOrbit(c->x,c->y,c->angle,c->speed*scale*boost,c->end_speed*scale,PATH_MOVE_ACCEL_MM_S2*accel_scale,PATH_MOVE_DECEL_MM_S2*speed_scale)) return false;
         return motion_started(c,now,true);
     case PC_MOVE_ROTATE:
         if (c->continuous)
         {
             if (c->end_speed <= 0 ||
-                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * decel_scale,
+                !Chassis_MoveRotateBoundary(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale,
                                             c->start_speed * scale, c->end_speed * scale))
                 return false;
         }
-        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * decel_scale))
+        else if (!Chassis_MoveRotate(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale))
             return false;
         return motion_started(c,now,c->continuous);
     case PC_HOME_ALIGN:
@@ -292,17 +288,17 @@ static bool send(void *ctx, const PathCommand *c)
         if (!Chassis_ReturnHome(c->argument)) return false;
         return motion_started(c,now,false);
     case PC_FINISH_FORWARD:
-        if (!Chassis_FinishForward(c->x,c->speed*scale*boost,c->acceleration*accel_scale,c->deceleration*decel_scale)) return false;
+        if (!Chassis_FinishForward(c->x,c->speed*scale*boost,c->acceleration*accel_scale,c->deceleration*speed_scale)) return false;
         return motion_started(c,now,false);
     case PC_MOVE:
         if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale * boost,
                                   (c->acceleration > 0 ? c->acceleration : PATH_MOVE_ACCEL_MM_S2) * accel_scale,
-                                  (c->deceleration > 0 ? c->deceleration : PATH_MOVE_DECEL_MM_S2) * decel_scale,
+                                  (c->deceleration > 0 ? c->deceleration : PATH_MOVE_DECEL_MM_S2) * speed_scale,
                                   c->start_speed * scale, c->end_speed * scale))
             return false;
         return motion_started(c,now,c->continuous);
     case PC_ARC:
-        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * decel_scale,
+        if (!Chassis_MoveArc(c->x, c->y, c->angle, c->speed * scale * boost, PATH_MOVE_ACCEL_MM_S2 * accel_scale, PATH_MOVE_DECEL_MM_S2 * speed_scale,
                              c->start_speed * scale, c->end_speed * scale))
             return false;
         return motion_started(c,now,c->continuous);
@@ -354,10 +350,6 @@ static bool send(void *ctx, const PathCommand *c)
         motion_pending = false;
         motion_continuous = false;
         return true;
-    case PC_BLOCK_CHECK:
-        return mission.step==13 && Chassis_IsSettled() &&
-               c->argument>=1 && c->argument<=3 &&
-               Rdk_BlockBeginCell(&rdk,(uint8_t)c->argument,mission.destack.column+1,now,c->timeout_ms);
     case PC_WAREHOUSE_DIGIT:
         return mission.step==13 && c->argument<=14 &&
                Rdk_WarehouseBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
@@ -627,14 +619,6 @@ void PathPorts_Error(UART_HandleTypeDef *u)
     else if (u == PINCFG_RFID_UART)
         rfid_fault |= 16;
 }
-static __attribute__((noinline)) void update_route_policy(unsigned gray)
-{
-    ChassisRoutePolicy warehouse_policy=PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase);
-    warehouse_policy.warehouse_follow=!mission.blue && mission.result==PATH_RUNNING &&
-        mission.step==13 && mission.point<9 && mission.phase!=WAREHOUSE_ALIGN_HOME;
-    warehouse_policy.warehouse_gray=gray;
-    Chassis_SetRoutePolicy(warehouse_policy);
-}
 void PathPorts_Tick(void)
 {
     if (!initialized)
@@ -773,11 +757,6 @@ void PathPorts_Tick(void)
         gray |= 4;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_1) == GPIO_PIN_RESET)
         gray |= 2;
-    /* Newly installed outer sensors qualify red warehouse lateral position only. */
-    if (!mission.blue && (mission.step == 12 || mission.step == 13)) {
-        if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3) == GPIO_PIN_RESET) gray |= 8;
-        if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_RESET) gray |= 1;
-    }
     bool disc_deadline = mission.result == PATH_RUNNING && mission.step == 3 &&
                          mission.phase == 1 &&
                          (uint32_t)(now - mission.entered) >= DISC_TASK_TIMEOUT_MS;
@@ -814,7 +793,6 @@ void PathPorts_Tick(void)
                     .imu_yaw_deg = Chassis_LineYaw(),
                     .ir = ir_raw == 0,
                     .warehouse_vision = PATH_RDK_ENABLE != 0,
-                    .destack_enabled = PATH_DESTACK_ENABLE && PATH_RDK_ENABLE != 0 && PATH_VISION_ENABLE && !PATH_SKIP_MATERIAL(&mission),
                     .warehouse_ready = rdk.warehouse_ready,
                     .warehouse_digit = rdk.warehouse_digit,
                     .warehouse_digit_reply = rdk.warehouse_reply,
@@ -826,7 +804,7 @@ void PathPorts_Tick(void)
                     .turn_reply = turn.reply};
     PathResult previous = mission.result;
     unsigned phase = mission.phase;
-    update_route_policy(gray);
+    Chassis_SetRoutePolicy(PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase));
     Path_Tick(&mission, now, &in);
     if (stationary && phase == 99 && mission.phase == 0 && mission.result == PATH_RUNNING)
     {
@@ -854,7 +832,7 @@ void PathPorts_Tick(void)
         if (PATH_RDK_ENABLE && !rdk.locked)
             (void)Rdk_Begin(&rdk, "STOP", 0, now, 1);
     }
-    update_route_policy(gray);
+    Chassis_SetRoutePolicy(PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase));
     service_turn(now);
     path_diagnostics = (PathDiagnostics){.result = mission.result,
                                          .inventory_fault = inventory_fault,

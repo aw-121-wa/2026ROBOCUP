@@ -23,11 +23,7 @@ void HostUart_Flush(void) { }
 void HostUart_Error(UART_HandleTypeDef *u) { (void)u; }
 void HostUart_RxComplete(UART_HandleTypeDef *u) { (void)u; }
 void PathPorts_Init(void) { }
-void PathPorts_Tick(void) {
- ChassisRoutePolicy p=PathPolicy_Chassis(path_diagnostics.blue,path_diagnostics.result,path_diagnostics.step,path_diagnostics.phase);
- p.warehouse_follow=!path_diagnostics.blue && path_diagnostics.result==PATH_RUNNING && path_diagnostics.step==13;
- p.warehouse_gray=path_diagnostics.gray;Chassis_SetRoutePolicy(p);
-}
+void PathPorts_Tick(void) { Chassis_SetRoutePolicy(PathPolicy_Chassis(path_diagnostics.blue, path_diagnostics.result, path_diagnostics.step, path_diagnostics.phase)); }
 void PathPorts_Cancel(void) { path_busy=false; }
 bool PathPorts_Busy(void) { return path_busy; }
 bool PathPorts_Start(void) { return false; }
@@ -102,28 +98,6 @@ int main(int argc,char **argv) {
         float expected=HeadingControl_Update(&request,&config,.005f,&test_integral);
         assert(fabsf(chassis_heading_diagnostics.requested_rad_s-expected)<1e-5f);
         assert(fabsf(expected)<.5f); /* Uncapped 1000 mm/s would saturate the yaw output. */
-    } else if(!strcmp(argv[1],"warehouse_turn")) {
-        path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=11;
-        for(unsigned side=0;side<2;++side) {
-            Chassis_HoldImmediate();tick();
-            float sign=side ? -1.0f : 1.0f;
-            path_yaw.continuous=0;route_heading=heading=0;
-            assert(Chassis_MoveRotateBoundary(1000,0,sign*180,600,650,650,0,100));
-            path_yaw.continuous=sign*181*RAD;segment_progress=900;
-            float x,y;Motion_FixedDirection(1,0,sign*181*RAD,&x,&y);
-            Mecanum_Inverse(geometry(),x*400,y*400,0,state.rpm_applied);
-            memcpy(state.rpm_pending,state.rpm_applied,sizeof(state.rpm_applied));
-            memcpy(state.rpm_inflight,state.rpm_applied,sizeof(state.rpm_applied));
-            pending_valid=tx_busy=tx_done=false;tx_part=0;tick();
-            assert(chassis_heading_diagnostics.requested_rad_s*sign<0);
-            assert(fabsf(chassis_heading_diagnostics.requested_rad_s)<.24f);
-            assert(planner.active && path_blend && !normal_stopping);
-            path_yaw.continuous=sign*179*RAD;fake_imu.gz_dps=sign*10;
-            tick();
-            assert(chassis_heading_diagnostics.requested_rad_s*sign<0);
-            assert(planner.active && !normal_stopping); /* Brake yaw before crossing the final target. */
-            fake_imu.gz_dps=0;
-        }
     } else if(!strcmp(argv[1],"entry_arc")) {
         assert(Chassis_MoveRotateBoundary(-1640,0,180,550,550,550,0,165));
         fake_imu.yaw_deg=180; segment_progress=1640; tick();
@@ -282,7 +256,7 @@ int main(int argc,char **argv) {
         state.x_mm=1100;state.y_mm=700;state.yaw_rad=0;
         assert(Chassis_ReturnHome(0));
         float k=(hypotf(1000,500)+100)/hypotf(1000,500);
-        float ex=1650, length=ex;
+        float ex=1000*k-110, length=ex;
         assert(fabsf(planner.distance-length)<0.01f);
         assert(fabsf(dx+ex/length)<1e-5f);
         assert(fabsf(dy)<1e-5f);
@@ -305,8 +279,7 @@ int main(int argc,char **argv) {
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;state.yaw_rad=map_yaw;
-        assert(Chassis_ReturnHome(0) && planner.distance==1650);
-        Chassis_Hold();wait_stop();
+        assert(Chassis_ReturnHome(0) && !Chassis_MotionBusy());
         assert(Chassis_Move(200,0,65,250,650));
         segment_progress=70; state.velocity[0]=60; state.velocity[1]=0;
         body_output[0]=60;
@@ -378,11 +351,6 @@ int main(int argc,char **argv) {
         assert(PathPolicy_CommandBoost(9,PC_BODY)==1);
         assert(PathPolicy_CommandBoost(13,PC_MAP_SEARCH)==1);
         assert(PathPolicy_CommandBoost(8,PC_ARC)==1);
-        assert(fabsf(PathPolicy_TransitScale(5,PC_MOVE_ROTATE)-16.0f/9.0f)<.001f);
-        assert(PathPolicy_TransitScale(9,PC_MOVE)==1);
-        assert(PathPolicy_TransitScale(13,PC_MOVE)==1);
-        assert(PathPolicy_TransitScale(8,PC_BODY)==1);
-        assert(PathPolicy_TransitScale(6,PC_ORBIT_ARC)==1);
         for(unsigned step=0;step<=13;step++) {
             ChassisRoutePolicy red=PathPolicy_Chassis(false,PATH_RUNNING,step,24);
             ChassisRoutePolicy blue=PathPolicy_Chassis(true,PATH_RUNNING,step,24);
@@ -405,21 +373,6 @@ int main(int argc,char **argv) {
         for(unsigned n=0;n<30;n++)tick();
         assert(state.armed && state.fault==0);
         assert(state.x_mm!=before); /* Distance remains command-integrated without position feedback. */
-        Chassis_Stop();wait_stop();assert(Chassis_IsSettled());
-        assert(Chassis_Arm());
-        path_diagnostics.result=PATH_RUNNING;path_diagnostics.step=13;path_diagnostics.gray=6;
-        assert(Chassis_Move(2000,0,40,250,650));
-        for(unsigned n=0;n<80;n++)tick();
-        assert(planner.active && state.velocity[0]>0);
-        path_diagnostics.gray=7;
-        for(unsigned n=0;n<80;n++)tick();
-        assert(planner.active && fabsf(state.velocity[0])<1);
-        float side=state.velocity[1];assert(fabsf(side)>1);
-        for(unsigned n=0;n<420;n++)tick();
-        assert(planner.active && side*state.velocity[1]<0);
-        path_diagnostics.gray=6;
-        for(unsigned n=0;n<80;n++)tick();
-        assert(planner.active && state.velocity[0]>0);
         Chassis_Stop();wait_stop();assert(Chassis_IsSettled());
     } else { assert(0); }
     puts("ok");return 0;

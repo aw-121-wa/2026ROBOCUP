@@ -39,7 +39,6 @@ option(CHASSIS_RELEASE_LTO "Enable experimental Release link-time optimization" 
 option(CHASSIS_TELEMETRY_ENABLE "Enable binary VOFA transmission (host RX stays enabled)" ON)
 option(CHASSIS_TELEMETRY_FULL "Include full IMU diagnostics in VOFA frames" ON)
 option(PATH_STOP_AT_STAIR_LINE "Stop test route after first stair line detection" OFF)
-option(PATH_WAREHOUSE_ONLY_VISION "Run chassis only before warehouse, retaining digits/destack vision" OFF)
 option(PATH_BLUE_DISC_TEST "Blue mirrored chassis-only route ending at disc" OFF)
 option(PATH_BLUE_PILLAR_TEST "Extend blue chassis-only route through pillar orbit" OFF)
 option(PATH_BLUE_STAIR_TEST "Extend blue chassis-only route through stairs" OFF)
@@ -61,7 +60,6 @@ if(PATH_BLUE_DISC_TEST)
 endif()
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    PATH_WAREHOUSE_ONLY_VISION=$<BOOL:${PATH_WAREHOUSE_ONLY_VISION}>
     PATH_STOP_AT_STAIR_LINE=$<BOOL:${PATH_STOP_AT_STAIR_LINE}>
     CHASSIS_TELEMETRY_ENABLE=$<BOOL:${CHASSIS_TELEMETRY_ENABLE}>
     CHASSIS_TELEMETRY_FULL=$<BOOL:${CHASSIS_TELEMETRY_FULL}>)
@@ -105,7 +103,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/path_chassis.c App/path_line.c
     App/path_mission.c
     App/ball_inventory.c
-    App/path_destack.c
     App/path_warehouse.c
     App/turntable_link.c
     App/path_ports.c

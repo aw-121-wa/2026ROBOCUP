@@ -49,7 +49,6 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
     if(path_diagnostics.blue && path_diagnostics.step==9 && path_diagnostics.phase==30 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
-    if(!path_diagnostics.blue && path_diagnostics.step==12 && path_diagnostics.phase==2 && pin==GPIO_PIN_0) return GPIO_PIN_SET;
     if(path_diagnostics.step==13 && path_diagnostics.phase==5 && pin!=GPIO_PIN_10) return GPIO_PIN_SET;
     return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
             (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
@@ -73,20 +72,20 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (test_blue && path_diagnostics.step==0 && fabsf(x)>100 && y!=0) assert(x>0 && y<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-755);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-765);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }
 bool Chassis_MoveBoundary(float x, float y, float v, float a, float d,
                           float start_speed, float end_speed) {
-    /* Accept task profiles and transit profiles independently of stale diagnostic step. */
-    const float bases[]={650,850,300,250,845,1105,390,325,1098.5f,1436.5f,507,422.5f,715,935,1428.05f,765};
-    bool valid_a=false,valid_d=false;
-    for(unsigned i=0;i<sizeof(bases)/sizeof(bases[0]);++i) {
-        valid_a |= fabsf(a-bases[i])<.05f || fabsf(a-bases[i]*16/9)<.05f;
-        valid_d |= fabsf(d-bases[i])<.05f || fabsf(d-bases[i]*16/9)<.05f;
-    }
-    if(!valid_a || !valid_d) return false;
+    /* Both route scales can occur before diagnostics publishes the new step. */
+    bool unscaled=(fabsf(a-650)<.01f || fabsf(a-850)<.01f || fabsf(a-300)<.01f || fabsf(a-250)<.01f);
+    bool scaled=(fabsf(a-845)<.01f || fabsf(a-1105)<.01f || fabsf(a-390)<.01f || fabsf(a-325)<.01f);
+    bool boosted=(fabsf(a-1098.5f)<.02f || fabsf(a-1436.5f)<.02f || fabsf(a-507)<.02f || fabsf(a-422.5f)<.02f);
+    bool retuned=(fabsf(a-714.999f)<.03f || fabsf(a-935)<.03f || fabsf(a-1428.05f)<.03f);
+    if(!unscaled && !scaled && !boosted && !retuned) return false;
+    if(!(fabsf(d-650)<.01f || fabsf(d-850)<.01f || fabsf(d-300)<.01f ||
+         fabsf(d-765)<.03f || fabsf(d-845)<.01f || fabsf(d-1105)<.01f || fabsf(d-390)<.01f)) return false;
     (void)start_speed; blend_end=end_speed;
     return Chassis_Move(x, y, v, a, d);
 }
@@ -118,12 +117,6 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *u) {
 
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n",__LINE__,#x); return 1; } } while(0)
 static void tick(void) {
-    if (!test_blue && !PATH_BLUE_STAIR_TEST && path_diagnostics.step==9) {
-        if (path_diagnostics.phase==30) gray_line=false;
-        else if (path_diagnostics.phase==31) gray_line=true;
-        else if (path_diagnostics.phase==22 && path_diagnostics.point==4) gray_line=false;
-    }
-    if (!test_blue && !PATH_BLUE_STAIR_TEST && path_diagnostics.step==10) gray_line=true;
     if(!moving) { state.x_mm+=pending_x*cosf(yaw)-pending_y*sinf(yaw);
         state.y_mm+=pending_x*sinf(yaw)+pending_y*cosf(yaw);pending_x=pending_y=0; }
     now += 5; PathPorts_Tick();
@@ -282,7 +275,7 @@ int main(int argc, char **argv) {
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==3 && !moving && blend_moves==1);
 #else
         CHECK(path_diagnostics.result==PATH_DONE && path_diagnostics.step==13);
-        CHECK(line_calibrations==0 && map_headings==9 && zero_aligns==0 && path_diagnostics.rfid_count==0);
+        CHECK(line_calibrations==0 && map_headings==8 && zero_aligns==0 && path_diagnostics.rfid_count==0);
 #endif
         CHECK(!PathPorts_Disc() && !PathPorts_Ping());
         CHECK(PathPorts_Start()); tick(); PathPorts_Cancel(); tick();
@@ -473,14 +466,12 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));
         reply("PILLAR_DONE\r\n"); tick(); CHECK(path_diagnostics.step==8);
         gray_line=false;
-        if (!extra) {
-            for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
-            CHECK(!strcmp(wire,"GROUP 2\r\n"));
-            gray_line=false;
-            for(unsigned i=0;i<4 && !moving;i++) tick();
-            CHECK(moving); /* G2 completion does not block approach. */
-            reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
-        }
+        for(unsigned i=0;i<30 && strcmp(wire,"GROUP 2\r\n");i++) {moving=false; tick();}
+        CHECK(!strcmp(wire,"GROUP 2\r\n"));
+        gray_line=false;
+        for(unsigned i=0;i<4 && !moving;i++) tick();
+        CHECK(moving); /* G2 completion does not block approach. */
+        reply("GROUP_ACK 2\r\nGROUP_DONE 2\r\n"); tick();
         for(unsigned i=0;i<30 && strcmp(wire,"GROUP 105\r\n");i++) {moving=false; tick();}
         CHECK(!strcmp(wire,"GROUP 105\r\n"));
         reply("GROUP_ACK 105\r\nGROUP_DONE 105\r\n"); tick();

@@ -11,9 +11,9 @@ serial:
   reconnect_attempts: 3
   reconnect_delay_ms: 250
 roi:
-  x: 64
+  x: 164
   y: 155
-  width: 567
+  width: 367
   height: 144
   edge_margin: 4
 colors:

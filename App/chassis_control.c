@@ -30,7 +30,7 @@
 ChassisConfig chassis_config = {.wheel_radius_mm = 37.5f,
                                 .half_track_mm = 128.5f, /* Measure before arming. */
                                 .half_wheelbase_mm = 130.5f,
-                                .rpm_limit = 260.0f,
+                                .rpm_limit = 200.0f,
                                 .kp = 4.0f,
                                 .ki = 0.00f,
                                 .gyro_damping = 0.15f,
@@ -350,8 +350,9 @@ bool Chassis_ReturnHome(unsigned leg)
         float x=home_x-state.x_mm, y=home_y-state.y_mm;
         float distance=hypotf(x,y);
         float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
+        float mx=(cosf(map_yaw)*x+sinf(map_yaw)*y)*scale;
         float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
-        travel=1650.0f;
+        travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM-route_policy.home_x_extra_trim_mm);
         home_right_target=current_y+-1*(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
         home_return_ready=true;
     } else {
@@ -966,9 +967,6 @@ void Chassis_Update(void)
     bool blending_this_cycle = path_blend;
     float vx = speed * dx, vy = speed * dy, wz = 0;
     float lateral_direction = dy;
-    if (route_policy.force_stair_heading && path_heading_enabled &&
-        !path_rotation && !path_blend)
-        route_heading=heading=Angle_Wrap(map_yaw+route_policy.stair_target_deg*RAD);
     state.yaw_error = Angle_Wrap(heading - state.yaw_rad);
     bool translating = !zero_output && !path_rotation &&
                        (planner.active || (path_body && body_w == 0 && !line_search));
@@ -991,23 +989,6 @@ void Chassis_Update(void)
         yaw_request.mode=HEADING_DYNAMIC;
         yaw_request.error=error;
         yaw_request.feedforward=feedforward;
-        if (route_policy.brake_turn_endpoint) {
-            float remaining=blend_yaw+blend_turn-path_yaw.continuous;
-            float direction=blend_turn>0 ? 1.0f : -1.0f;
-            bool blue=route_policy.mirror_map_y;
-            float projected=remaining*direction;
-            if(!blue) projected-=fmaxf(0,gyro_rad_s*direction)*CHASSIS_BLEND_END_LOOKAHEAD_S;
-            float distance=blue ? fabsf(remaining) : fmaxf(0,projected);
-            float limit=sqrtf(2.0f*(blue ? 1.5f : CHASSIS_BLEND_END_BRAKE_RAD_S2)*distance);
-            yaw_config.limit=fminf(yaw_config.limit,fmaxf(HEADING_FINE_LIMIT,limit));
-            if(!blue) yaw_config.damping=fmaxf(yaw_config.damping,CHASSIS_BLEND_END_DAMPING);
-            if (projected<=0) {
-                if(!blue) integral=0;
-                yaw_request.feedforward=0;
-                yaw_request.error=remaining;state.yaw_error=remaining;
-            } else yaw_request.feedforward=fmaxf(-yaw_config.limit,
-                                      fminf(yaw_config.limit,yaw_request.feedforward));
-        }
         if (blend_continuous && !planner.active)
         {
             /* Keep this cycle's end speed; next tick emits the arc without Hold.
@@ -1087,8 +1068,7 @@ void Chassis_Update(void)
     float stair_hold_error = Angle_Wrap(map_yaw + route_policy.stair_target_deg * RAD - state.yaw_rad);
     bool stair_hold = state.armed && !state.fault && path_heading_enabled &&
                       zero_output && !normal_stopping && route_policy.stationary_hold &&
-                      (route_policy.force_stair_heading || route_policy.hold_during_action ||
-                       fabsf(stair_hold_error)<HEADING_HOLD_ENTRY);
+                      (route_policy.hold_during_action || fabsf(stair_hold_error)<HEADING_HOLD_ENTRY);
     if (zero_output || !state.armed) {
         vx=vy=0;
         yaw_request.mode=HEADING_OFF;
@@ -1102,8 +1082,6 @@ void Chassis_Update(void)
     /* Only the final selected mode evaluates the angle loop. */
     if (yaw_request.mode==HEADING_DYNAMIC && route_policy.use_start_turn_kp)
         yaw_config.kp=HEADING_START_TURN_KP;
-    if (route_policy.soften_disc_approach_kp)
-        yaw_config.kp=route_policy.soften_start_straight_kp ? 3.5f : yaw_config.kp*0.9f;
     wz=HeadingControl_Update(&yaw_request,&yaw_config,dt,&integral);
     chassis_heading_diagnostics.mode=yaw_request.mode;
     chassis_heading_diagnostics.requested_rad_s=wz;
@@ -1127,17 +1105,6 @@ void Chassis_Update(void)
                           (path_heading_active() && route_policy.suppress_lateral_comp)
                               ? 0.0f : chassis_config.forward_lateral_comp);
     if (!blending_this_cycle) vy = forward_comp.vy_final;
-    /* Preserve forward distance while restoring warehouse lateral position. */
-    static uint32_t warehouse_lost_since;
-    static bool warehouse_lost;
-    if (route_policy.warehouse_follow && planner.active && !path_blend && !path_rotation &&
-        route_policy.warehouse_gray!=6U) {
-        if (!warehouse_lost) {warehouse_lost=true;warehouse_lost_since=HAL_GetTick();}
-        unsigned sweep=(HAL_GetTick()-warehouse_lost_since)/2000U;
-        float correction=(sweep&1U ? 1.0f : -1.0f)*PATH_WAREHOUSE_LINE_MM_S;
-        float angle=map_yaw-state.yaw_rad;
-        vx=-sinf(angle)*correction;vy=cosf(angle)*correction;
-    } else warehouse_lost=false;
     if (!config_valid())
     {
         Chassis_Stop();
@@ -1156,8 +1123,6 @@ void Chassis_Update(void)
         /* Stair capture strengthens translation braking only; orbit/yaw stay unchanged. */
         float capture_scale = route_policy.stationary_hold ?
             CHASSIS_STAIR_CAPTURE_BRAKE_SCALE : CHASSIS_CAPTURE_BRAKE_SCALE;
-        if (route_policy.stationary_hold && !route_policy.mirror_map_y)
-            capture_scale=3.0f;
         Motion_SlewVelocity(body_output, target, dt,
                             (normal_stopping ? BODY_BRAKE_MM_S2 * (capture_braking ? capture_scale : 1.0f) : BODY_ACCEL_MM_S2) * route_policy.travel_speed_scale,
                             normal_stopping ? YAW_BRAKE_RAD_S2 * (capture_braking ? CHASSIS_CAPTURE_BRAKE_SCALE : 1.0f) : YAW_ACCEL_RAD_S2);

@@ -18,7 +18,7 @@ int main(void) {
     /* Residual yaw is corrected in motion; keep the original continuous arc. */
     in.motion_done=true;in.settled=false;
     PathChassis_Tick(&m,1100,&in);
-    assert(last.kind==PC_ARC && last.start_speed==25 && last.end_speed==40 && last.y==0 && last.angle==90);
+    assert(last.kind==PC_ARC && last.start_speed==15 && last.end_speed==30 && last.y==0 && last.angle==90);
     assert(m.phase==2 && !m.heading_align_active);
     in.motion_done=false;in.settled=true;
     Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=11;m.entered=2000;
@@ -32,7 +32,7 @@ int main(void) {
         Path_Init(&m,send,0);m.blue=blue;m.result=PATH_RUNNING;m.step=9;m.phase=22;
         in.settled=true;in.x_mm=in.y_mm=0;
         PathChassis_Tick(&m,3000,&in);
-        assert(last.kind==PC_MOVE && last.x==(blue?280:260));
+        assert(last.kind==PC_MOVE && last.x==(blue?280:160));
     }
     Path_Init(&m,send,0);m.blue=true;m.result=PATH_RUNNING;m.step=6;m.phase=3;
     in.motion_done=false;in.map_yaw_deg=280;
