@@ -98,9 +98,9 @@ static void early_warehouse_prep(void) {
   assert(g3==1 && g4==0 && m.point==3 && m.phase==22 && m.prep_pending);
   assert(m.warehouse_prep_started && !m.stair_scanning);
   in.reply=PATH_WAIT; Path_Tick(&m,8,&in);
-  assert(last.kind==PC_MOVE && last.x==(blue?850:810) && last.speed==PATH_STAIR_FAST_SPEED_RPM);
+  assert(last.kind==PC_MOVE && last.x==(blue?870:810) && last.speed==PATH_STAIR_FAST_SPEED_RPM);
   assert(m.prep_pending); /* Travel does not wait for G3. */
-  in.x_mm=blue?900:860; Path_Tick(&m,9,&in); assert(m.phase==27);
+  in.x_mm=blue?920:860; Path_Tick(&m,9,&in); assert(m.phase==27);
   Path_Tick(&m,10,&in); Path_Tick(&m,11,&in);
   assert(m.step==11 && g3==1 && g4==0 && m.prep_pending);
   in.reply=PATH_FAILED; Path_Tick(&m,12,&in); assert(m.result==PATH_ERROR);

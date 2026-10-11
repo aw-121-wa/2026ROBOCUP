@@ -98,95 +98,40 @@ static void advance(PathMission *m, uint32_t now)
     if (m->point==9)
     {
         if (BallInventory_HasKnown(&m->inventory)) fail(m,PATH_ERROR);
-        else if (emit(m,(PathCommand){.kind=PC_HOLD})) m->phase=WAREHOUSE_ALIGN_HOME;
+        else if (emit(m,(PathCommand){.kind=PC_HOLD})) {m->phase=WAREHOUSE_ALIGN_HOME;m->stable=false;}
     }
-}
-static float home_map_y(const PathInput *in)
-{
-    float axis=(in->yaw_deg-in->map_yaw_deg)*0.01745329252f;
-    return -sinf(axis)*in->x_mm+cosf(axis)*in->y_mm;
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
-    if (m->blue && m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
+    if (m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         if (m->phase==WAREHOUSE_ALIGN_HOME) {
-            if(in->settled) { m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->stable=false;m->entered=now; }
-        } else if (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT ||
-                   m->phase==WAREHOUSE_HOME_SEARCH) {
-            unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : m->phase==WAREHOUSE_HOME_RIGHT ? 1 : 2;
-            unsigned gray=in->gray&15U;
-            bool arrived=gray && (gray&(gray-1U));
-            if (!arrived) m->stable=true;
-            if (leg && m->stable && arrived) {
-                if (emit(m,(PathCommand){.kind=PC_HOLD})) {
-                    m->phase=WAREHOUSE_HOME_FINAL_ALIGN;m->waiting=false;m->entered=now;
-                }
-            } else if (!m->waiting) {
+            if (!m->stable) {
+                unsigned middle=in->gray&6U;
+                if (middle==2U || middle==4U) {
+                    if (emit(m,(PathCommand){.kind=PC_HOLD})) m->stable=true;
+                } else (void)emit(m,(PathCommand){.kind=PC_BODY,.x=m->blue ? 20 : -20,.timeout_ms=10000});
+            } else if (in->settled) {
+                m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->entered=now;
+            }
+        } else if (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT) {
+            unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : 1;
+            if (!m->waiting) {
                 if(in->settled) m->waiting=emit(m,(PathCommand){.kind=PC_RETURN_HOME,.argument=leg,.timeout_ms=30000});
             } else if(in->settled) {
-                if(leg==2) {fail(m,PATH_TIMEOUT);return;}
-                m->phase=leg==0 ? WAREHOUSE_HOME_RIGHT : WAREHOUSE_HOME_SEARCH;
+                m->phase=leg==0 ? WAREHOUSE_HOME_RIGHT : WAREHOUSE_HOME_FINAL_ALIGN;
                 m->waiting=false;m->entered=now;
             }
         } else if (m->phase==WAREHOUSE_HOME_FINAL_ALIGN) {
-            float error=remainderf(180.0f-in->map_yaw_deg,360.0f);
+            float target=m->blue ? 180.0f : 0.0f;
+            float error=remainderf(target-in->map_yaw_deg,360.0f);
             if (!isfinite(error)) {fail(m,PATH_ERROR);return;}
-            if ((uint32_t)(now-m->entered)>=PATH_HEADING_TIMEOUT_MS) {fail(m,PATH_TIMEOUT);return;}
             if (!in->settled) return;
             if (fabsf(error)<0.1f) m->result=PATH_DONE;
-            else m->waiting=emit(m,(PathCommand){.kind=PC_HOME_ALIGN,.x=180,.timeout_ms=PATH_HEADING_TIMEOUT_MS});
-        } else fail(m,PATH_ERROR);
-        return;
-    }
-    if (m->point==9 && m->phase==WAREHOUSE_ALIGN_HOME && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
-        /* Brake after unloading, then correct heading during return travel. */
-        if (in->settled) {
-            m->waiting=false; m->stable=false;
-            m->phase=WAREHOUSE_RETURN_HOME; m->entered=now;
-        }
-        return;
-    }
-    if (m->point==9 && m->phase==WAREHOUSE_HOME_ADVANCE) {
-        if (in->settled) m->result=PATH_DONE;
-        else if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=5000U) fail(m,PATH_TIMEOUT);
-        return;
-    }
-    if (m->point==9 && m->phase==WAREHOUSE_HOME_BRAKE) {
-        if (in->settled) {
-            float current=home_map_y(in);
-            float remaining=20.0f-(m->home_line_y-current);
-            if (remaining<=0.5f) m->result=PATH_DONE;
-            else if (!isfinite(remaining)) fail(m,PATH_ERROR);
-            else if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,.y=m->blue ? remaining : -remaining,.timeout_ms=5000})) {
-                m->phase=WAREHOUSE_HOME_ADVANCE; m->entered=now;
-            }
-        }
-        else if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=3000U) fail(m,PATH_TIMEOUT);
-        return;
-    }
-    if (m->point==9 && (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT ||
-                       m->phase==WAREHOUSE_HOME_SEARCH) && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
-        unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : m->phase==WAREHOUSE_HOME_RIGHT ? 1 : 2;
-        unsigned gray=in->gray&15U;
-        bool arrived=gray && (gray&(gray-1U));
-        if (!arrived) m->stable=true; /* Do not mistake the warehouse line for home. */
-        if (leg && m->stable && arrived) {
-            if (emit(m,(PathCommand){.kind=PC_HOLD})) {
-                m->home_line_y=home_map_y(in);
-                m->phase=WAREHOUSE_HOME_BRAKE; m->entered=now;
-            }
-        } else if (!m->waiting) {
-            if (!in->settled) return;
-            m->entered=now;
-            m->waiting=emit(m,(PathCommand){.kind=PC_RETURN_HOME,.argument=leg,.timeout_ms=30000});
-        } else if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
-        else if (in->settled) {
-            if (leg==2) fail(m,PATH_TIMEOUT); /* Distance alone is not proof of arriving home. */
-            else {
-                m->phase=leg==0 ? WAREHOUSE_HOME_RIGHT : WAREHOUSE_HOME_SEARCH;
-                m->waiting=false; m->entered=now;
-            }
-        }
+            else m->waiting=emit(m,(PathCommand){.kind=PC_HOME_ALIGN,.x=target,.timeout_ms=PATH_HEADING_TIMEOUT_MS});
+        } else {fail(m,PATH_ERROR);return;}
+        if (m->result==PATH_RUNNING && !PATH_WAREHOUSE_UNTIMED(m) &&
+            (uint32_t)(now-m->entered)>=(m->phase==WAREHOUSE_HOME_FINAL_ALIGN ? PATH_HEADING_TIMEOUT_MS : 30000U))
+            fail(m,PATH_TIMEOUT);
         return;
     }
     if (m->inventory.uncertain || m->point>=9)
@@ -202,6 +147,13 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
     {
     case WAREHOUSE_ENTRY_BACK:
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=5000U) { fail(m,PATH_TIMEOUT); break; }
+        if (!m->stable) {
+            unsigned middle=in->gray&6U;
+            if (middle==2U || middle==4U) {
+                if (emit(m,(PathCommand){.kind=PC_HOLD})) m->stable=true;
+            } else (void)emit(m,(PathCommand){.kind=PC_BODY,.x=-20,.timeout_ms=5000});
+            break;
+        }
         if (!in->settled) break;
         if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,
                 .y=-PATH_WAREHOUSE_FIRST_RIGHT_MM,.timeout_ms=10000})) {
@@ -295,20 +247,8 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!in->settled) break;
             if (!PathHeading_Ready(m,now,in)) break;
             m->entered=now;
-            if (m->blue) {
-                if (emit(m,(PathCommand){.kind=PC_MOVE,.y=-10,.speed=30,
-                        .acceleration=300,.deceleration=300,.timeout_ms=5000}))
-                    m->phase=WAREHOUSE_FIRST_OFFSET;
-                break;
-            }
-            /* Retreat along map -X, independently of residual body yaw. */
-            float yaw=in->map_yaw_deg*0.01745329252f;
-            if (!isfinite(yaw)) { fail(m,PATH_ERROR); break; }
-            if (emit(m,(PathCommand){.kind=PC_MOVE,
-                    .x=-PATH_WAREHOUSE_ENTRY_BACK_MM*cosf(yaw),
-                    .y=PATH_WAREHOUSE_ENTRY_BACK_MM*sinf(yaw),
-                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=300,.deceleration=300,.timeout_ms=5000}))
-                m->phase=WAREHOUSE_ENTRY_BACK;
+            m->stable=false;
+            m->phase=WAREHOUSE_ENTRY_BACK;
             break;
         }
         if (!m->waiting) {

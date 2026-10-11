@@ -66,6 +66,7 @@ static float chain_yaw, chain_x, chain_y;
 static float blend_x, blend_y, blend_yaw, blend_turn;
 static float path_target, body_x, body_y, body_w, arc_start, arc_turn;
 static uint8_t rotate_stable_count;
+static bool home_alignment;
 static float rotate_tolerance_deg = HEADING_STATIC_TOLERANCE_DEG;
 static bool rotate_measured_zero;
 static bool rotate_map_precision;
@@ -320,12 +321,10 @@ bool Chassis_Arm(void)
     integral = 0;
     return true;
 }
-static float home_x, home_y, map_yaw, home_right_target;
-static bool home_return_ready;
+static float map_yaw;
 void Chassis_BeginPath(void)
 {
-    home_x = state.x_mm; home_y = state.y_mm; map_yaw = state.yaw_rad;
-    home_return_ready=false;
+    map_yaw = state.yaw_rad;
     route_heading = heading = state.yaw_rad;
     path_heading_enabled = true;
     line_yaw_reference = Chassis_MeasuredYaw();
@@ -333,44 +332,18 @@ void Chassis_BeginPath(void)
 }
 bool Chassis_ReturnHome(unsigned leg)
 {
-    if (!path_heading_enabled || !state.armed || !Chassis_IsSettled()) return false;
-    if (route_policy.mirror_map_y) {
-        if (leg>2) return false;
-        /* Blue fixed return: keep the unloading heading and use body-frame directions. */
-        float boost=PATH_TRAVEL_BOOST*route_policy.travel_speed_scale;
-        return Chassis_Move(leg==0 ? 2250.0f : 0,leg==1 ? -1000.0f : leg==2 ? -CHASSIS_HOME_SEARCH_MM : 0,
-                            (leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S*boost),CHASSIS_HOME_ACCEL_MM_S2*boost,
-                            CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
+    if (!path_heading_enabled || !state.armed || !Chassis_IsSettled() || leg>1) return false;
+    float boost=PATH_TRAVEL_BOOST*route_policy.travel_speed_scale;
+    float forward=route_policy.mirror_map_y ? 1710.0f : -1685.0f;
+    float x=leg==0 ? forward : 0, y=leg==1 ? -900.0f : 0;
+    if (!route_policy.mirror_map_y) {
+        float angle=state.yaw_rad-map_yaw, c=cosf(angle), sn=sinf(angle);
+        float bx=x*c+y*sn; y=-x*sn+y*c; x=bx;
+        route_heading=heading=map_yaw; integral=0;
     }
-    /* Return travel keeps heading control active without an angle admission gate. */
-    if (leg>2 || !isfinite(state.x_mm) || !isfinite(state.y_mm) || !isfinite(state.yaw_rad)) return false;
-    float travel;
-    float current_y=-sinf(map_yaw)*state.x_mm+cosf(map_yaw)*state.y_mm;
-    if (leg==0) {
-        float x=home_x-state.x_mm, y=home_y-state.y_mm;
-        float distance=hypotf(x,y);
-        float scale=distance>=5 ? (distance+CHASSIS_HOME_DIAGONAL_EXTEND_MM)/distance : 1;
-        float mx=(cosf(map_yaw)*x+sinf(map_yaw)*y)*scale;
-        float my=(-sinf(map_yaw)*x+cosf(map_yaw)*y)*scale;
-        travel=fmaxf(0,fabsf(mx)-CHASSIS_HOME_X_TRIM_MM-route_policy.home_x_extra_trim_mm);
-        home_right_target=current_y+-1*(fabsf(my)+(distance>=5 ? CHASSIS_HOME_Y_EXTEND_MM : 0));
-        home_return_ready=true;
-    } else {
-        if (!home_return_ready) return false;
-        float remaining=fmaxf(0,1*(current_y-home_right_target));
-        travel=leg==1 ? fmaxf(0,remaining-CHASSIS_HOME_SEARCH_MM) : remaining+CHASSIS_HOME_SEARCH_MM;
-    }
-    if (travel < 0.5f) return true;
-    float angle=state.yaw_rad-map_yaw, c=cosf(angle), sn=sinf(angle);
-    float lateral=-travel;
-    float forward=route_policy.mirror_map_y ? travel : -travel;
-    float bx=leg==0 ? forward*c : lateral*sn;
-    float by=leg==0 ? -forward*sn : lateral*c;
-    route_heading = heading = map_yaw;
-    integral = 0;
-    float boost=leg==2 ? 1.0f : PATH_TRAVEL_BOOST;
-    return Chassis_Move(bx, by, (leg==2 ? CHASSIS_HOME_SEARCH_SPEED_MM_S : CHASSIS_HOME_SPEED_MM_S)*route_policy.travel_speed_scale*boost,
-                        CHASSIS_HOME_ACCEL_MM_S2*route_policy.travel_speed_scale*boost, CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
+    return Chassis_Move(x,y,
+                        CHASSIS_HOME_SPEED_MM_S*boost,CHASSIS_HOME_ACCEL_MM_S2*boost,
+                        CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
 }
 void Chassis_Stop(void)
 {
@@ -562,6 +535,7 @@ bool Chassis_Rotate(float degrees)
 {
     if (!state.armed || Chassis_MotionBusy() || !isfinite(degrees) || fabsf(degrees) > 360)
         return false;
+    home_alignment = false;
     rotate_tolerance_deg = HEADING_STATIC_TOLERANCE_DEG;
     rotate_measured_zero = false;
     rotate_map_precision = false;
@@ -595,7 +569,11 @@ static bool align_map_heading(float degrees, float tolerance)
 }
 
 bool Chassis_AlignMapAxis(void) { return align_map_heading(route_policy.stair_target_deg, STAIR_HEADING_STOP_TOLERANCE_DEG); }
-bool Chassis_AlignHome(float target_deg) { return align_map_heading(target_deg, HEADING_STATIC_TOLERANCE_DEG); }
+bool Chassis_AlignHome(float target_deg) {
+    if (!align_map_heading(target_deg, HEADING_STATIC_TOLERANCE_DEG)) return false;
+    home_alignment=true;
+    return true;
+}
 bool Chassis_MapSearch(float mm_s)
 {
     if (!path_heading_enabled) return false;
@@ -1037,7 +1015,9 @@ void Chassis_Update(void)
             rotate_limit = fminf(limit, chassis_config.wz_limit * 0.6f);
         else
             rotate_limit = fminf(limit, 0.25f * chassis_config.wz_limit);
-        yaw_request.mode=rotate_map_precision && abs_error<=HEADING_FINE_RANGE
+        bool home_coarse=home_alignment && abs_error>0.3f*RAD;
+        if (home_coarse) rotate_limit=fminf(rotate_limit,6.0f*RAD);
+        yaw_request.mode=rotate_map_precision && !home_coarse && abs_error<=HEADING_FINE_RANGE
                              ? HEADING_PRECISION : HEADING_ROTATE;
         yaw_request.error=error;
         yaw_request.limit=rotate_limit;
@@ -1133,7 +1113,8 @@ void Chassis_Update(void)
     {
         /* Preserve the planner's distance braking envelope; smooth yaw only. */
         wz = body_output[2] + clamp(wz - body_output[2],
-            (path_rotation && rotate_map_precision ? HEADING_FINE_SLEW : YAW_ACCEL_RAD_S2) * dt);
+            (path_rotation && rotate_map_precision ?
+                (home_alignment && fabsf(state.yaw_error)>0.3f*RAD ? 20.0f*RAD : HEADING_FINE_SLEW) : YAW_ACCEL_RAD_S2) * dt);
     }
     float t[4], r[4], out[4];
     Mecanum_Inverse(geometry(), vx, vy, 0, t);

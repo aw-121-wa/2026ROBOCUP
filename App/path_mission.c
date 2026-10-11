@@ -28,7 +28,7 @@ static bool emit_move(PathMission *m, float x, float y, float speed,
                      .continuous = continuous, .timeout_ms = 30000};
     if (m->blue || PATH_BLUE_DISC_TEST) {
         if (m->step==0 && m->part==0) {
-            c.kind=PC_MOVE_ROTATE; c.y=-c.y; c.angle=180.0f;
+            c.kind=PC_MOVE_ROTATE; c.y=-c.y-25.0f; c.angle=180.0f;
             c.speed*=BLUE_START_TURN_SPEED_SCALE;
             c.end_speed*=BLUE_START_TURN_SPEED_SCALE;
         } else {

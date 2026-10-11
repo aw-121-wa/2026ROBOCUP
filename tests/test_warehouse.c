@@ -60,10 +60,11 @@ static int run(unsigned mask) {
                 in.turn_reply=PATH_OK; finished_turns=turns; turn_wait=0;
             } else in.turn_reply=PATH_WAIT;
         }
-        if(m.point==9) in.gray=m.phase==5?0:6;
+        if(m.point<9) in.gray=m.phase==15?2:6;
+        if(m.point==9) in.gray=m.phase==6?2:6;
         Path_Tick(&m,t,&in);
     }
-    CHECK(m.result==PATH_DONE && moves==2 && calibrations==3 && homes==1 && !bad);
+    CHECK(m.result==PATH_DONE && moves==2 && calibrations==3 && homes==2 && !bad);
     CHECK(groups==expected && m.inventory.placed==expected && !m.inventory.occupied);
     unsigned seen=0, previous_col=0;
     for(unsigned n=0;n<groups;n++) {
@@ -118,73 +119,36 @@ static int errors(void) {
     init(); m.inventory.occupied=1; m.inventory.uid[0]=123; /* Unknown destination receives the first unused code at warehouse entry. */
     in.settled=true; in.reply=PATH_OK;
     for(unsigned t=0;t<1000 && m.result==PATH_RUNNING;t+=5) {
-        if(m.point==9) in.gray=m.phase==5?0:6;
+        if(m.point<9) in.gray=m.phase==15?2:6;
+        if(m.point==9) in.gray=m.phase==6?2:6;
         Path_Tick(&m,t,&in);
     }
     CHECK(m.result==PATH_DONE && moves==2 && groups==1 && m.inventory.occupied==0 && m.inventory.inferred==1);
     return 0;
 }
-static int home_line_stop(void) {
- init(); m.point=9; m.phase=6;
- PathInput tilted={.armed=true,.settled=false,.map_yaw_deg=12};
- Path_Tick(&m,0,&tilted); CHECK(m.phase==6);
- tilted.settled=true;
- Path_Tick(&m,20000,&tilted); CHECK(m.phase==5 && m.result==PATH_RUNNING);
- Path_Tick(&m,20005,&tilted); CHECK(last.kind==PC_RETURN_HOME && last.argument==0);
- for(unsigned mask=0;mask<16;mask++) {
-  init(); m.point=9; m.phase=5;
-  PathInput in={.armed=true,.settled=true,.gray=15};
-  Path_Tick(&m,0,&in); CHECK(homes==1 && m.result==PATH_RUNNING);
-  in.settled=false; Path_Tick(&m,5,&in); CHECK(m.phase==5);
-  in.gray=0; Path_Tick(&m,10,&in);
-  in.settled=true; Path_Tick(&m,11,&in); CHECK(m.phase==16);
-  Path_Tick(&m,12,&in); CHECK(last.kind==PC_RETURN_HOME && last.argument==1);
-  in.settled=false; in.gray=mask; Path_Tick(&m,15,&in);
-  unsigned bits=0;for(unsigned i=0;i<4;i++)bits+=(mask>>i)&1U;
-  if(bits>=2) {
-   CHECK(m.phase==14 && last.kind==PC_HOLD && m.result==PATH_RUNNING);
-   in.gray=0;Path_Tick(&m,20,&in);CHECK(m.phase==14);
-   in.settled=true;Path_Tick(&m,25,&in);
-   CHECK(m.result==PATH_RUNNING && last.kind==PC_MAP_LATERAL && last.y==-20);
-   in.settled=false;Path_Tick(&m,30,&in);CHECK(m.result==PATH_RUNNING);
-   in.settled=true;Path_Tick(&m,35,&in);CHECK(m.result==PATH_DONE);
-  } else CHECK(m.phase==16 && m.result==PATH_RUNNING);
+static int home_fixed_return(void) {
+ for(unsigned blue=0;blue<2;blue++) for(unsigned mask=0;mask<16;mask++) {
+  init();m.blue=blue;m.point=9;m.phase=6;m.stable=false;
+  PathInput in={.armed=true,.settled=false,.gray=mask,.map_yaw_deg=blue?180:0};
+  Path_Tick(&m,0,&in);
+  bool split=(mask&6)==2 || (mask&6)==4;
+  CHECK(last.kind==(split?PC_HOLD:PC_BODY));
+  if(!split) {in.gray=2;Path_Tick(&m,5,&in);CHECK(last.kind==PC_HOLD);}
+  Path_Tick(&m,6,&in);CHECK(m.phase==6);
+  in.settled=true;Path_Tick(&m,10,&in);CHECK(m.phase==5);
+  Path_Tick(&m,15,&in);CHECK(last.kind==PC_RETURN_HOME && last.argument==0);
+  in.settled=false;in.gray=15;Path_Tick(&m,20,&in);CHECK(m.phase==5);
+  in.settled=true;Path_Tick(&m,25,&in);CHECK(m.phase==16);
+  Path_Tick(&m,30,&in);CHECK(last.kind==PC_RETURN_HOME && last.argument==1);
+  Path_Tick(&m,35,&in);CHECK(m.phase==20);
+  in.map_yaw_deg+=1;Path_Tick(&m,40,&in);CHECK(last.kind==PC_HOME_ALIGN);
+  in.settled=false;in.map_yaw_deg=blue?180:0;Path_Tick(&m,45,&in);CHECK(m.result==PATH_RUNNING);
+  in.settled=true;Path_Tick(&m,50,&in);CHECK(m.result==PATH_DONE);
  }
- return 0;
-}
-static int home_advance_braking(void) {
- for(unsigned blue=0;blue<1;++blue) for(unsigned slide=0;slide<=25;slide+=5) {
-  init();m.blue=blue;m.point=9;m.phase=16;m.stable=true;m.waiting=true;
-  PathInput in={.armed=true,.gray=6,.y_mm=100};
-  Path_Tick(&m,0,&in);CHECK(m.phase==14 && last.kind==PC_HOLD);
-  in.y_mm=blue ? 100+slide : 100-slide;in.settled=true;
-  Path_Tick(&m,100,&in);
-  if(slide>=20) CHECK(m.result==PATH_DONE);
-  else {
-   CHECK(m.phase==18 && last.kind==PC_MAP_LATERAL && last.y==(blue ? 1 : -1)*(20.0f-slide));
-   in.settled=false;Path_Tick(&m,200,&in);CHECK(m.phase==18 && m.result==PATH_RUNNING);
-   Path_Tick(&m,5100,&in);CHECK(m.result==PATH_TIMEOUT);
-  }
- }
- return 0;
-}
-static int home_missing_line(void) {
- init(); m.point=9; m.phase=5;
- PathInput in={.armed=true,.settled=true,.gray=15};
- Path_Tick(&m,0,&in); CHECK(last.kind==PC_RETURN_HOME && last.argument==0);
- in.settled=false;Path_Tick(&m,5,&in);CHECK(m.phase==5);
- in.gray=0;Path_Tick(&m,10,&in);
- in.settled=true;Path_Tick(&m,15,&in);CHECK(m.phase==16);
- Path_Tick(&m,20,&in);CHECK(last.kind==PC_RETURN_HOME && last.argument==1);
- Path_Tick(&m,25,&in);CHECK(m.phase==17);
- Path_Tick(&m,30,&in);CHECK(last.kind==PC_RETURN_HOME && last.argument==2);
- Path_Tick(&m,35,&in);CHECK(m.result==PATH_TIMEOUT); /* No gray: not PATH_DONE. */
  return 0;
 }
 int main(void) {
-    CHECK(home_advance_braking()==0);
-    CHECK(home_missing_line()==0);
-    CHECK(home_line_stop()==0);
+    CHECK(home_fixed_return()==0);
     for(unsigned mask=0;mask<512;mask++) CHECK(run(mask)==0);
     CHECK(optimized_order()==0); CHECK(errors()==0); CHECK(alignment()==0);
     puts("warehouse sorted rows, missing cells, three columns and failure gates passed"); return 0;

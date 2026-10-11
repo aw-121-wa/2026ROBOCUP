@@ -48,6 +48,7 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
+    if(path_diagnostics.step==13 && (path_diagnostics.phase==15 || path_diagnostics.phase==6) && port==GPIOD && pin==GPIO_PIN_1) return GPIO_PIN_SET;
     if(path_diagnostics.blue && path_diagnostics.step==9 && path_diagnostics.phase==30 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
     if(path_diagnostics.step==13 && path_diagnostics.phase==5 && pin!=GPIO_PIN_10) return GPIO_PIN_SET;
     return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
@@ -72,7 +73,7 @@ bool Chassis_Move(float x, float y, float v, float a, float d) {
 #endif
     (void)x; (void)y; (void)v; (void)a; (void)d;
     if (test_blue && path_diagnostics.step==0 && fabsf(x)>100 && y!=0) assert(x>0 && y<0);
-    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1395 && y==-765);
+    if (test_blue && path_diagnostics.step==5 && fabsf(x)>100) assert(x==1385 && y==-765);
     if (!state.armed || moving) return false;
     pending_x=x; pending_y=y; moving = true; return true;
 }

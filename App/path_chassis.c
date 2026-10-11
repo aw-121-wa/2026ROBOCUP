@@ -201,7 +201,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 280.0f : 160.0f, 500, m->blue ? 675.0f : 600.0f, m->blue ? 900.0f : 860.0f};
+    const float ends[] = {m->blue ? 330.0f : 160.0f, 500, m->blue ? 735.0f : 600.0f, m->blue ? 920.0f : 860.0f};
     if (m->phase >= 20 && m->phase != 30 && m->phase != 31) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;
@@ -397,7 +397,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             PathCommand c={.kind=PC_MOVE_ROTATE,.x=-1425,.y=-725,
                 .angle=90,.speed=195,.end_speed=PILLAR_SEARCH_SPEED_RPM,
                 .continuous=true,.timeout_ms=30000};
-            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x-30; c.y-=40; c.angle=-90; }
+            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x-40; c.y-=40; c.angle=-90; }
             if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
         } else if (in->motion_done) {
             next(m,now); pillar(m,now,in); /* Orbit remains gated by debounced IR. */
