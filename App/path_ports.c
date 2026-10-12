@@ -261,6 +261,10 @@ static bool send(void *ctx, const PathCommand *c)
     float speed_scale = PathPolicy_Chassis(mission.blue,mission.result,mission.step,mission.phase).travel_speed_scale;
     float boost = PathPolicy_CommandBoost(mission.step,c->kind);
     float accel_scale = speed_scale * fminf(boost,PATH_TRAVEL_BOOST);
+    /* Travel only: keep acquisition speeds, boundary speeds and acceleration unchanged. */
+    if(mission.step!=6 && mission.step!=9 && mission.step!=12 && mission.step!=13 &&
+       (c->kind==PC_MOVE || c->kind==PC_MOVE_ROTATE || c->kind==PC_ARC ||
+        c->kind==PC_ORBIT_EXIT || c->kind==PC_ORBIT_ARC)) boost*=1.25f;
     float scale = speed_scale * 2.0f * 3.141592654f * chassis_config.wheel_radius_mm / 60.0f;
     switch (c->kind)
     {
@@ -287,9 +291,11 @@ static bool send(void *ctx, const PathCommand *c)
     case PC_RETURN_HOME:
         if (!Chassis_ReturnHome(c->argument)) return false;
         return motion_started(c,now,false);
+#if !PATH_CONTINUOUS_WAREHOUSE
     case PC_FINISH_FORWARD:
         if (!Chassis_FinishForward(c->x,c->speed*scale*boost,c->acceleration*accel_scale,c->deceleration*speed_scale)) return false;
         return motion_started(c,now,false);
+#endif
     case PC_MOVE:
         if (!Chassis_MoveBoundary(c->x, c->y, c->speed * scale * boost,
                                   (c->acceleration > 0 ? c->acceleration : PATH_MOVE_ACCEL_MM_S2) * accel_scale,
@@ -350,9 +356,13 @@ static bool send(void *ctx, const PathCommand *c)
         motion_pending = false;
         motion_continuous = false;
         return true;
+    case PC_WAREHOUSE_STREAM:
+        return mission.step==13 && Rdk_Scan(&rdk,c->argument);
+#if !PATH_CONTINUOUS_WAREHOUSE
     case PC_WAREHOUSE_DIGIT:
         return mission.step==13 && c->argument<=14 &&
                Rdk_WarehouseBegin(&rdk,(uint8_t)c->argument,now,c->timeout_ms);
+#endif
     case PC_HELLO:
         return Rdk_Begin(&rdk, "HELLO", 0, now, 2000);
     case PC_TURN:
@@ -757,6 +767,11 @@ void PathPorts_Tick(void)
         gray |= 4;
     if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_1) == GPIO_PIN_RESET)
         gray |= 2;
+    /* Preserve two-probe behavior elsewhere; warehouse uses all four probes. */
+    if (mission.step==12 || mission.step==13) {
+        if (HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_3)==GPIO_PIN_RESET) gray|=8;
+        if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13)==GPIO_PIN_RESET) gray|=1;
+    }
     bool disc_deadline = mission.result == PATH_RUNNING && mission.step == 3 &&
                          mission.phase == 1 &&
                          (uint32_t)(now - mission.entered) >= DISC_TASK_TIMEOUT_MS;
@@ -794,6 +809,11 @@ void PathPorts_Tick(void)
                     .ir = ir_raw == 0,
                     .warehouse_vision = PATH_RDK_ENABLE != 0,
                     .warehouse_ready = rdk.warehouse_ready,
+                    .destack_enabled = PATH_CONTINUOUS_WAREHOUSE && !PATH_SKIP_MATERIAL(&mission),
+                    .scan_active = rdk.scan_active,
+                    .scan_fresh = rdk.scan_seen && !rdk.scan_stopping && (uint32_t)(now-rdk.scan_received)<250,
+                    .scan_digit = rdk.scan_digit, .scan_offset = rdk.scan_offset,
+                    .scan_frame = rdk.scan_frame,
                     .warehouse_digit = rdk.warehouse_digit,
                     .warehouse_digit_reply = rdk.warehouse_reply,
                     .vision_ready = rdk.pillar_ready,

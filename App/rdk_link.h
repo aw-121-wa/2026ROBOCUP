@@ -5,6 +5,11 @@
 typedef bool (*RdkTransmit)(void *context, const char *data, size_t size);
 typedef struct
 {
+    uint32_t now, scan_token, scan_received, scan_frame;
+    bool scan_active, scan_pending, scan_stopping, scan_seen;
+    uint8_t scan_digit;
+    int16_t scan_offset;
+    char scan_request[48];
     uint32_t session, sequence, started, last_tx, timeout;
     PathReply reply, interrupted_reply;
     uint32_t interrupted_sequence;
@@ -34,6 +39,7 @@ typedef struct
 void Rdk_Init(RdkLink *r, uint32_t session, RdkTransmit transmit, void *context);
 bool Rdk_Begin(RdkLink *r, const char *verb, uint32_t argument, uint32_t now, uint32_t timeout);
 bool Rdk_WarehouseBegin(RdkLink *r, uint8_t excluded, uint32_t now, uint32_t timeout);
+bool Rdk_Scan(RdkLink *r, unsigned row);
 void Rdk_Feed(RdkLink *r, uint8_t byte);
 void Rdk_Tick(RdkLink *r, uint32_t now);
 bool Rdk_TakeDiscActionDone(RdkLink *r, uint8_t *index);

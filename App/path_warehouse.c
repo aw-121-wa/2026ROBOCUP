@@ -1,6 +1,7 @@
 #include "path_warehouse.h"
 #include "path_chassis.h"
 #include "path_config.h"
+#include "path_destack.h"
 #include <math.h>
 /* Compare all 6^3 row orders once, including the transitions between columns.
  * Cache pocket lookups before enumeration; replan when a new digit changes the mapping. */
@@ -12,6 +13,25 @@ static void plan_warehouse(PathMission *m)
 {
     (void)BallInventory_AssignMissing(&m->inventory);
     static const uint8_t orders[6][3]={{1,2,3},{1,3,2},{2,1,3},{2,3,1},{3,1,2},{3,2,1}};
+#if PATH_CONTINUOUS_WAREHOUSE
+    /* Column order is selected by distance; optimize only the column being served. */
+    unsigned col=m->point/3,best=~0U,chosen=0;
+    int slots[3];
+    for(unsigned row=0;row<3;++row)
+        slots[row]=BallInventory_Find(&m->inventory,(uint8_t)(((row+1)<<4)|column_code(m,col)));
+    for(unsigned candidate=0;candidate<6;++candidate) {
+        unsigned current=m->inventory.current,cost=0;
+        for(unsigned i=0;i<3;++i) {
+            int slot=slots[orders[candidate][i]-1];
+            if(slot<0) continue;
+            unsigned forward=((unsigned)slot+BALL_SLOT_COUNT-current)%BALL_SLOT_COUNT;
+            unsigned reverse=(current+BALL_SLOT_COUNT-(unsigned)slot)%BALL_SLOT_COUNT;
+            cost+=forward<reverse?forward:reverse;current=(unsigned)slot;
+        }
+        if(cost<best) {best=cost;chosen=candidate;}
+    }
+    for(unsigned i=0;i<3;++i) m->warehouse_order[col*3+i]=orders[chosen][i];
+#else
     int slots[9];
     for(unsigned col=0;col<3;col++)
         for(unsigned row=0;row<3;row++)
@@ -34,6 +54,7 @@ static void plan_warehouse(PathMission *m)
     }
     for(unsigned col=0;col<3;col++,chosen/=6)
         for(unsigned i=0;i<3;i++) m->warehouse_order[col*3+i]=orders[chosen%6][i];
+#endif
     m->warehouse_plan_ready=true;
 }
 uint8_t PathWarehouse_Code(const PathMission *m)
@@ -64,6 +85,7 @@ static bool emit(PathMission *m, PathCommand command)
     return false;
 }
 /* Recognition and first-column fallback must stop motion before unloading. */
+#if !PATH_CONTINUOUS_WAREHOUSE
 static void brake_for_unload(PathMission *m, uint32_t now)
 {
     if (!emit(m, (PathCommand){.kind=PC_HOLD})) return;
@@ -89,8 +111,10 @@ static void remember_digit(PathMission *m, uint8_t digit)
     m->warehouse_used|=(uint8_t)(1U<<digit);
     m->warehouse_plan_ready=false;
 }
+#endif
 static void advance(PathMission *m, uint32_t now)
 {
+    if(PathDestack_Advance(m,now)) return;
     ++m->point;
     m->waiting=false;
     m->entered=now;
@@ -103,6 +127,7 @@ static void advance(PathMission *m, uint32_t now)
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
+    if(PathDestack_Tick(m,now,in)) return;
     if (m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
         if (m->phase==WAREHOUSE_ALIGN_HOME) {
             if (!m->stable) {
@@ -145,6 +170,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         (m->phase==WAREHOUSE_MOVE && m->point==0 && in->warehouse_vision))) return;
     switch(m->phase)
     {
+#if !PATH_CONTINUOUS_WAREHOUSE
     case WAREHOUSE_ENTRY_BACK:
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=5000U) { fail(m,PATH_TIMEOUT); break; }
         if (!m->stable) {
@@ -295,6 +321,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             m->inventory.uncertain=true;
         }
         break;
+#endif
     case WAREHOUSE_SELECT_BALL:
     {
         if (PATH_BLUE_WAREHOUSE_TEST || PATH_SKIP_MATERIAL(m)) {

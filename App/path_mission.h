@@ -51,6 +51,7 @@ typedef enum
     PC_FINISH_FORWARD, /* Retarget current straight motion without stopping. */
     PC_ORBIT_EXIT, /* Transfer moving orbit to map-heading translation. */
     PC_ORBIT_ARC, /* Enter stair arc directly from moving orbit. */
+    PC_WAREHOUSE_STREAM, /* argument: 0=columns, 1..3=block row, 4=stop. */
 } PathCommandKind;
 typedef struct
 {
@@ -73,12 +74,16 @@ typedef struct
     float x_mm, y_mm; /* Command-integrated open-loop odometry, in world frame. */
     float map_yaw_deg; /* Measured yaw relative to the fixed PATH start direction. */
     float imu_yaw_deg; /* Latest validated JY60 angle, without software zero/integration. */
-    uint8_t gray; /* Two active probes: front PD0 bit 2, rear PD1 bit 1; both on = 0110. */
+    uint8_t gray; /* Warehouse: PD3/PD0/PD1/PB13 bits 3..0. Other tasks use middle two. */
     bool ir;
     uint16_t rfid; /* IDs seen since preceding tick, bit N is raw ID N */
     PathReply reply, turn_reply, interrupted_reply;
     bool warehouse_vision;
     bool warehouse_ready;
+    bool destack_enabled, scan_active, scan_fresh;
+    uint8_t scan_digit;
+    int16_t scan_offset; /* horizontal pixels relative to camera center */
+    uint32_t scan_frame;
     uint8_t warehouse_digit;
     PathReply warehouse_digit_reply;
     bool vision_ready;
@@ -91,8 +96,18 @@ typedef enum {
     LINE_FALLBACK_HEADING, LINE_BRAKE_REVERSE, LINE_SWEEP_REVERSE,
     LINE_BRAKE_FINAL, LINE_SWEEP_FINAL
 } PathLineSearchState;
+typedef struct {
+    bool enabled, cleared, correcting, stopping, stream, arm_wait, sample_valid, braking;
+    uint8_t state, row, column, target, occupied, mapped, sample_digit;
+    uint16_t handled;
+    uint32_t since, frame, fresh_since;
+    float axis, origin, columns[3], resume, goal, scan_end, current_position;
+    float sample_position, sample_offset, pixel_slope;
+    int8_t direction;
+} PathDestack;
 typedef struct
 {
+    PathDestack destack;
     bool blue; /* Runtime side; fixed for an entire mission. */
     PathResult result;
     unsigned step, phase, part, point, grabs;

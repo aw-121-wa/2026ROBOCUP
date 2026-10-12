@@ -342,7 +342,7 @@ bool Chassis_ReturnHome(unsigned leg)
         route_heading=heading=map_yaw; integral=0;
     }
     return Chassis_Move(x,y,
-                        CHASSIS_HOME_SPEED_MM_S*boost,CHASSIS_HOME_ACCEL_MM_S2*boost,
+                        CHASSIS_HOME_SPEED_MM_S*boost*1.25f,CHASSIS_HOME_ACCEL_MM_S2*boost,
                         CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
 }
 void Chassis_Stop(void)

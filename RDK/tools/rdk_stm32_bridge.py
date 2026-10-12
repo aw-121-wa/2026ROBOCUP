@@ -29,6 +29,7 @@ from stair_task import run_stair_point
 from vision_servo_direct_test import build_parser as build_disc_parser, run_disc_task
 from rdk_vision.config import load_config
 from shared_task_camera import SharedTaskCamera
+from rdk_vision.warehouse_stream import run_stream
 from rdk_vision.warehouse_digits import load_number_config, recognize_number, NumberCameraSession
 from stair_scan import run_stair_scan
 
@@ -136,6 +137,7 @@ class BridgeCore:
         close_camera=lambda: None,
         run_scan=None,
         run_number=None,
+        run_stream=None,
         prepare_number=lambda: None,
         close_number=lambda: None,
         select_color=None,
@@ -155,6 +157,8 @@ class BridgeCore:
         self._run_scan = run_scan
         self._prepare_number = prepare_number
         self._close_number = close_number
+        self._run_stream = run_stream
+        self._stream_token = None
         self._run_number = run_number
         self._close_camera = close_camera
         self._scan_level = None
@@ -165,6 +169,27 @@ class BridgeCore:
         self._stopped = threading.Event()
         self._ball = 0
         self._waiting_stop = False
+
+    def _stream_main(self, token, row):
+        sequence=0
+        def publish(frame,digit,offset):
+            nonlocal sequence
+            sequence+=1
+            self._send_line(f'WH_FRAME {token} {sequence} {digit} {offset}')
+        try:
+            while not self._cancel.is_set():
+                try:
+                    if self._run_stream is None: raise RuntimeError('warehouse stream unavailable')
+                    self._run_stream(row, cancel=self._cancel,
+                        emit=publish)
+                except Exception as exc:
+                    print(f'Warehouse stream retry: {exc!r}',flush=True)
+                    self._close_camera();self._close_number()
+                    self._cancel.wait(.5)
+        finally:
+            with self._lock:
+                self._worker=self._mode=self._stream_token=None
+                self._send_line(f'WH_DONE {token}')
 
     def _number_main(self, token, excluded):
         digit=0
@@ -336,6 +361,22 @@ class BridgeCore:
         if command == "PING":
             self._send_line("PONG")
             return
+        match=re.fullmatch(r'WH_SCAN ([1-9][0-9]{0,9}) ([0-3])',command)
+        if match:
+            token,row=map(int,match.groups())
+            if token>0xffffffff: return
+            with self._lock:
+                if self._worker is not None: return
+                self._cancel.clear();self._mode='warehouse_stream';self._stream_token=token
+                self._worker=threading.Thread(target=self._stream_main,args=(token,row),daemon=True)
+                self._worker.start()
+            return
+        match=re.fullmatch(r'WH_STOP ([1-9][0-9]{0,9})',command)
+        if match:
+            with self._lock:
+                if self._mode=='warehouse_stream' and self._stream_token==int(match.group(1)):
+                    self._cancel.set()
+            return
         match=re.fullmatch(r'WAREHOUSE_CHECK ([1-9][0-9]{0,9}) ([0-9]{1,2})',command)
         if match:
             token,excluded=map(int,match.groups())
@@ -346,7 +387,7 @@ class BridgeCore:
                 self._worker=threading.Thread(target=self._number_main,args=(token,excluded),daemon=True)
                 self._worker.start()
             return
-        match = re.fullmatch(r'GROUP (0|1|2|3|4|100|105|109|110|111)', command)
+        match = re.fullmatch(r'GROUP (0|1|2|3|4|100|105|109|110|111|112|113|114|115|116|117|118|119|120)', command)
         if match:
             with self._lock:
                 if self._worker is not None: return
@@ -558,6 +599,7 @@ def service_loop(project_root: Path, port: str, baudrate: int, reconnect_delay_s
                     camera_session=camera_session,color=color,**kwargs),
                 close_camera=camera_session.close,
                 run_number=number_session.recognize,
+                run_stream=lambda row,**kw:run_stream(project_root,row,camera_session,number_session,color=color,**kw),
                 prepare_number=number_session.start,
                 close_number=number_session.close,
                 select_color=select_color,

@@ -71,6 +71,7 @@ class DigitDetector:
         return self.variant_cache[key]
 
     def detect(self,frame):
+        self.last_center = None
         gray=cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY) if frame.ndim==3 else frame
         if gray.size==0: return 0,0.0
         _,mask=cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV|cv2.THRESH_OTSU)
@@ -107,12 +108,13 @@ class DigitDetector:
             minimum=max(.72,self.min_score) if partial else self.min_score
             margin=max(.16,self.min_margin) if partial else self.min_margin
             if scores[0][0]>=minimum and scores[0][0]-scores[1][0]>=margin:
-                candidates.append((scores[0][1],scores[0][0],sources))
+                candidates.append((scores[0][1],scores[0][0],sources,x+w/2))
         selected=[]
-        for digit,score,sources in sorted(candidates,key=lambda item:item[1],reverse=True):
+        for digit,score,sources,center in sorted(candidates,key=lambda item:item[1],reverse=True):
             overlaps=[other for other in selected if sources & other[2]]
             if any(other[0]!=digit for other in overlaps): return 0,0.0
-            if not overlaps: selected.append((digit,score,sources))
+            if not overlaps: selected.append((digit,score,sources,center))
+        if len(selected)==1: self.last_center=selected[0][3]
         return selected[0][:2] if len(selected)==1 else (0,0.0)
 
 class DigitConfirmation:
