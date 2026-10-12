@@ -13,7 +13,7 @@ from .block_digits import BlockDetector
 from .config import load_config
 
 
-def locate(frame, templates, roi, min_score=.72, min_margin=.12, min_height=20):
+def locate(frame, templates, roi, min_score=.72, min_margin=.12, min_height=20, score_floor=.73):
     x,y,w,h=roi
     if frame is None or x+w>frame.shape[1] or y+h>frame.shape[0]: return 0,0
     crop=frame[y:y+h,x:x+w]
@@ -39,7 +39,7 @@ def locate(frame, templates, roi, min_score=.72, min_margin=.12, min_height=20):
                 score=float(np.count_nonzero(glyph&template))/max(1,np.count_nonzero(glyph|template))
                 scores[digit]=max(scores[digit],score)
             ranked=sorted(((score,digit) for digit,score in scores.items()),reverse=True)
-            if ranked[0][0]<max(.73,min_score) or ranked[0][0]-ranked[1][0]<min_margin: continue
+            if ranked[0][0]<max(score_floor,min_score) or ranked[0][0]-ranked[1][0]<min_margin: continue
             center=x+left+a+c/2
             found.append((ranked[0][1],center,ranked[0][0]))
     if not found: return 0,0
@@ -48,6 +48,17 @@ def locate(frame, templates, roi, min_score=.72, min_margin=.12, min_height=20):
     # Multiple visible glyphs are not allowed to masquerade as one centered glyph.
     if any(other!=digit or abs(cx-center)>12 for other,cx,_ in found[1:]): return 0,0
     return digit,round(center-frame.shape[1]/2)
+
+
+def locate_number(frame,detector,roi):
+    """Retry the central half when shelf background hides the single digit."""
+    x,y,w,h=roi
+    for left,width in ((x,w),(x+w//4,w//2)):
+        digit,_=detector.detect(frame[y:y+h,left:left+width])
+        center=detector.last_center
+        if digit and center is not None:
+            return digit,round(left+center-frame.shape[1]/2)
+    return 0,0
 
 
 class StableLocation:
@@ -77,6 +88,8 @@ def run_stream(project_root,row,camera_session,number_session,*,color,cancel,emi
         camera=camera_session.borrow(config.camera,cancelled=cancel.is_set)
         camera.start()
         roi=(0,settings['roi'][1],640,settings['roi'][3])
+        if row==2:
+            roi=(0,max(0,roi[1]-20),640,roi[3]+40)
         templates=detector.templates
         score=settings.get('min_score',.72);margin=settings.get('min_margin',.12)
     else:
@@ -98,12 +111,10 @@ def run_stream(project_root,row,camera_session,number_session,*,color,cancel,emi
         if time.monotonic()-stamp>2: raise TimeoutError('warehouse camera stalled')
         if stamp<requested or frame_id==gate.last_id: continue
         if row:
-            digit,offset=locate(frame,templates,roi,score,margin)
+            digit,offset=locate(frame,templates,roi,score,margin,score_floor=.73 if row==1 else .70)
         else:
             x,y,w,h=roi
-            digit,_=number_session.detector.detect(frame[y:y+h,x:x+w])
-            center=number_session.detector.last_center
-            offset=round(x+center-frame.shape[1]/2) if center is not None else 0
+            digit,offset=locate_number(frame,number_session.detector,roi)
         result=gate.update(digit,offset,frame_id,stamp,time.monotonic())
         if result is not None:
             sequence+=1;emit(sequence,*result)

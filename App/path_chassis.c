@@ -2,7 +2,7 @@
 #include "path_chassis.h"
 #include "stair_heading.h"
 #include "path_warehouse.h"
-#define PILLAR_SEARCH_SPEED_RPM 30.0f
+
 /* Post-disc route, including RDK preparation and stop/grab/resume at the pillar. */
 static bool emit(PathMission *m, PathCommandKind k, float x, float y, float v, uint32_t arg,
                  uint32_t timeout)
@@ -46,8 +46,8 @@ static void leave_pillar(PathMission *m, uint32_t now, const PathInput *in)
 /* Keep reduced translation speed; angular speed / 1.05 enlarges radius by 5%. */
 static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float orbit_degrees=m->blue ? 530.0f : 358.0f;
-    const float orbit_x=m->blue ? -76.89408f : -80.94114f;
+    const float orbit_degrees=m->blue ? ROUTE_ORBIT_BLUE_DEG : ROUTE_ORBIT_RED_DEG;
+    const float orbit_x=m->blue ? ROUTE_ORBIT_BLUE_X_RPM : ROUTE_ORBIT_RED_X_RPM;
     const uint32_t orbit_limit=m->blue ? 25000U : 15000U;
     if ((PATH_VISION_ENABLE && in->reply == PATH_FAILED) ||
         (m->phase >= 4 && (uint32_t)(now - m->entered) >=
@@ -81,7 +81,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         }
         else
             m->stable = false;
-        (void)emit(m, PC_BODY, 0, 30, 0, 0, 10000);
+        (void)emit(m, PC_BODY, 0, ROUTE_PILLAR_IR_SEARCH_RPM, 0, 0, 10000);
         break;
     case 1:
         if (in->settled && !m->prep_pending)
@@ -104,7 +104,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->orbit_yaw = in->yaw_deg;
                 m->orbit_ms = 0;
                 m->previous = now;
-                if (emit(m, PC_BODY, orbit_x, 0, -58.653f, 0, orbit_limit)) m->phase = 2;
+                if (emit(m, PC_BODY, orbit_x, 0, ROUTE_ORBIT_ROTATION_RPM, 0, orbit_limit)) m->phase = 2;
                 break;
             }
             if (emit(m, PC_VISION, 0, 0, 0, 0, 300000))
@@ -147,7 +147,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 m->phase = 5;
                 m->entered = now;
             }
-            else if (emit(m, PC_BODY, orbit_x, 0, -58.653f, 0, orbit_limit)) m->phase = 2;
+            else if (emit(m, PC_BODY, orbit_x, 0, ROUTE_ORBIT_ROTATION_RPM, 0, orbit_limit)) m->phase = 2;
         }
         break;
     case 5:
@@ -170,7 +170,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             }
             else if (m->orbit_yaw - in->yaw_deg >= orbit_degrees)
                 leave_pillar(m,now,in);
-            else if (emit(m, PC_BODY, orbit_x, 0, -58.653f, 0, orbit_limit - m->orbit_ms)) m->phase = 2;
+            else if (emit(m, PC_BODY, orbit_x, 0, ROUTE_ORBIT_ROTATION_RPM, 0, orbit_limit - m->orbit_ms)) m->phase = 2;
         }
         break;
     case 7:
@@ -201,7 +201,7 @@ static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id
 /* Continuous stair scan. Distances include braking and survive RFID pauses. */
 static void stair(PathMission *m, uint32_t now, const PathInput *in)
 {
-    const float ends[] = {m->blue ? 330.0f : 160.0f, 500, m->blue ? 735.0f : 600.0f, m->blue ? 920.0f : 860.0f};
+    const float ends[] = {m->blue ? ROUTE_STAIR_BLUE_FIRST_MM : ROUTE_STAIR_RED_FIRST_MM, ROUTE_STAIR_UNUSED_MM, m->blue ? ROUTE_STAIR_BLUE_SECOND_MM : ROUTE_STAIR_RED_SECOND_MM, m->blue ? ROUTE_STAIR_BLUE_END_MM : ROUTE_STAIR_RED_END_MM};
     if (m->phase >= 20 && m->phase != 30 && m->phase != 31) {
         if (m->point >= 4 || !isfinite(in->x_mm) || !isfinite(in->y_mm)) {
             fail(m, PATH_ERROR); return;
@@ -219,7 +219,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             if (!emit(m,PC_GROUP,0,0,0,105,30000)) break;
             m->stair_ready_started=true; m->prep_pending=true; m->prep_since=now;
         }
-        if (PathLine_Align(m,now,in,50000,PATH_STAIR_SEARCH_SLOW_RPM)) {
+        if (PathLine_Align(m,now,in,50000,PATH_STAIR_SEARCH_SLOW_RPM_COMMAND)) {
             if (PATH_STOP_AT_STAIR_LINE) {
                 hold(m); m->result=PATH_DONE;
                 break;
@@ -249,7 +249,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->waiting) { m->entered=now;m->waiting=true; }
         if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT);break; }
         if (!(in->gray&2U)) { hold(m);m->phase=31;break; }
-        (void)emit(m,PC_BODY,-20,0,0,0,10000);
+        (void)emit(m,PC_BODY,ROUTE_STAIR_ENTRY_BACK_RPM,0,0,0,10000);
         break;
     case 31:
         if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT);break; }
@@ -288,9 +288,10 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
             if (!in->settled) break;
             /* Fast transit only after two confirmed grabs and scan END acknowledgement. */
             bool fast = m->grabs>=2 && !m->stair_scanning;
-            float speed = fast ? PATH_STAIR_FAST_SPEED_RPM : PATH_STAIR_SCAN_SPEED_RPM;
+            float speed = m->blue ? (fast ? PATH_STAIR_FAST_SPEED_RPM : PATH_STAIR_SCAN_SPEED_RPM)
+                                 : (fast ? RED_STAIR_FAST_SPEED_RPM : RED_STAIR_SCAN_SPEED_RPM);
             PathCommand c={.kind=PC_MOVE,.x=remaining,.speed=speed,
-                .acceleration=(fast ? PATH_STAIR_FAST_ACCEL : 650),.deceleration=650,.timeout_ms=30000};
+                .acceleration=(fast ? PATH_STAIR_FAST_ACCEL : ROUTE_STAIR_ACCEL_MM_S2),.deceleration=ROUTE_STAIR_DECEL_MM_S2,.timeout_ms=30000};
             m->waiting=m->send(m->context,&c);
             if (!m->waiting) fail(m,PATH_ERROR);
         }
@@ -382,10 +383,10 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if ((uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
         if (!m->waiting) {
             /* Blue uses the opposite quarter-turn to face its side-mounted IR toward the pillar. */
-            PathCommand c={.kind=PC_MOVE_ROTATE,.x=-1425,.y=-725,
-                .angle=90,.speed=195,.end_speed=PILLAR_SEARCH_SPEED_RPM,
+            PathCommand c={.kind=PC_MOVE_ROTATE,.x=ROUTE_PILLAR_RED_X_MM,.y=ROUTE_PILLAR_RED_Y_MM,
+                .angle=90,.speed=ROUTE_PILLAR_TRAVEL_RPM_COMMAND,.end_speed=PILLAR_SEARCH_SPEED_RPM_COMMAND,
                 .continuous=true,.timeout_ms=30000};
-            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=-c.x-40; c.y-=40; c.angle=-90; }
+            if (m->blue || PATH_BLUE_PILLAR_TEST) { c.x=ROUTE_PILLAR_BLUE_X_MM; c.y=ROUTE_PILLAR_BLUE_Y_MM; c.angle=-90; }
             if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
         } else if (in->motion_done) {
             next(m,now); pillar(m,now,in); /* Orbit remains gated by debounced IR. */
@@ -409,8 +410,8 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (m->phase == 4) {
             /* Blue: shift toward the current body right before the stair exit turn. */
             if (!m->waiting) {
-                PathCommand c={.kind=PC_ORBIT_EXIT,.y=-20,.angle=in->map_yaw_deg,
-                               .speed=30,.end_speed=15,.continuous=true,.timeout_ms=5000};
+                PathCommand c={.kind=PC_ORBIT_EXIT,.y=ROUTE_BLUE_EXIT_RIGHT_MM,.angle=in->map_yaw_deg,
+                               .speed=ROUTE_EXIT_CLEAR_RPM_COMMAND,.end_speed=ROUTE_EXIT_BOUNDARY_RPM_COMMAND,.continuous=true,.timeout_ms=5000};
                 if (!(m->waiting=m->send(m->context,&c))) { fail(m,PATH_ERROR); break; }
             } else if (in->motion_done) {
                 m->phase=5;m->waiting=false;m->entered=now;
@@ -422,8 +423,8 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!m->waiting) {
                 /* Blue stair approach points along map +Y; retain current heading until clear. */
                 float yaw=in->map_yaw_deg*0.01745329252f;
-                PathCommand c={.kind=PC_ORBIT_EXIT,.x=250*sinf(yaw),.y=250*cosf(yaw),
-                               .angle=in->map_yaw_deg,.speed=30,.end_speed=15,
+                PathCommand c={.kind=PC_ORBIT_EXIT,.x=ROUTE_BLUE_EXIT_CLEAR_MM*sinf(yaw),.y=ROUTE_BLUE_EXIT_CLEAR_MM*cosf(yaw),
+                               .angle=in->map_yaw_deg,.speed=ROUTE_EXIT_CLEAR_RPM_COMMAND,.end_speed=ROUTE_EXIT_BOUNDARY_RPM_COMMAND,
                                .continuous=true,.timeout_ms=10000};
                 if (!(m->waiting=m->send(m->context,&c))) { fail(m,PATH_ERROR);break; }
             } else if (in->motion_done) {
@@ -435,15 +436,15 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         else if (m->phase == 0)
         {
             if (!m->waiting) {
-                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? 10 : -10,
-                               .angle=STAIR_TARGET_DEG(m->blue || PATH_BLUE_STAIR_TEST),.speed=195,
-                               .end_speed=15,
+                PathCommand c={.kind=PC_ORBIT_EXIT,.x=(m->blue || PATH_BLUE_STAIR_TEST) ? ROUTE_EXIT_BLUE_X_MM : ROUTE_EXIT_RED_X_MM,
+                               .angle=STAIR_TARGET_DEG(m->blue || PATH_BLUE_STAIR_TEST),.speed=ROUTE_EXIT_TURN_RPM_COMMAND,
+                               .end_speed=ROUTE_EXIT_BOUNDARY_RPM_COMMAND,
                                .continuous=true,.timeout_ms=30000};
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
-                float speed=30;
-                PathCommand c={.kind=PC_ARC,.x=50,.y=180,.angle=-90,
-                               .speed=speed,.start_speed=15,.end_speed=speed,
+                float speed=ROUTE_STAIR_ARC_RPM_COMMAND;
+                PathCommand c={.kind=PC_ARC,.x=ROUTE_STAIR_ARC_RADIUS_MM,.y=180,.angle=-90,
+                               .speed=speed,.start_speed=ROUTE_EXIT_BOUNDARY_RPM_COMMAND,.end_speed=speed,
                                .continuous=true,.timeout_ms=10000};
                 if (m->blue || PATH_BLUE_STAIR_TEST) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
@@ -456,7 +457,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if ((uint32_t)(now-m->entered)>=10000U) { fail(m,PATH_TIMEOUT); break; }
             /* Accept entry gray only after the applied translation is at slow speed. */
             if (in->gray && !m->approach_slow && isfinite(in->travel_rpm) &&
-                in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM+2.0f) {
+                in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM_COMMAND+2.0f) {
                 hold(m);m->approach_slow=true;
                 m->stable=PathLine_Aligned(m,in->gray);
             }
@@ -486,8 +487,8 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (m->phase == 0) {
             if (!m->waiting) {
                 m->approach_slow=false;
-                PathCommand c={.kind=PC_MOVE_ROTATE,.y=-1425,.angle=180,.speed=155,
-                               .end_speed=m->blue ? 40 : 45,.continuous=true,.timeout_ms=30000};
+                PathCommand c={.kind=PC_MOVE_ROTATE,.y=ROUTE_WAREHOUSE_TRAVEL_Y_MM,.angle=180,.speed=ROUTE_WAREHOUSE_TRAVEL_RPM_COMMAND,
+                               .end_speed=m->blue ? ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND : ROUTE_WAREHOUSE_RED_ENTRY_RPM_COMMAND,.continuous=true,.timeout_ms=30000};
                 if (m->blue || PATH_BLUE_WAREHOUSE_TEST) c.angle=-c.angle;
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
             } else if (in->motion_done) {
@@ -495,8 +496,8 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                     next(m,now);PathChassis_Tick(m,now,in);
                     break; /* No entry arc: 40 rpm transition directly to line acquisition. */
                 }
-                PathCommand c={.kind=PC_ARC,.x=50,.y=90,.angle=-90,.speed=45,
-                               .start_speed=45,.end_speed=m->blue ? 40 : 45,.continuous=true,.timeout_ms=10000};
+                PathCommand c={.kind=PC_ARC,.x=ROUTE_WAREHOUSE_RED_ARC_RADIUS_MM,.y=90,.angle=-90,.speed=ROUTE_WAREHOUSE_RED_ENTRY_RPM_COMMAND,
+                               .start_speed=ROUTE_WAREHOUSE_RED_ENTRY_RPM_COMMAND,.end_speed=m->blue ? ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND : ROUTE_WAREHOUSE_RED_ENTRY_RPM_COMMAND,.continuous=true,.timeout_ms=10000};
                 if (m->blue) { c.y=180-c.y; c.angle=-c.angle; }
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=2;m->entered=now;
@@ -510,13 +511,13 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
             }
         } else if (m->phase == 1) {
             if (m->waiting && in->motion_done) {
-                PathCommand c={.kind=PC_ARC,.x=25,.y=0,.angle=90,.speed=40,
-                               .start_speed=40,.end_speed=40,.continuous=true,.timeout_ms=10000};
+                PathCommand c={.kind=PC_ARC,.x=ROUTE_WAREHOUSE_RED_SECOND_ARC_MM,.y=0,.angle=90,.speed=ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND,
+                               .start_speed=ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND,.end_speed=ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND,.continuous=true,.timeout_ms=10000};
                 if (!m->send(m->context,&c)) { fail(m,PATH_ERROR); break; }
                 m->phase=3;m->stable=false;m->entered=now;
             } else if (!m->waiting) {
-                PathCommand c={.kind=PC_MOVE,.x=110,.speed=125,.start_speed=45,
-                               .end_speed=40,.continuous=true,.timeout_ms=10000};
+                PathCommand c={.kind=PC_MOVE,.x=ROUTE_WAREHOUSE_RED_FORWARD_MM,.speed=ROUTE_WAREHOUSE_RED_FORWARD_RPM_COMMAND,.start_speed=ROUTE_WAREHOUSE_RED_ENTRY_RPM_COMMAND,
+                               .end_speed=ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND,.continuous=true,.timeout_ms=10000};
                 if (!(m->waiting=m->send(m->context,&c))) fail(m,PATH_ERROR);
 
             }
@@ -532,7 +533,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     case 12:
         if (m->phase == 0)
         {
-            if (PathLine_Align(m, now, in, 50000, 40))
+            if (PathLine_Align(m, now, in, 50000, ROUTE_WAREHOUSE_SEARCH_RPM_COMMAND))
             {
                 m->phase = 1;
                 m->line_active = false;

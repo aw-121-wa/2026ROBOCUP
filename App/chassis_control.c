@@ -334,15 +334,15 @@ bool Chassis_ReturnHome(unsigned leg)
 {
     if (!path_heading_enabled || !state.armed || !Chassis_IsSettled() || leg>1) return false;
     float boost=PATH_TRAVEL_BOOST*route_policy.travel_speed_scale;
-    float forward=route_policy.mirror_map_y ? 1710.0f : -1685.0f;
-    float x=leg==0 ? forward : 0, y=leg==1 ? -900.0f : 0;
+    float forward=route_policy.mirror_map_y ? ROUTE_HOME_BLUE_X_MM : ROUTE_HOME_RED_X_MM;
+    float x=leg==0 ? forward : 0, y=leg==1 ? ROUTE_HOME_Y_MM : 0;
     if (!route_policy.mirror_map_y) {
         float angle=state.yaw_rad-map_yaw, c=cosf(angle), sn=sinf(angle);
         float bx=x*c+y*sn; y=-x*sn+y*c; x=bx;
         route_heading=heading=map_yaw; integral=0;
     }
     return Chassis_Move(x,y,
-                        CHASSIS_HOME_SPEED_MM_S*boost*1.25f,CHASSIS_HOME_ACCEL_MM_S2*boost,
+                        CHASSIS_HOME_SPEED_MM_S_COMMAND*boost*1.25f,CHASSIS_HOME_ACCEL_MM_S2*boost,
                         CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
 }
 void Chassis_Stop(void)

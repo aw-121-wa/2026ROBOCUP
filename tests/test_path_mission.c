@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "stair_heading.h"
 #include "disc_task_config.h"
 #include "path_mission.h"
@@ -193,7 +194,7 @@ static int chassis_only(void) {
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={160,440,260,110,187,187};
+    const float expected[]={160,440,260,110,PATH_WAREHOUSE_COLUMN_SPACING_MM,PATH_WAREHOUSE_COLUMN_SPACING_MM};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
         CHECK(n<6 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;

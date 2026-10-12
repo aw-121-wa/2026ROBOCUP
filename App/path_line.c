@@ -34,10 +34,10 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
         float x=in->x_mm-m->approach_x, y=in->y_mm-m->approach_y;
         /* Ignore gray during fast approach and while the slow command is ramping down. */
         if (x*x+y*y >= PATH_STAIR_SEARCH_FAST_DISTANCE_MM*PATH_STAIR_SEARCH_FAST_DISTANCE_MM ||
-            (in->gray && isfinite(in->travel_rpm) && in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM+2.0f)) m->approach_slow=true;
-        if (!m->approach_slow) lateral=PATH_STAIR_SEARCH_FAST_RPM;
+            (in->gray && isfinite(in->travel_rpm) && in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM_COMMAND+2.0f)) m->approach_slow=true;
+        if (!m->approach_slow) lateral=PATH_STAIR_SEARCH_FAST_RPM_COMMAND;
         if (!m->line_entry_detected && (!m->approach_slow ||
-            !isfinite(in->travel_rpm) || in->travel_rpm>PATH_STAIR_SEARCH_SLOW_RPM+2.0f)) {
+            !isfinite(in->travel_rpm) || in->travel_rpm>PATH_STAIR_SEARCH_SLOW_RPM_COMMAND+2.0f)) {
             (void)emit(m,PC_BODY,0,lateral,0,0,timeout);
             return false;
         }
@@ -106,7 +106,7 @@ static LinePolicy line_policy(const PathMission *m)
     return (LinePolicy){
         .accepted_patterns=(1U<<6),
         .bidirectional=true,
-        .lateral_mm_s=stair ? PATH_STAIR_LINE_MM_S : PATH_WAREHOUSE_LINE_MM_S,
+        .lateral_mm_s=stair ? PATH_STAIR_LINE_MM_S : PATH_WAREHOUSE_LINE_MM_S_COMMAND,
         .first_ms=stair || warehouse ? PATH_LINE_SWEEP_MS : PATH_LINE_ENTRY_SWEEP_MS,
         .reverse_ms=warehouse ? PATH_WAREHOUSE_REVERSE_MS :
                     stair ? PATH_LINE_SWEEP_MS : PATH_LINE_ENTRY_REVERSE_MS,

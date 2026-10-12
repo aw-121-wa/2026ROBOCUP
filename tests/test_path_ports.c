@@ -532,9 +532,11 @@ int main(int argc, char **argv) {
             unsigned request_token,request_row;
             if(sscanf(wire,"WH_SCAN %u %u",&request_token,&request_row)==2 && request_token!=scan_token) {
                 scan_token=request_token;scan_row=request_row;scan_frame=0;
+                if(request_row==0 && scan_origin_set && path_diagnostics.warehouse_placed==0)
+                    scan_origin=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis);
                 if(!scan_origin_set) {
                     scan_axis=yaw-map_yaw_test*0.01745329252f+(test_blue?3.14159265f:0);
-                    scan_origin=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis)-(3*187+15);
+                    scan_origin=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis)-PATH_WAREHOUSE_COLUMN_SPACING_MM;
                     scan_origin_set=true;
                 }
             }
@@ -544,7 +546,7 @@ int main(int argc, char **argv) {
             }
             if(scan_token) {
                 float p=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis)-scan_origin;
-                unsigned digit=scan_row?0:(fabsf(p-187)<8?1:fabsf(p-374)<8?2:fabsf(p-561)<8?3:0);
+                unsigned digit=scan_row?0:(fabsf(p-PATH_WAREHOUSE_COLUMN_SPACING_MM)<8?1:fabsf(p-2*PATH_WAREHOUSE_COLUMN_SPACING_MM)<8?2:fabsf(p-3*PATH_WAREHOUSE_COLUMN_SPACING_MM)<8?3:0);
                 char response[80];snprintf(response,sizeof(response),"WH_FRAME %u %u %u 0\r\n",scan_token,++scan_frame,digit);
                 reply(response);
             }

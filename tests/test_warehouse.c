@@ -1,3 +1,4 @@
+#include "path_config.h"
 #include "path_mission.h"
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +14,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
     if(c->kind==PC_MOVE && c->x==-30 && c->y==0) return c->acceleration==300 && c->deceleration==300;
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=187 || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=PATH_WAREHOUSE_COLUMN_SPACING_MM || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
     if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }

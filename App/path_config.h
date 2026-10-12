@@ -1,5 +1,6 @@
 #ifndef PATH_CONFIG_H
 #define PATH_CONFIG_H
+#include "route_speed_adapter.h"
 #include "heading_tuning.h"
 /* Extra cruise/acceleration gain; line search and pillar orbit are excluded. */
 /* Read briefly after completed capture; missing RFID must not block the route. */
@@ -25,27 +26,13 @@
 #endif
 /* Warehouse creep uses rpm; distances are millimetres, acceleration mm/s^2. */
 #define PATH_WAREHOUSE_TARGET_DEG(blue) ((blue) ? 180.0f : 0.0f)
-#define PATH_WAREHOUSE_COLUMN_SPACING_MM 187.0f
-#define PATH_WAREHOUSE_ENTRY_BACK_MM 30.0f
-#define PATH_WAREHOUSE_FIRST_RIGHT_MM 19.0f
-#define PATH_WAREHOUSE_CREEP_LIMIT_MM 300.0f
-#define PATH_WAREHOUSE_CREEP_SPEED_RPM 16.0f
-#define PATH_WAREHOUSE_DIGIT_ADVANCE_MM 25.0f
-#define PATH_WAREHOUSE_CREEP_ACCEL 250.0f
+
 #define PATH_WAREHOUSE_DIGIT_TIMEOUT_MS 10000U
 #define PATH_WAREHOUSE_DIGIT_GUARD_MS 11000U
 #define PATH_WAREHOUSE_CREEP_TIMEOUT_MS 12000U
-#define PATH_STAIR_ENTRY_ADVANCE_MM 5.0f
-#define PATH_STAIR_SCAN_SPEED_RPM 45.0f
-#define PATH_STAIR_FAST_SPEED_RPM 135.0f
-#define PATH_STAIR_FAST_ACCEL 850.0f
 
 /* Line acquisition and admission; lateral speeds are mm/s, approach speed rpm. */
-#define PATH_STAIR_SEARCH_FAST_DISTANCE_MM 600.0f
-#define PATH_STAIR_SEARCH_FAST_RPM 90.0f
-#define PATH_STAIR_SEARCH_SLOW_RPM 30.0f
-#define PATH_STAIR_LINE_MM_S 40.0f
-#define PATH_WAREHOUSE_LINE_MM_S 15.0f
+
 #define PATH_LINE_STABLE_MS 100U
 #define PATH_LINE_SWEEP_MS 2000U
 #define PATH_LINE_ENTRY_SWEEP_MS 1000U
@@ -55,8 +42,8 @@
 #define PATH_WAREHOUSE_SEARCH_TIMEOUT_MS 12000U
 #define PATH_HEADING_TIMEOUT_MS 30000U
 #define PATH_WAREHOUSE_HEADING_TOLERANCE_DEG HEADING_STATIC_TOLERANCE_DEG
-#define PATH_MOVE_ACCEL_MM_S2 650.0f
-#define PATH_MOVE_DECEL_MM_S2 650.0f
+
+
 
 /* Shared outer/inner deadline for multi-stage disc line alignment. */
 #define PATH_DISC_LINE_TIMEOUT_MS 30000U

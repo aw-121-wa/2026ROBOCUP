@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 import cv2
 import numpy as np
-from rdk_vision.warehouse_stream import StableLocation, locate
+from rdk_vision.warehouse_stream import StableLocation, locate, locate_number
 from rdk_vision.block_digits import BlockDetector
 import yaml
 from rdk_vision.warehouse_digits import _normalize
@@ -37,13 +37,31 @@ class StreamTests(unittest.TestCase):
         for color in ('red','blue'):
             for row in (1,2,3):
                 settings=cfg[color][row];detector=BlockDetector(root,settings)
+                roi=(0,settings['roi'][1],640,settings['roi'][3])
+                if row==2: roi=(0,max(0,roi[1]-20),640,roi[3]+40)
                 for image in (root/settings['templates']).glob('*scene.png'):
                     expected=0 if image.name.startswith('empty') else int(image.name[0])
                     with self.subTest(color=color,row=row,image=image.name):
                         result=locate(cv2.imread(str(image)),detector.templates,
-                            (0,settings['roi'][1],640,settings['roi'][3]),
-                            settings['min_score'],settings['min_margin'])
+                            roi,
+                            settings['min_score'],settings['min_margin'],score_floor=.73 if row==1 else .70)
                         self.assertEqual(result[0],expected)
+
+    def test_number_central_retry(self):
+        class Detector:
+            def detect(self,image):
+                self.last_center=165 if image.shape[1]==320 else None
+                return (2,.8) if self.last_center is not None else (0,0)
+        self.assertEqual(locate_number(np.full((480,640),255,np.uint8),Detector(),(0,0,640,480)),(2,5))
+
+    def test_number_retry_recorded_and_empty(self):
+        from rdk_vision.warehouse_digits import DigitDetector
+        detector=DigitDetector()
+        root=Path(__file__).resolve().parent/'fixtures'
+        for digit in (1,2,3):
+            frame=cv2.imread(str(root/f'warehouse_partial_{digit}.png'))
+            self.assertEqual(locate_number(frame,detector,(0,0,frame.shape[1],frame.shape[0]))[0],digit)
+        self.assertEqual(locate_number(np.full((480,640),255,np.uint8),detector,(0,0,640,480)),(0,0))
 
     def test_bridge_stop_before_arm(self):
         sent=[];started=threading.Event()

@@ -134,7 +134,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 unsigned middle=in->gray&6U;
                 if (middle==2U || middle==4U) {
                     if (emit(m,(PathCommand){.kind=PC_HOLD})) m->stable=true;
-                } else (void)emit(m,(PathCommand){.kind=PC_BODY,.x=m->blue ? 20 : -20,.timeout_ms=10000});
+                } else (void)emit(m,(PathCommand){.kind=PC_BODY,.x=m->blue ? ROUTE_HOME_LEAVE_LINE_RPM_COMMAND : -ROUTE_HOME_LEAVE_LINE_RPM_COMMAND,.timeout_ms=10000});
             } else if (in->settled) {
                 m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->entered=now;
             }
@@ -216,7 +216,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (in->warehouse_ready && in->warehouse_digit_reply==PATH_WAIT &&
             m->phase==WAREHOUSE_FIRST_DIGIT)
             emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
-                .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
+                .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM_COMMAND,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
                 .deceleration=650,.timeout_ms=PATH_WAREHOUSE_CREEP_TIMEOUT_MS});
         break;
     case WAREHOUSE_FIRST_DIGIT: /* First-column result selects the mode once for the whole warehouse. */
@@ -244,7 +244,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         m->warehouse_query=false;
         if (m->warehouse_mode==WAREHOUSE_DIGIT_ORDER) {
             if (emit(m,(PathCommand){.kind=PC_FINISH_FORWARD,.x=PATH_WAREHOUSE_DIGIT_ADVANCE_MM,
-                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
+                    .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM_COMMAND,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
                     .deceleration=650,.timeout_ms=5000})) {
                 m->waiting=true; m->phase=WAREHOUSE_BRAKE; m->entered=now;
             }
