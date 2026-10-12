@@ -95,7 +95,7 @@ static void next_ball(PathMission *m,uint32_t now)
     }
     if(nearest<3) {
         d->column=nearest;d->direction=d->columns[nearest]>d->current_position ? 1 : -1;
-        d->goal=d->current_position+d->direction*ROUTE_WAREHOUSE_LAST_COLUMN_MM;
+        d->goal=d->current_position+ROUTE_WAREHOUSE_LAST_COLUMN_MM; /* Last column follows the first two. */
         m->point=nearest*3;enter(m,DS_BALL_MOVE,now);
     } else {
         m->point=9;m->phase=WAREHOUSE_ALIGN_HOME;m->stable=false;
@@ -122,7 +122,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         (void)send(m,&(PathCommand){.kind=PC_MAP_HEADING,.x=PATH_WAREHOUSE_TARGET_DEG(m->blue)});
     }
     if(m->point==9) return false;
-    if(!isfinite(in->yaw_deg)||!isfinite(in->x_mm)||!isfinite(in->y_mm)) {fail(m);return true;}
+    if(!isfinite(in->yaw_deg+in->x_mm+in->y_mm)) {fail(m);return true;}
     /* Entry alone permits a middle probe off: establish the longitudinal datum. */
     if(d->state==DS_ENTRY) {
         if(!stop_stream(m,in)) {hold(m);return true;}
@@ -134,7 +134,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
                 if(d->cleared) {d->current_position=d->origin;next_ball(m,now);}
                 else enter(m,DS_FIRST,now);
             }
-        } else velocity(m,in,ROUTE_WAREHOUSE_ENTRY_BACK_RPM_COMMAND);
+        } else velocity(m,in,d->cleared ? -ROUTE_WAREHOUSE_AFTER_BLOCK_RPM_COMMAND : ROUTE_WAREHOUSE_ENTRY_BACK_RPM_COMMAND);
         return true;
     }
     d->current_position=position(m,in);
@@ -209,7 +209,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         if(arm(m,now,in,122-3*d->row)) enter(m,DS_FOURTH,now);
         break;
     case DS_FOURTH:
-        if(move(m,in,d->columns[2]+PATH_WAREHOUSE_COLUMN_SPACING_MM,ROUTE_WAREHOUSE_TRANSFER_RPM_COMMAND)) enter(m,DS_PLACE,now);
+        if(move(m,in,d->columns[2]+PATH_WAREHOUSE_COLUMN_SPACING_MM,ROUTE_WAREHOUSE_TO_FOURTH_RPM_COMMAND)) enter(m,DS_PLACE,now);
         break;
     case DS_PLACE:
         if(arm(m,now,in,123-3*d->target)) {
@@ -219,7 +219,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     case DS_RETURN:
         /* Fourth column is nearest the third-column scan endpoint for every row. */
         if(d->row==1) {enter(m,DS_STOP_ROW,now);break;}
-        if(move(m,in,d->columns[2]+ROUTE_BLOCK_SCAN_MARGIN_MM,ROUTE_WAREHOUSE_TRANSFER_RPM_COMMAND))
+        if(move(m,in,d->columns[2]+ROUTE_BLOCK_SCAN_MARGIN_MM,ROUTE_WAREHOUSE_AFTER_BLOCK_RPM_COMMAND))
             enter(m,DS_STOP_ROW,now);
         break;
     case DS_STOP_ROW:

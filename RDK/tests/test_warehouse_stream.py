@@ -56,7 +56,7 @@ class StreamTests(unittest.TestCase):
 
     def test_number_retry_recorded_and_empty(self):
         from rdk_vision.warehouse_digits import DigitDetector
-        detector=DigitDetector()
+        detector=DigitDetector(.58,.08)
         root=Path(__file__).resolve().parent/'fixtures'
         for digit in (1,2,3):
             frame=cv2.imread(str(root/f'warehouse_partial_{digit}.png'))

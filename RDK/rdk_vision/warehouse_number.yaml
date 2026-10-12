@@ -6,7 +6,7 @@ height: 480
 fps: 30
 roi: [0, 0, 640, 480]
 timeout_s: 8.0
-min_score: 0.62
-min_margin: 0.10
+min_score: 0.58
+min_margin: 0.08
 confirm_frames: 3
 stale_s: 0.25
