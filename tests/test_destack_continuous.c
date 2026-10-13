@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+static bool expect_cancel;
 static PathInput in;
 static PathMission m;
 static float vx,vy;
@@ -26,7 +27,7 @@ static bool emit(void *ctx,const PathCommand *c)
         assert(in.settled && !in.scan_active);assert(ngroups<20);
         groups[ngroups++]=c->argument;in.reply=PATH_OK;break;
     case PC_TURN:++turns;break;
-    default:assert(c->kind!=PC_CANCEL);break;
+    default:assert(c->kind!=PC_CANCEL || expect_cancel);break;
     }
     return true;
 }
@@ -72,17 +73,28 @@ static void route(bool blue)
     }
     printf("stuck state=%u row=%u x=%f groups=%u\n",m.destack.state,m.destack.row,in.x_mm,ngroups);assert(0);
 }
-static void line_and_stale(void)
-{
-    init(false);PathWarehouse_Tick(&m,0,&in);assert(m.destack.enabled);
-    PathWarehouse_Tick(&m,5,&in);
-    m.destack.state=DS_SCAN;in.gray=15;PathWarehouse_Tick(&m,20,&in);assert(vx==0);
-    PathWarehouse_Tick(&m,40,&in);assert(vx==0 && vy!=0);
-    /* Loss recovery cannot accept the image that arrived during lateral motion. */
-    in.gray=6;in.scan_frame=10;
-    for(unsigned n=60;n<500;n+=20) PathWarehouse_Tick(&m,n,&in);
-    in.scan_active=true;in.scan_fresh=false;
-    PathWarehouse_Tick(&m,500,&in);assert(vx==0 && vy==0 && ngroups==0);
+static void line_and_stale(void){
+    for(unsigned blue=0;blue<2;++blue) for(int direction=-1;direction<=1;direction+=2) {
+        init(blue);in.gray=15;in.scan_active=in.scan_fresh=true;in.scan_digit=0;
+        m.destack=(PathDestack){.enabled=true,.state=DS_SCAN,.row=3,.direction=direction,
+            .scan_end=direction*1000,.stream=true};
+        in.yaw_deg=0;
+        PathWarehouse_Tick(&m,1000,&in);
+        assert(vx*direction>0 && vy*(blue?1:-1)>0 && !m.destack.braking);
+        in.gray=0;PathWarehouse_Tick(&m,1700,&in);
+        assert(vx*direction>0 && vy*(blue?1:-1)<0);
+        in.gray=6;PathWarehouse_Tick(&m,1800,&in);
+        assert(vx*direction>0 && vy==0);
+        in.scan_fresh=false;PathWarehouse_Tick(&m,1900,&in);assert(vx==0 && vy==0);
+    }
+    init(false);in.gray=9;in.scan_active=in.scan_fresh=true;
+    m.destack=(PathDestack){.enabled=true,.state=DS_SCAN,.row=3,.direction=1,.scan_end=1000,.stream=true};
+    PathWarehouse_Tick(&m,1000,&in);
+    in.y_mm=30;PathWarehouse_Tick(&m,2000,&in);
+    assert(m.result==PATH_RUNNING && vx>0 && vy<0); /* No 25 mm cutoff. */
+    PathWarehouse_Tick(&m,4999,&in);assert(m.result==PATH_RUNNING);
+    expect_cancel=true;PathWarehouse_Tick(&m,5000,&in);
+    assert(m.result==PATH_ERROR && vx==0 && vy==0);expect_cancel=false;
 }
 static void braking_and_arm(void)
 {
@@ -109,7 +121,7 @@ static void entry_and_nearest(void)
     assert(vx>0 && vy==0 && !m.destack.correcting); /* Leave rear-off datum without lateral search. */
     m.destack.state=DS_SCAN;m.destack.stream=true;
     PathWarehouse_Tick(&m,30,&in);
-    assert(vx==0 && m.destack.correcting); /* Later tasks retain strict 0110. */
+    assert(vx==0 && m.destack.distance_active); /* Missing vision still stops scanning. */
     m.destack.correcting=false;m.destack.stream=false;
     m.destack.state=DS_STOP_ROW;m.destack.row=1;
     in.gray=6;in.x_mm=2*PATH_WAREHOUSE_COLUMN_SPACING_MM;in.settled=true;

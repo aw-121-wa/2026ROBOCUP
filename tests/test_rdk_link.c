@@ -172,5 +172,18 @@ int main(void) {
     r.camera_wait_event=false;
     feed(&r,"DISC_CAMERA_WAIT\r\n");
     CHECK(!r.camera_wait_event); /* No extension after startup. */
+    /* Decimal encoding must preserve full uint32 tokens and rollover. */
+    Rdk_Init(&r,0,tx,0);r.sequence=UINT32_MAX-1;
+    CHECK(Rdk_Scan(&r,3));
+    CHECK(!strcmp(r.scan_request,"WH_SCAN 4294967295 3\r\n"));
+    CHECK(Rdk_Scan(&r,4));
+    CHECK(!strcmp(r.scan_request,"WH_STOP 4294967295\r\n"));
+    Rdk_Init(&r,0,tx,0);r.sequence=UINT32_MAX;
+    CHECK(Rdk_Scan(&r,0));CHECK(!strcmp(r.scan_request,"WH_SCAN 1 0\r\n"));
+    Rdk_Init(&r,0,tx,0);r.sequence=UINT32_MAX-1;
+    CHECK(Rdk_WarehouseBegin(&r,14,0,100));
+    CHECK(!strcmp(r.warehouse_request,"WAREHOUSE_CHECK 4294967295 14\r\n"));
+    Rdk_Init(&r,0,tx,0);r.stage=2;
+    CHECK(Rdk_Begin(&r,"GROUP",0,0,100));CHECK(!strcmp(r.request,"GROUP 0\r\n"));
     puts("ZHY link tests passed"); return 0;
 }

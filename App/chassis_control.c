@@ -324,7 +324,7 @@ bool Chassis_Arm(void)
 static float map_yaw;
 void Chassis_BeginPath(void)
 {
-    map_yaw = state.yaw_rad;
+    map_yaw = state.yaw_rad - ((PATH_WAREHOUSE_CAPTURE_START && route_policy.mirror_map_y) ? 180.0f * RAD : 0.0f);
     route_heading = heading = state.yaw_rad;
     path_heading_enabled = true;
     line_yaw_reference = Chassis_MeasuredYaw();

@@ -104,6 +104,10 @@
 /* 连续倒垛仓库：列中心为列间距的1/2/3/4倍，入口先走至第一列；扫描和转移速度分开 */
 #define ROUTE_BLOCK_SCAN_RPM 17.0
 #define ROUTE_WAREHOUSE_ENTRY_BACK_RPM -15.6
+/* Moving warehouse-distance trim; body lateral wheel-equivalent rpm. */
+#define ROUTE_WAREHOUSE_DISTANCE_RPM 5.0f
+#define ROUTE_WAREHOUSE_DISTANCE_TIMEOUT_MS 4000U
+#define ROUTE_WAREHOUSE_DISTANCE_SWEEP_MS 600U
 #define ROUTE_WAREHOUSE_TRANSFER_RPM 30.0
 /* 夹取后送往第四列的独立速度rpm */
 #define ROUTE_WAREHOUSE_TO_FOURTH_RPM 80.0

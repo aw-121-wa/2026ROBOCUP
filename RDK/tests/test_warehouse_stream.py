@@ -77,4 +77,14 @@ class StreamTests(unittest.TestCase):
         if core._worker: core._worker.join(1)
         self.assertIn('GROUP_DONE 113',sent)
 
+    def test_capture_command(self):
+        sent=[];started=threading.Event();received=[]
+        def runner(row,cancel,emit,capture=False):
+            received.append((row,capture));started.set();cancel.wait(1)
+        core=BridgeCore(sent.append,lambda **kw:0,run_stream=runner)
+        core.handle('WH_CAPTURE 43 2');self.assertTrue(started.wait(1))
+        worker=core._worker;core.handle('WH_STOP 43');worker.join(1)
+        self.assertEqual(received,[(2,True)])
+        self.assertIn('WH_DONE 43',sent)
+
 if __name__=='__main__': unittest.main()

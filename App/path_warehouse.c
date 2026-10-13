@@ -131,6 +131,10 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
 {
     if(PathDestack_Tick(m,now,in)) return;
     if (m->point==9 && !BallInventory_HasKnown(&m->inventory) && !m->inventory.uncertain) {
+        if (PATH_WAREHOUSE_CAPTURE_START) {
+            if (emit(m,&(PathCommand){.kind=PC_HOLD}) && in->settled) m->result=PATH_DONE;
+            return;
+        }
         if (m->phase==WAREHOUSE_ALIGN_HOME) {
             if (!m->stable) {
                 unsigned middle=in->gray&6U;

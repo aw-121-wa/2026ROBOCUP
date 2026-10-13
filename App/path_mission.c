@@ -120,12 +120,24 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
         fail(m, PATH_TIMEOUT);
         return;
     }
+    if (PATH_WAREHOUSE_CAPTURE_START && m->phase == 98) {
+        if (in->reply == PATH_FAILED) fail(m,PATH_ERROR);
+        else if (in->reply == PATH_OK) {
+            m->step=12;m->phase=0;m->entered=now;
+        }
+        return;
+    }
     if (m->phase == 99)
     {
         if (in->reply == PATH_FAILED)
             fail(m, PATH_ERROR);
         else if (in->reply == PATH_OK)
         {
+            if (PATH_WAREHOUSE_CAPTURE_START) {
+                PathCommand prep={.kind=PC_GROUP,.argument=3,.timeout_ms=30000};
+                if (!m->send(m->context,&prep)) { fail(m,PATH_ERROR);return; }
+                m->phase=98;m->entered=now;return;
+            }
             if (PATH_ROUTE_VISION_ENABLE) {
                 PathCommand prep = {.kind=PC_GROUP,.argument=100,.timeout_ms=30000};
                 if (!m->send(m->context,&prep)) { fail(m,PATH_ERROR); return; }

@@ -7,7 +7,7 @@
 #define RAD 0.01745329252f
 #define CENTER_PX 8
 
-static __attribute__((noinline)) bool send(PathMission *m,const PathCommand *c)
+static bool send(PathMission *m,const PathCommand *c)
 {
     if(m->send(m->context,c)) return true;
     (void)m->send(m->context,&(PathCommand){.kind=PC_HOLD});
@@ -27,12 +27,12 @@ static void enter(PathMission *m,unsigned state,uint32_t now)
 }
 static float position(const PathMission *m,const PathInput *in)
 { return in->x_mm*cosf(m->destack.axis)+in->y_mm*sinf(m->destack.axis); }
-static __attribute__((noinline)) void velocity(PathMission *m,const PathInput *in,float rpm)
+static void velocity(PathMission *m,const PathInput *in,float rpm)
 {
     if(m->destack.braking && !in->settled) return;
     m->destack.braking=false;
     float a=m->destack.axis-in->yaw_deg*RAD;
-    (void)send(m,&(PathCommand){.kind=PC_BODY,.x=rpm*cosf(a),.y=rpm*sinf(a),.timeout_ms=30000});
+    (void)send(m,&(PathCommand){.kind=PC_BODY,.x=rpm*cosf(a),.y=rpm*sinf(a)+m->destack.distance_rpm,.timeout_ms=30000});
 }
 static bool move(PathMission *m,const PathInput *in,float goal,float rpm)
 {
@@ -77,6 +77,33 @@ static bool arm(PathMission *m,uint32_t now,const PathInput *in,unsigned group)
     } else if(in->reply==PATH_FAILED || (uint32_t)(now-m->destack.since)>=30000) fail(m);
     else if(in->reply==PATH_OK) return true;
     return false;
+}
+/* Correct distance while travelling, without interrupting longitudinal motion.
+ * Body +Y is left: warehouse left on red, right on blue. Unknown patterns
+ * cannot identify a side; use a bounded away/toward sweep, never blind drift. */
+static bool moving_distance(PathMission *m,uint32_t now,const PathInput *in)
+{
+    PathDestack *d=&m->destack;
+    d->distance_rpm=0;
+    bool travelling=d->state==DS_SCAN || d->state==DS_FOURTH ||
+        d->state==DS_RETURN || (d->state==DS_BALL_MOVE && !d->stopping);
+    if(!travelling) {d->distance_active=false;return false;}
+    if(in->gray==6 || (d->state==DS_BALL_MOVE && !d->mapped && in->gray==4)) {
+        d->distance_active=false;return true;
+    }
+    if(!d->distance_active) {
+        d->distance_active=true;d->distance_since=now;
+    }
+    uint32_t elapsed=now-d->distance_since;
+    if(elapsed>=ROUTE_WAREHOUSE_DISTANCE_TIMEOUT_MS) {
+        fail(m);return true;
+    }
+    float away=m->blue ? 1.0f : -1.0f;
+    bool near=in->gray==9 || in->gray==15;
+    unsigned leg=(elapsed/ROUTE_WAREHOUSE_DISTANCE_SWEEP_MS)%4U;
+    d->distance_rpm=away*(near || leg==0 || leg==3 ? 1.0f : -1.0f)*
+        (ROUTE_WAREHOUSE_DISTANCE_RPM/1.3f);
+    return true;
 }
 /* Line recovery never changes arm state or scan progress. A new frame is required
  * after lateral recovery; frames seen during correction cannot trigger pickup. */
@@ -134,6 +161,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     if(!isfinite(in->yaw_deg+in->x_mm+in->y_mm)) {fail(m);return true;}
     /* Entry alone permits a middle probe off: establish the longitudinal datum. */
     if(d->state==DS_ENTRY) {
+        d->distance_rpm=0;d->distance_active=false;
         if(!stop_stream(m,in)) {hold(m);return true;}
         if((in->gray&6U)==4U) {
             hold(m);
@@ -150,7 +178,9 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     /* Do not move the chassis while the arm or turntable is operating. */
     bool arm_busy=d->arm_wait || (d->state==DS_BALL &&
         (m->phase==WAREHOUSE_TURN || (m->phase==WAREHOUSE_UNLOAD && m->waiting)));
-    if(!arm_busy && !line_ready(m,now,in)) return true;
+    bool travelling=moving_distance(m,now,in);
+    if(m->result!=PATH_RUNNING) return true;
+    if(!arm_busy && !travelling && !line_ready(m,now,in)) return true;
     if(d->state==DS_BALL) return false;
     float p=position(m,in);
     bool new_frame=in->scan_fresh && in->scan_frame!=d->frame;

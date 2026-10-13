@@ -170,7 +170,7 @@ class BridgeCore:
         self._ball = 0
         self._waiting_stop = False
 
-    def _stream_main(self, token, row):
+    def _stream_main(self, token, row, capture=False):
         sequence=0
         def publish(frame,digit,offset):
             nonlocal sequence
@@ -181,7 +181,7 @@ class BridgeCore:
                 try:
                     if self._run_stream is None: raise RuntimeError('warehouse stream unavailable')
                     self._run_stream(row, cancel=self._cancel,
-                        emit=publish)
+                        emit=publish, **({"capture": True} if capture else {}))
                 except Exception as exc:
                     print(f'Warehouse stream retry: {exc!r}',flush=True)
                     self._close_camera();self._close_number()
@@ -361,14 +361,14 @@ class BridgeCore:
         if command == "PING":
             self._send_line("PONG")
             return
-        match=re.fullmatch(r'WH_SCAN ([1-9][0-9]{0,9}) ([0-3])',command)
+        match=re.fullmatch(r'WH_(?:SCAN|CAPTURE) ([1-9][0-9]{0,9}) ([0-3])',command)
         if match:
             token,row=map(int,match.groups())
             if token>0xffffffff: return
             with self._lock:
                 if self._worker is not None: return
                 self._cancel.clear();self._mode='warehouse_stream';self._stream_token=token
-                self._worker=threading.Thread(target=self._stream_main,args=(token,row),daemon=True)
+                self._worker=threading.Thread(target=self._stream_main,args=(token,row,command.startswith("WH_CAPTURE ")),daemon=True)
                 self._worker.start()
             return
         match=re.fullmatch(r'WH_STOP ([1-9][0-9]{0,9})',command)

@@ -96,7 +96,7 @@ class StableLocation:
         return (digit,offset) if digit and self.count>=3 else (0,0)
 
 
-def run_stream(project_root,row,camera_session,number_session,*,color,cancel,emit):
+def run_stream(project_root,row,camera_session,number_session,*,color,cancel,emit,capture=False):
     root=Path(project_root)/'rdk_vision'
     camera=None
     if row:
@@ -122,34 +122,46 @@ def run_stream(project_root,row,camera_session,number_session,*,color,cancel,emi
     pending=None;capture_at=0
     capture_dir=Path(project_root)/'captures'/'warehouse_monitor'/str(time.time_ns())
     if monitor: capture_dir.mkdir(parents=True,exist_ok=True)
-    gate=StableLocation();requested=time.monotonic();sequence=0
-    while not cancel.wait(.005):
+    from .warehouse_capture import Recorder
+    def snapshot_for_capture():
         if row:
             snap=camera.get_latest()
-            snapshot=None if snap is None else (snap.frame_id,snap.timestamp,snap.frame)
-        else:
-            snapshot=number_session.frames.snapshot() if number_session.frames else None
-        if snapshot is None:
-            if time.monotonic()-requested>2: raise TimeoutError('warehouse camera has no frames')
-            continue
-        frame_id,stamp,frame=snapshot
-        if time.monotonic()-stamp>2: raise TimeoutError('warehouse camera stalled')
-        if stamp<requested or frame_id==gate.last_id: continue
-        processing=time.monotonic()
-        if row:
-            digit,offset=locate(frame,templates,roi,score,margin,score_floor=.73 if row==1 else .70)
-        else:
-            x,y,w,h=roi
-            digit,offset=locate_number(frame,number_session.detector,roi)
-        completed=time.monotonic()
-        result=gate.update(digit,offset,frame_id,stamp,completed)
-        if monitor and completed-capture_at>=1 and (pending is None or pending.done()):
-            capture_at=completed
-            image_path=capture_dir/f'row{row}-frame{frame_id}.jpg'
-            pending=writer.submit(cv2.imwrite,str(image_path),frame.copy())
-            print(f'WH_DEBUG row={row} raw={digit} offset={offset} age_ms={(completed-stamp)*1000:.1f} process_ms={(completed-processing)*1000:.1f} result={result} image={image_path}',flush=True)
-        if result is not None:
-            sequence+=1;emit(sequence,*result)
-    if writer is not None: writer.shutdown(wait=False)
-
-
+            return None if snap is None else (snap.frame_id,snap.timestamp,snap.frame)
+        return number_session.frames.snapshot() if number_session.frames else None
+    recorder=Recorder(Path(project_root)/'captures'/'warehouse_field',row,color,snapshot_for_capture) if capture else None
+    if recorder: recorder.start()
+    try:
+        gate=StableLocation();requested=time.monotonic();sequence=0;debug_at=0
+        while not cancel.wait(.005):
+            if row:
+                snap=camera.get_latest()
+                snapshot=None if snap is None else (snap.frame_id,snap.timestamp,snap.frame)
+            else:
+                snapshot=number_session.frames.snapshot() if number_session.frames else None
+            if snapshot is None:
+                if time.monotonic()-requested>2: raise TimeoutError('warehouse camera has no frames')
+                continue
+            frame_id,stamp,frame=snapshot
+            if time.monotonic()-stamp>2: raise TimeoutError('warehouse camera stalled')
+            if stamp<requested or frame_id==gate.last_id: continue
+            processing=time.monotonic()
+            if row:
+                digit,offset=locate(frame,templates,roi,score,margin,score_floor=.73 if row==1 else .70)
+            else:
+                x,y,w,h=roi
+                digit,offset=locate_number(frame,number_session.detector,roi)
+            completed=time.monotonic()
+            result=gate.update(digit,offset,frame_id,stamp,completed)
+            if capture and completed-debug_at>=.5:
+                debug_at=completed
+                print(f'WH_CAPTURE_STATUS row={row} frame={frame_id} raw={digit} offset={offset} age_ms={(completed-stamp)*1000:.1f} process_ms={(completed-processing)*1000:.1f} result={result}',flush=True)
+            if monitor and completed-capture_at>=1 and (pending is None or pending.done()):
+                capture_at=completed
+                image_path=capture_dir/f'row{row}-frame{frame_id}.jpg'
+                pending=writer.submit(cv2.imwrite,str(image_path),frame.copy())
+                print(f'WH_DEBUG row={row} raw={digit} offset={offset} age_ms={(completed-stamp)*1000:.1f} process_ms={(completed-processing)*1000:.1f} result={result} image={image_path}',flush=True)
+            if result is not None:
+                sequence+=1;emit(sequence,*result)
+    finally:
+        if recorder: recorder.stop()
+        if writer is not None: writer.shutdown(wait=True)

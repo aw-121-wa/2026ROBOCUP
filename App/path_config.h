@@ -57,6 +57,12 @@
 #ifndef PATH_VISION_ENABLE
 #define PATH_VISION_ENABLE 1
 #endif
+#ifndef PATH_WAREHOUSE_CAPTURE_START
+#define PATH_WAREHOUSE_CAPTURE_START 0
+#endif
+#if PATH_WAREHOUSE_CAPTURE_START && !PATH_VISION_ENABLE
+#error "Warehouse capture requires vision"
+#endif
 #ifndef PATH_WAREHOUSE_ONLY_VISION
 #define PATH_WAREHOUSE_ONLY_VISION 0
 #endif

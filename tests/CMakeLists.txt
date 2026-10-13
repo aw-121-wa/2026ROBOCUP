@@ -265,3 +265,12 @@ target_compile_options(test_continuous_ports PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(test_continuous_ports PRIVATE m)
 add_test(NAME continuous_ports_red COMMAND test_continuous_ports full_path)
 add_test(NAME continuous_ports_blue COMMAND test_continuous_ports full_path_blue)
+
+add_executable(test_warehouse_capture_start test_warehouse_capture_start.c
+ ../App/path_mission.c ../App/path_chassis.c ../App/path_line.c ../App/path_warehouse.c
+ ../App/path_destack.c ../App/ball_inventory.c ../App/rdk_link.c)
+target_include_directories(test_warehouse_capture_start PRIVATE ../App)
+target_compile_definitions(test_warehouse_capture_start PRIVATE PATH_WAREHOUSE_CAPTURE_START=1 PATH_VISION_ENABLE=1)
+target_compile_options(test_warehouse_capture_start PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(test_warehouse_capture_start PRIVATE m)
+add_test(NAME warehouse_capture_start COMMAND test_warehouse_capture_start)

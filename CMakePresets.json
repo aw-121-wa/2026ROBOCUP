@@ -6,9 +6,8 @@
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
-		    "toolchainFile": "${sourceDir}/cmake/gcc-arm-none-eabi.cmake",
-            "cacheVariables": {
-            }
+            "toolchainFile": "${sourceDir}/cmake/gcc-arm-none-eabi.cmake",
+            "cacheVariables": {}
         },
         {
             "name": "Debug",
@@ -31,6 +30,24 @@
                 "CMAKE_BUILD_TYPE": "Release",
                 "CHASSIS_RELEASE_LTO": "OFF"
             }
+        },
+        {
+            "name": "Full-Vision",
+            "inherits": "Release-LTO",
+            "cacheVariables": {
+                "PATH_WAREHOUSE_CAPTURE_START": "OFF",
+                "PATH_WAREHOUSE_ONLY_VISION": "OFF",
+                "CMAKE_C_FLAGS": "-fno-inline-functions-called-once -flto-partition=one"
+            }
+        },
+        {
+            "name": "Warehouse-Capture",
+            "inherits": "Release-LTO",
+            "cacheVariables": {
+                "PATH_WAREHOUSE_CAPTURE_START": "ON",
+                "PATH_WAREHOUSE_ONLY_VISION": "OFF",
+                "CMAKE_C_FLAGS": "-fno-inline-functions-called-once -flto-partition=one"
+            }
         }
     ],
     "buildPresets": [
@@ -45,6 +62,14 @@
         {
             "name": "Release",
             "configurePreset": "Release"
+        },
+        {
+            "name": "Full-Vision",
+            "configurePreset": "Full-Vision"
+        },
+        {
+            "name": "Warehouse-Capture",
+            "configurePreset": "Warehouse-Capture"
         }
     ]
 }

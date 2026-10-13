@@ -103,6 +103,9 @@ typedef struct {
     uint32_t since, frame, fresh_since;
     float axis, origin, columns[3], resume, goal, scan_end, current_position;
     float sample_position, sample_offset, pixel_slope;
+    float distance_rpm;
+    uint32_t distance_since;
+    bool distance_active;
     int8_t direction;
 } PathDestack;
 typedef struct
