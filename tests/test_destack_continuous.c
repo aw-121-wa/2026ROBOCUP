@@ -50,7 +50,7 @@ static void route(bool blue)
             float goal=row ? (4-row)*PATH_WAREHOUSE_COLUMN_SPACING_MM : roundf(relative/PATH_WAREHOUSE_COLUMN_SPACING_MM)*PATH_WAREHOUSE_COLUMN_SPACING_MM;
             unsigned digit=row ? 4-row : (goal<PATH_WAREHOUSE_COLUMN_SPACING_MM*1.5f?2:goal<PATH_WAREHOUSE_COLUMN_SPACING_MM*2.5f?1:3);
             if(fabsf(relative-goal)<45 && !(row && (m.destack.occupied&(1U<<digit)))) {
-                in.scan_digit=digit;in.scan_offset=(int16_t)lroundf((goal-p)*2);
+                in.scan_digit=digit;in.scan_offset=(int16_t)lroundf((goal-relative)*2);
             }
         }
         PathWarehouse_Tick(&m,tick*20,&in);
@@ -127,24 +127,29 @@ static void entry_and_nearest(void)
 }
 static void digit_stops_motion(void)
 {
-    init(false);in.gray=6;in.scan_active=in.scan_fresh=true;
+    for(unsigned blue=0;blue<2;++blue) {
+    init(blue);in.gray=6;in.scan_active=in.scan_fresh=true;
     float spacing=PATH_WAREHOUSE_COLUMN_SPACING_MM;
     m.destack=(PathDestack){.enabled=true,.cleared=true,.state=DS_BALL_MOVE,
         .stream=true,.column=2,.direction=-1,.columns={spacing,2*spacing,3*spacing}};
     in.x_mm=3*spacing;in.scan_frame=1;in.scan_digit=0;
     PathWarehouse_Tick(&m,1000,&in);
-    assert(vx<0 && !m.destack.stopping); /* Do not stop at the predicted center. */
+    assert(vx*(blue?-1:1)<0 && !m.destack.stopping); /* Do not stop at the predicted center. */
     in.x_mm-=30;in.scan_frame=2;in.scan_digit=2;in.scan_offset=30;
     PathWarehouse_Tick(&m,1020,&in);
+    assert(vx*(blue?-1:1)<0 && !m.destack.stopping && !m.warehouse_used); /* Off-center ID cannot stop or map a column. */
+    in.scan_frame=3;in.scan_offset=-8;
+    PathWarehouse_Tick(&m,1030,&in);
     assert(vx==0 && m.destack.stopping && m.warehouse_columns[2]==2);
     PathWarehouse_Tick(&m,1040,&in);
     assert(m.destack.state==DS_BALL && !in.scan_active);
     m.destack.state=DS_BALL_MOVE;m.destack.column=1;m.destack.direction=-1;
     m.destack.stopping=false;m.destack.stream=true;
-    in.scan_active=in.scan_fresh=true;in.scan_frame=3;in.scan_digit=2;
+    in.scan_active=in.scan_fresh=true;in.scan_frame=4;in.scan_digit=2;
     PathWarehouse_Tick(&m,1060,&in);
-    assert(vx<0 && !m.destack.stopping); /* Old column cannot cause another unload. */
+    assert(vx*(blue?-1:1)<0 && !m.destack.stopping); /* Old column cannot cause another unload. */
     in.scan_fresh=false;PathWarehouse_Tick(&m,1080,&in);assert(vx==0);
+    }
 }
 static void nearest_row_start(void)
 {
@@ -204,7 +209,23 @@ static void protocol(void)
     feed(&r,"WH_FRAME 1 3 1 0\r\n");assert(!r.locked && r.active);
     feed(&r,"GROUP_ACK 113\r\nGROUP_DONE 113\r\n");assert(r.reply==PATH_OK);
 }
-int main(void) {protocol();infer_last_column();nearest_row_start();digit_stops_motion();entry_and_nearest();line_and_stale();braking_and_arm();route(false);route(true);return 0;}
+static void crossed_center(void)
+{
+    init(false);in.gray=6;in.scan_active=in.scan_fresh=true;in.settled=true;
+    m.destack=(PathDestack){.enabled=true,.state=DS_SCAN,.row=3,.direction=1,
+        .scan_end=1000,.stream=true,.sample_valid=true,.sample_digit=3,
+        .sample_offset=14,.sample_position=0};
+    in.x_mm=5;in.scan_digit=3;in.scan_offset=-10;in.scan_frame=2;
+    PathWarehouse_Tick(&m,1000,&in);
+    assert(m.destack.state==DS_CENTER && m.destack.target==3 && vx==0);
+    init(false);in.gray=6;in.scan_active=in.scan_fresh=true;in.settled=true;
+    m.destack=(PathDestack){.enabled=true,.cleared=true,.state=DS_BALL_MOVE,
+        .stream=true,.direction=1,.sample_valid=true,.sample_digit=2,.sample_offset=16};
+    in.scan_digit=2;in.scan_offset=-12;in.scan_frame=2;
+    PathWarehouse_Tick(&m,1000,&in);
+    assert(m.destack.stopping && m.warehouse_columns[0]==2);
+}
+int main(void) {crossed_center();protocol();infer_last_column();nearest_row_start();digit_stops_motion();entry_and_nearest();line_and_stale();braking_and_arm();route(false);route(true);return 0;}
 
 
 

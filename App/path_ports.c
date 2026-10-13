@@ -286,7 +286,7 @@ static bool send(void *ctx, const PathCommand *c)
             return false;
         return motion_started(c,now,c->continuous);
     case PC_HOME_ALIGN:
-        if (!Chassis_AlignHome(c->x)) return false;
+        if (!Chassis_AlignHome(c->x,c->speed)) return false;
         return motion_started(c,now,false);
     case PC_RETURN_HOME:
         if (!Chassis_ReturnHome(c->argument)) return false;

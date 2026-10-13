@@ -267,7 +267,7 @@ int main(int argc,char **argv) {
         assert(fabsf(dx)<1e-5f && dy>.999f);
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
-        assert(Chassis_AlignHome(0));assert(fabsf(rotate_tolerance_deg-0.1f)<1e-6f);
+        assert(Chassis_AlignHome(0,0));assert(fabsf(rotate_tolerance_deg-0.1f)<1e-6f);
         assert(fabsf(Angle_Wrap(route_heading-map_yaw))<1e-5f);
         Chassis_Hold();wait_stop();
         state.x_mm=100;state.y_mm=200;state.yaw_rad=map_yaw;

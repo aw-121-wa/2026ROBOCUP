@@ -569,8 +569,8 @@ static bool align_map_heading(float degrees, float tolerance)
 }
 
 bool Chassis_AlignMapAxis(void) { return align_map_heading(route_policy.stair_target_deg, STAIR_HEADING_STOP_TOLERANCE_DEG); }
-bool Chassis_AlignHome(float target_deg) {
-    if (!align_map_heading(target_deg, HEADING_STATIC_TOLERANCE_DEG)) return false;
+bool Chassis_AlignHome(float target_deg, float tolerance_deg) {
+    if (!align_map_heading(target_deg, tolerance_deg>0 ? tolerance_deg : HEADING_STATIC_TOLERANCE_DEG)) return false;
     home_alignment=true;
     return true;
 }

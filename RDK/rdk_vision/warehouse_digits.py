@@ -105,8 +105,8 @@ class DigitDetector:
                 if not 0.60<(w/h)/aspect<1.65: score=0.0
                 best[digit]=max(best[digit],score)
             scores=sorted(((score,digit) for digit,score in best.items()),reverse=True)
-            minimum=max(.70,self.min_score) if partial else self.min_score
-            margin=max(.14,self.min_margin) if partial else self.min_margin
+            minimum=max(.72,self.min_score) if partial else self.min_score
+            margin=max(.16,self.min_margin) if partial else self.min_margin
             if scores[0][0]>=minimum and scores[0][0]-scores[1][0]>=margin:
                 candidates.append((scores[0][1],scores[0][0],sources,x+w/2))
         selected=[]

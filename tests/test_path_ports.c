@@ -695,7 +695,7 @@ bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
 bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=180))return false; map_headings++; map_yaw_test=degrees; return true; }
 
-bool Chassis_AlignHome(float target_deg) { map_yaw_test=target_deg; moving=true; return true; }
+bool Chassis_AlignHome(float target_deg, float tolerance_deg) { (void)tolerance_deg; map_yaw_test=target_deg; moving=true; return true; }
 
 void Chassis_SetRoutePolicy(ChassisRoutePolicy policy) { (void)policy; }
 

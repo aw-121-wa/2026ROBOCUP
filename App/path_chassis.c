@@ -35,7 +35,7 @@ static void next(PathMission *m, uint32_t now)
 static void leave_pillar(PathMission *m, uint32_t now, const PathInput *in)
 {
     if (PATH_BLUE_PILLAR_TEST && !PATH_BLUE_STAIR_TEST) { hold(m);m->result=PATH_DONE;return; }
-    if (PATH_VISION_ENABLE) {
+    if (PATH_ROUTE_VISION_ENABLE) {
         if (!emit(m,PC_PILLAR_END,0,0,0,0,5000)) { fail(m,PATH_ERROR);return; }
         m->pillar_depart_pending=m->prep_pending=true;
         m->prep_since=now;
@@ -49,7 +49,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
     const float orbit_degrees=m->blue ? ROUTE_ORBIT_BLUE_DEG : ROUTE_ORBIT_RED_DEG;
     const float orbit_x=m->blue ? ROUTE_ORBIT_BLUE_X_RPM : ROUTE_ORBIT_RED_X_RPM;
     const uint32_t orbit_limit=m->blue ? 25000U : 15000U;
-    if ((PATH_VISION_ENABLE && in->reply == PATH_FAILED) ||
+    if ((PATH_ROUTE_VISION_ENABLE && in->reply == PATH_FAILED) ||
         (m->phase >= 4 && (uint32_t)(now - m->entered) >=
                           (m->phase == 7 ? 5000U : 60000U)))
     {
@@ -99,7 +99,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
                 }
                 m->heading_align_active=false;
             }
-            if (!PATH_VISION_ENABLE)
+            if (!PATH_ROUTE_VISION_ENABLE)
             {
                 m->orbit_yaw = in->yaw_deg;
                 m->orbit_ms = 0;
@@ -119,7 +119,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         m->previous = now;
         if (m->orbit_ms >= orbit_limit)
             fail(m, PATH_TIMEOUT);
-        else if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
+        else if (PATH_ROUTE_VISION_ENABLE && in->ball_index > m->grabs)
         {
             hold(m);
             m->phase = 5;
@@ -131,7 +131,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         }
         break;
     case 3:
-        if (PATH_VISION_ENABLE && in->ball_index>m->grabs) {
+        if (PATH_ROUTE_VISION_ENABLE && in->ball_index>m->grabs) {
             hold(m);m->phase=5;m->entered=now;
         } else leave_pillar(m,now,in);
         break;
@@ -141,7 +141,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
             m->orbit_yaw = in->yaw_deg;
             m->orbit_ms = 0;
             m->previous = now;
-            if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
+            if (PATH_ROUTE_VISION_ENABLE && in->ball_index > m->grabs)
             {
                 hold(m);
                 m->phase = 5;
@@ -162,7 +162,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->grabs = in->resume_index;
             m->previous = now;
-            if (PATH_VISION_ENABLE && in->ball_index > m->grabs)
+            if (PATH_ROUTE_VISION_ENABLE && in->ball_index > m->grabs)
             {
                 hold(m);
                 m->phase = 5;
@@ -183,7 +183,7 @@ static void pillar(PathMission *m, uint32_t now, const PathInput *in)
 }
 static bool group(PathMission *m, uint32_t now, const PathInput *in, unsigned id)
 {
-    if (!PATH_VISION_ENABLE) return true;
+    if (!PATH_ROUTE_VISION_ENABLE) return true;
     if (!m->waiting)
     {
         m->entered = now;
@@ -215,7 +215,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     }
     switch(m->phase) {
     case 0:
-        if (PATH_VISION_ENABLE && !m->prep_pending && !m->stair_ready_started) {
+        if (PATH_ROUTE_VISION_ENABLE && !m->prep_pending && !m->stair_ready_started) {
             if (!emit(m,PC_GROUP,0,0,0,105,30000)) break;
             m->stair_ready_started=true; m->prep_pending=true; m->prep_since=now;
         }
@@ -262,7 +262,7 @@ static void stair(PathMission *m, uint32_t now, const PathInput *in)
     case 20: /* Start a level only when stopped, with a fresh detection session. */
         if (!in->settled) break;
         m->stair_base_grabs=m->grabs;
-        if (PATH_VISION_ENABLE && m->grabs<2) {
+        if (PATH_ROUTE_VISION_ENABLE && m->grabs<2) {
             if (emit(m,PC_STAIR_SCAN,0,0,0,(m->point == 0 ? 1 : m->point < 3 ? 2 : 3),180000)) {
                 m->stair_scanning=true; m->phase=21;
             }
@@ -365,7 +365,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
     switch (m->step)
     {
     case 4:
-        if (!PATH_VISION_ENABLE)
+        if (!PATH_ROUTE_VISION_ENABLE)
         {
             next(m, now);
             break;
@@ -399,7 +399,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         next(m, now);
         break;
     case 8:
-        if (PATH_VISION_ENABLE && !m->prep_pending) {
+        if (PATH_ROUTE_VISION_ENABLE && !m->prep_pending) {
             unsigned id = !m->stair_prep_started ? 2 : !m->stair_ready_started ? 105 : 0;
             if (id) {
                 if (!emit(m,PC_GROUP,0,0,0,id,30000)) break;
@@ -467,7 +467,7 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
         {
             if (m->phase == 1 && !m->waiting && !PathHeading_Ready(m, now, in)) break;
             bool detected=m->stable;
-            if (!PATH_VISION_ENABLE) { next(m,now); m->stable=detected; break; }
+            if (!PATH_ROUTE_VISION_ENABLE) { next(m,now); m->stable=detected; break; }
             next(m,now); m->stable=detected;
         }
         else fail(m, PATH_ERROR);
@@ -541,14 +541,26 @@ void PathChassis_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->entered = now;
             }
         }
-        else if (PathLine_AlignFour(m, now, in))
+        else if (m->phase==1)
         {
-            if (PATH_STOP_AT_WAREHOUSE_LINE) {
-                hold(m); m->result=PATH_DONE;
-                break;
+            if (PathLine_AlignFour(m,now,in)) {
+                if (emit(m,PC_HOME_ALIGN,PATH_WAREHOUSE_TARGET_DEG(m->blue),0,
+                         PATH_WAREHOUSE_ENTRY_ALIGN_DEG,0,PATH_HEADING_TIMEOUT_MS)) {
+                    m->phase=2;m->entered=now;
+                }
             }
-            m->point = 0;
-            next(m, now);
+        }
+        else if (m->phase==2)
+        {
+            /* The deadline is a release condition, not a task error. */
+            /* Settled acknowledges the controller's requested 0.05-degree precision. */
+            if ((uint32_t)(now-m->entered)<PATH_WAREHOUSE_ENTRY_ALIGN_MS && !in->settled) break;
+            hold(m);m->phase=3;
+        }
+        else if (in->settled)
+        {
+            if (PATH_STOP_AT_WAREHOUSE_LINE) { m->result=PATH_DONE;break; }
+            m->point=0;next(m,now);
         }
         break;
     case 13:

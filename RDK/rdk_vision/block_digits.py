@@ -31,6 +31,7 @@ class BlockDetector:
         # Samples must come from this camera/pose, not bottom-camera templates.
         samples=[(digit, f'{digit}.png') for digit in (1,2,3)]
         samples.extend((int(digit), name) for digit, name in settings.get('additional_templates', {}).items())
+        samples.extend((int(digit), name) for digit, name in settings.get('sample_templates', []))
         for digit, name in samples:
             path = root / settings['templates'] / name
             image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)

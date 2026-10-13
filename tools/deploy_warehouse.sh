@@ -7,6 +7,7 @@ cp rdk_vision/warehouse_digits.py "$backup/warehouse_digits.py"
 if [ -f rdk_vision/warehouse_stream.py ]; then cp rdk_vision/warehouse_stream.py "$backup/warehouse_stream.py"; fi
 if [ -f rdk_vision/block_digits.py ]; then cp rdk_vision/block_digits.py "$backup/block_digits.py"; fi
 if [ -f rdk_vision/block_digits.yaml ]; then cp rdk_vision/block_digits.yaml "$backup/block_digits.yaml"; fi
+cp -a rdk_vision/block_samples "$backup/block_samples"
 systemctl stop rdk-disc.service
 tar -xzf /tmp/warehouse-continuous-deploy.tar.gz
 chown -R sunrise:sunrise tools/rdk_stm32_bridge.py rdk_vision/warehouse_digits.py rdk_vision/warehouse_stream.py rdk_vision/block_digits.py rdk_vision/block_digits.yaml rdk_vision/block_samples

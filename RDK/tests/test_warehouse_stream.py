@@ -47,16 +47,16 @@ class StreamTests(unittest.TestCase):
                             settings['min_score'],settings['min_margin'],score_floor=.73 if row==1 else .70)
                         self.assertEqual(result[0],expected)
 
-    def test_number_central_retry(self):
+    def test_number_no_central_retry(self):
         class Detector:
             def detect(self,image):
                 self.last_center=165 if image.shape[1]==320 else None
                 return (2,.8) if self.last_center is not None else (0,0)
-        self.assertEqual(locate_number(np.full((480,640),255,np.uint8),Detector(),(0,0,640,480)),(2,5))
+        self.assertEqual(locate_number(np.full((480,640),255,np.uint8),Detector(),(0,0,640,480)),(0,0))
 
     def test_number_retry_recorded_and_empty(self):
         from rdk_vision.warehouse_digits import DigitDetector
-        detector=DigitDetector(.58,.08)
+        detector=DigitDetector(.62,.10)
         root=Path(__file__).resolve().parent/'fixtures'
         for digit in (1,2,3):
             frame=cv2.imread(str(root/f'warehouse_partial_{digit}.png'))

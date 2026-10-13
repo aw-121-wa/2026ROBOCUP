@@ -7,7 +7,7 @@
 #define RAD 0.01745329252f
 #define CENTER_PX 8
 
-static bool send(PathMission *m,const PathCommand *c)
+static __attribute__((noinline)) bool send(PathMission *m,const PathCommand *c)
 {
     if(m->send(m->context,c)) return true;
     (void)m->send(m->context,&(PathCommand){.kind=PC_HOLD});
@@ -27,7 +27,7 @@ static void enter(PathMission *m,unsigned state,uint32_t now)
 }
 static float position(const PathMission *m,const PathInput *in)
 { return in->x_mm*cosf(m->destack.axis)+in->y_mm*sinf(m->destack.axis); }
-static void velocity(PathMission *m,const PathInput *in,float rpm)
+static __attribute__((noinline)) void velocity(PathMission *m,const PathInput *in,float rpm)
 {
     if(m->destack.braking && !in->settled) return;
     m->destack.braking=false;
@@ -40,6 +40,14 @@ static bool move(PathMission *m,const PathInput *in,float goal,float rpm)
     if(fabsf(error)<=ROUTE_WAREHOUSE_MOVE_TOL_MM) {hold(m);return in->settled;}
     velocity(m,in,copysignf(fminf(rpm,fmaxf(ROUTE_WAREHOUSE_APPROACH_MIN_RPM_COMMAND,fabsf(error))),error));
     return false;
+}
+/* A confirmed digit may cross the center between two camera updates. */
+static bool centered(const PathDestack *d,const PathInput *in)
+{
+    return abs(in->scan_offset)<=CENTER_PX ||
+        (d->sample_valid && d->sample_digit==in->scan_digit &&
+         fabsf(d->sample_offset)<=80 && abs(in->scan_offset)<=80 &&
+         (int)d->sample_offset*in->scan_offset<0);
 }
 static bool stream(PathMission *m,const PathInput *in,unsigned row)
 {
@@ -88,6 +96,7 @@ static bool line_ready(PathMission *m,uint32_t now,const PathInput *in)
 static void next_ball(PathMission *m,uint32_t now)
 {
     PathDestack *d=&m->destack;
+    d->sample_valid=false;
     unsigned nearest=3;float best=INFINITY;
     for(unsigned c=0;c<3;++c) if(!(d->mapped&(1U<<c))) {
         float distance=fabsf(d->current_position-d->columns[c]);
@@ -134,7 +143,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
                 if(d->cleared) {d->current_position=d->origin;next_ball(m,now);}
                 else enter(m,DS_FIRST,now);
             }
-        } else velocity(m,in,d->cleared ? -ROUTE_WAREHOUSE_AFTER_BLOCK_RPM_COMMAND : ROUTE_WAREHOUSE_ENTRY_BACK_RPM_COMMAND);
+        } else velocity(m,in,d->cleared ? -ROUTE_WAREHOUSE_REBASE_BACK_RPM_COMMAND : ROUTE_WAREHOUSE_ENTRY_BACK_RPM_COMMAND);
         return true;
     }
     d->current_position=position(m,in);
@@ -165,6 +174,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
                 unsigned col=0;float best=INFINITY;
                 for(unsigned c=0;c<3;++c) if(fabsf(p-d->columns[c])<best) {best=fabsf(p-d->columns[c]);col=c;}
                 if(!(d->handled&(1U<<((d->row-1)*3+col)))) {
+                    bool at_center=centered(d,in) || abs(in->scan_offset)<=48;
                     float dp=p-d->sample_position;
                     if(d->sample_valid && d->sample_digit==in->scan_digit && fabsf(dp)>1 && fabsf(in->scan_offset-d->sample_offset)>1)
                         d->pixel_slope=(in->scan_offset-d->sample_offset)/dp;
@@ -172,7 +182,8 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
                         d->sample_position=p;d->sample_offset=in->scan_offset;
                         d->sample_valid=true;d->sample_digit=in->scan_digit;
                     }
-                    if(abs(in->scan_offset)<=CENTER_PX) {
+                    if(at_center) {
+                        if(fabsf(d->pixel_slope)<=.05f) d->pixel_slope=-2.0f;
                         d->target=in->scan_digit;d->column=col;d->resume=p;
                         hold(m);enter(m,DS_CENTER,now);break;
                     }
@@ -181,7 +192,9 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
         }
         if((uint32_t)(now-d->fresh_since)<350) {hold(m);break;} /* Inspect the initial endpoint. */
         if((p-d->scan_end)*d->direction>=0) {hold(m);enter(m,DS_STOP_ROW,now);break;}
-        velocity(m,in,d->direction*ROUTE_BLOCK_SCAN_RPM_COMMAND);break;
+        float scan_rpm=ROUTE_BLOCK_SCAN_RPM_COMMAND;
+        if(in->scan_digit && abs(in->scan_offset)<160) scan_rpm=fminf(scan_rpm,ROUTE_VISION_CENTER_RPM_COMMAND);
+        velocity(m,in,d->direction*scan_rpm);break;
     case DS_CENTER:
         if(!in->scan_fresh) {hold(m);break;}
         if(d->stopping) {
@@ -231,7 +244,8 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
     case DS_BALL_MOVE:
         /* Continue past estimated centers until a fresh, unserved bottom number is seen. */
         if(!d->stopping) {
-            unsigned digit=in->scan_digit;
+            /* Off-center recognition must not become a column datum. Inferred last column uses distance below. */
+            unsigned digit=centered(d,in) ? in->scan_digit : 0;
             if(d->column==2 && m->warehouse_columns[0] && m->warehouse_columns[1]) {
                 if(!move(m,in,d->goal,ROUTE_WAREHOUSE_TRANSFER_RPM_COMMAND)) break;
                 digit=6-m->warehouse_columns[0]-m->warehouse_columns[1]; /* 6 minus the two distinct IDs. */
@@ -239,8 +253,9 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
             } else if(!stream(m,in,0)) {hold(m);break;}
             if(new_frame) {
                 d->frame=in->scan_frame;
+                d->sample_valid=in->scan_digit!=0;d->sample_digit=in->scan_digit;d->sample_offset=in->scan_offset;
                 if(digit>=1 && digit<=3 && !(m->warehouse_used&(1U<<digit))) {
-                    /* Identity is the stop trigger; predicted centers select travel direction only. */
+                    /* A fresh centered identity is the stop trigger. */
                     unsigned col=d->column;
                     m->warehouse_columns[col]=digit;m->warehouse_used|=1U<<digit;
                     d->stopping=true;
@@ -252,7 +267,7 @@ bool PathDestack_Tick(PathMission *m,uint32_t now,const PathInput *in)
                 float high=d->origin+PATH_WAREHOUSE_COLUMN_SPACING_MM*3.5f;
                 if((d->direction<0 && p<=low) || (d->direction>0 && p>=high)) {
                     hold(m);d->direction=-d->direction;
-                } else velocity(m,in,d->direction*ROUTE_WAREHOUSE_TRANSFER_RPM_COMMAND);
+                } else velocity(m,in,d->direction*((in->scan_digit && !(m->warehouse_used&(1U<<in->scan_digit)) && abs(in->scan_offset)<160) ? ROUTE_VISION_CENTER_RPM_COMMAND : ROUTE_WAREHOUSE_TRANSFER_RPM_COMMAND));
                 break;
             }
         }

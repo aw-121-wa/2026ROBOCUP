@@ -126,9 +126,11 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
             fail(m, PATH_ERROR);
         else if (in->reply == PATH_OK)
         {
-            PathCommand prep = {.kind=PC_GROUP,.argument=100,.timeout_ms=30000};
-            if (!m->send(m->context,&prep)) { fail(m,PATH_ERROR); return; }
-            m->prep_pending=true; m->prep_since=now;
+            if (PATH_ROUTE_VISION_ENABLE) {
+                PathCommand prep = {.kind=PC_GROUP,.argument=100,.timeout_ms=30000};
+                if (!m->send(m->context,&prep)) { fail(m,PATH_ERROR); return; }
+                m->prep_pending=true; m->prep_since=now;
+            }
             m->phase = 0;
             m->entered = now;
         }
@@ -207,7 +209,7 @@ void Path_Tick(PathMission *m, uint32_t now, const PathInput *in)
     {
         if (PathLine_Align(m, now, in, PATH_DISC_LINE_TIMEOUT_MS, DISC_ENTRY_SPEED_RPM_COMMAND))
         {
-            if (!PATH_VISION_ENABLE) { m->result=PATH_DONE; return; }
+            if (!PATH_ROUTE_VISION_ENABLE) { m->result=PATH_DONE; return; }
             m->phase=3; m->entered=now; /* Line reached; serialize the next arm/vision request. */
         }
     }

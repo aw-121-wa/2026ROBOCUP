@@ -72,8 +72,10 @@ static void fail(PathMission *m, PathResult result)
     (void)m->send(m->context,&cancel);
     m->result=result;
 }
-static bool emit(PathMission *m, PathCommand command)
+static bool emit(PathMission *m, const PathCommand *requested)
 {
+    PathCommand command=*requested;
+
     /* A recognized blue digit prohibits lateral search; unloading remains gyro-controlled. */
     if (m->blue && m->point<9 && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
         (command.kind==PC_MAP_SEARCH || command.kind==PC_MAP_LATERAL)) {
@@ -88,7 +90,7 @@ static bool emit(PathMission *m, PathCommand command)
 #if !PATH_CONTINUOUS_WAREHOUSE
 static void brake_for_unload(PathMission *m, uint32_t now)
 {
-    if (!emit(m, (PathCommand){.kind=PC_HOLD})) return;
+    if (!emit(m, &(PathCommand){.kind=PC_HOLD})) return;
     m->waiting=false;
     m->phase=WAREHOUSE_BRAKE;
     m->entered=now;
@@ -122,7 +124,7 @@ static void advance(PathMission *m, uint32_t now)
     if (m->point==9)
     {
         if (BallInventory_HasKnown(&m->inventory)) fail(m,PATH_ERROR);
-        else if (emit(m,(PathCommand){.kind=PC_HOLD})) {m->phase=WAREHOUSE_ALIGN_HOME;m->stable=false;}
+        else if (emit(m,&(PathCommand){.kind=PC_HOLD})) {m->phase=WAREHOUSE_ALIGN_HOME;m->stable=false;}
     }
 }
 void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
@@ -133,15 +135,15 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!m->stable) {
                 unsigned middle=in->gray&6U;
                 if (middle==2U || middle==4U) {
-                    if (emit(m,(PathCommand){.kind=PC_HOLD})) m->stable=true;
-                } else (void)emit(m,(PathCommand){.kind=PC_BODY,.x=m->blue ? ROUTE_HOME_LEAVE_LINE_RPM_COMMAND : -ROUTE_HOME_LEAVE_LINE_RPM_COMMAND,.timeout_ms=10000});
+                    if (emit(m,&(PathCommand){.kind=PC_HOLD})) m->stable=true;
+                } else (void)emit(m,&(PathCommand){.kind=PC_BODY,.x=m->blue ? ROUTE_HOME_LEAVE_LINE_RPM_COMMAND : -ROUTE_HOME_LEAVE_LINE_RPM_COMMAND,.timeout_ms=10000});
             } else if (in->settled) {
                 m->phase=WAREHOUSE_RETURN_HOME;m->waiting=false;m->entered=now;
             }
         } else if (m->phase==WAREHOUSE_RETURN_HOME || m->phase==WAREHOUSE_HOME_RIGHT) {
             unsigned leg=m->phase==WAREHOUSE_RETURN_HOME ? 0 : 1;
             if (!m->waiting) {
-                if(in->settled) m->waiting=emit(m,(PathCommand){.kind=PC_RETURN_HOME,.argument=leg,.timeout_ms=30000});
+                if(in->settled) m->waiting=emit(m,&(PathCommand){.kind=PC_RETURN_HOME,.argument=leg,.timeout_ms=30000});
             } else if(in->settled) {
                 m->phase=leg==0 ? WAREHOUSE_HOME_RIGHT : WAREHOUSE_HOME_FINAL_ALIGN;
                 m->waiting=false;m->entered=now;
@@ -152,7 +154,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (!isfinite(error)) {fail(m,PATH_ERROR);return;}
             if (!in->settled) return;
             if (fabsf(error)<0.1f) m->result=PATH_DONE;
-            else m->waiting=emit(m,(PathCommand){.kind=PC_HOME_ALIGN,.x=target,.timeout_ms=PATH_HEADING_TIMEOUT_MS});
+            else m->waiting=emit(m,&(PathCommand){.kind=PC_HOME_ALIGN,.x=target,.timeout_ms=PATH_HEADING_TIMEOUT_MS});
         } else {fail(m,PATH_ERROR);return;}
         if (m->result==PATH_RUNNING && !PATH_WAREHOUSE_UNTIMED(m) &&
             (uint32_t)(now-m->entered)>=(m->phase==WAREHOUSE_HOME_FINAL_ALIGN ? PATH_HEADING_TIMEOUT_MS : 30000U))
@@ -176,12 +178,12 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!m->stable) {
             unsigned middle=in->gray&6U;
             if (middle==2U || middle==4U) {
-                if (emit(m,(PathCommand){.kind=PC_HOLD})) m->stable=true;
-            } else (void)emit(m,(PathCommand){.kind=PC_BODY,.x=-20,.timeout_ms=5000});
+                if (emit(m,&(PathCommand){.kind=PC_HOLD})) m->stable=true;
+            } else (void)emit(m,&(PathCommand){.kind=PC_BODY,.x=-20,.timeout_ms=5000});
             break;
         }
         if (!in->settled) break;
-        if (emit(m,(PathCommand){.kind=PC_MAP_LATERAL,
+        if (emit(m,&(PathCommand){.kind=PC_MAP_LATERAL,
                 .y=-PATH_WAREHOUSE_FIRST_RIGHT_MM,.timeout_ms=10000})) {
             m->phase=WAREHOUSE_FIRST_OFFSET;
             m->entered=now;
@@ -193,7 +195,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         m->waiting=false;
         if (in->warehouse_vision && m->warehouse_mode!=WAREHOUSE_DEFAULT_ORDER) {
             m->entered=now;
-            m->warehouse_query=emit(m,(PathCommand){.kind=PC_WAREHOUSE_DIGIT,
+            m->warehouse_query=emit(m,&(PathCommand){.kind=PC_WAREHOUSE_DIGIT,
                 .argument=m->warehouse_used,.timeout_ms=PATH_WAREHOUSE_DIGIT_TIMEOUT_MS});
             if (m->warehouse_query) m->phase=WAREHOUSE_WAIT_CAMERA;
         } else {
@@ -215,7 +217,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             m->phase=WAREHOUSE_FIRST_DIGIT;
         if (in->warehouse_ready && in->warehouse_digit_reply==PATH_WAIT &&
             m->phase==WAREHOUSE_FIRST_DIGIT)
-            emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
+            emit(m,&(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_CREEP_LIMIT_MM,
                 .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM_COMMAND,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
                 .deceleration=650,.timeout_ms=PATH_WAREHOUSE_CREEP_TIMEOUT_MS});
         break;
@@ -224,7 +226,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             if (in->warehouse_digit_reply==PATH_WAIT) break;
             if (m->point && (!valid_digit(in) || (m->warehouse_used & (1U<<in->warehouse_digit)))) {
                 /* Retry in place: do not restart creep beyond its distance limit. */
-                m->warehouse_query=emit(m,(PathCommand){.kind=PC_WAREHOUSE_DIGIT,
+                m->warehouse_query=emit(m,&(PathCommand){.kind=PC_WAREHOUSE_DIGIT,
                     .argument=m->warehouse_used,.timeout_ms=PATH_WAREHOUSE_DIGIT_TIMEOUT_MS});
                 break;
             }
@@ -243,7 +245,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         } else m->warehouse_mode=WAREHOUSE_DEFAULT_ORDER;
         m->warehouse_query=false;
         if (m->warehouse_mode==WAREHOUSE_DIGIT_ORDER) {
-            if (emit(m,(PathCommand){.kind=PC_FINISH_FORWARD,.x=PATH_WAREHOUSE_DIGIT_ADVANCE_MM,
+            if (emit(m,&(PathCommand){.kind=PC_FINISH_FORWARD,.x=PATH_WAREHOUSE_DIGIT_ADVANCE_MM,
                     .speed=PATH_WAREHOUSE_CREEP_SPEED_RPM_COMMAND,.acceleration=PATH_WAREHOUSE_CREEP_ACCEL,
                     .deceleration=650,.timeout_ms=5000})) {
                 m->waiting=true; m->phase=WAREHOUSE_BRAKE; m->entered=now;
@@ -283,7 +285,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             uint8_t first=m->warehouse_columns[0], second=m->warehouse_columns[1];
             if (m->point==6 && m->warehouse_mode==WAREHOUSE_DIGIT_ORDER &&
                 first>=1 && first<=3 && second>=1 && second<=3 && first!=second) {
-                if (emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,
+                if (emit(m,&(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,
                         .speed=120,.acceleration=850,.deceleration=850,.timeout_ms=30000})) {
                     remember_digit(m,(uint8_t)(6-first-second));
                     m->warehouse_query=false;
@@ -294,7 +296,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
             /* Later columns are reached by forward digit scanning, without a right shift.
              * Default order retains the fixed forward column spacing. */
             if (m->warehouse_mode==WAREHOUSE_DEFAULT_ORDER &&
-                !emit(m,(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,.speed=120,
+                !emit(m,&(PathCommand){.kind=PC_MOVE,.x=PATH_WAREHOUSE_COLUMN_SPACING_MM,.speed=120,
                     .acceleration=850,.deceleration=850,.timeout_ms=30000})) break;
             m->phase=WAREHOUSE_FIRST_OFFSET;
         }
@@ -303,7 +305,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=30000U) { fail(m,PATH_TIMEOUT); break; }
         if (PathLine_Aligned(m,in->gray)) {
             if (!m->line_stopping) {
-                if (emit(m,(PathCommand){.kind=PC_HOLD})) m->line_stopping=true;
+                if (emit(m,&(PathCommand){.kind=PC_HOLD})) m->line_stopping=true;
             } else if (in->settled) {
                 m->line_stopping=false;
                 m->phase=WAREHOUSE_ALIGN_LINE;
@@ -311,7 +313,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
                 m->entered=now;
             }
         } else if (!m->line_stopping)
-            emit(m,(PathCommand){.kind=PC_BODY,.x=-10,.timeout_ms=30000});
+            emit(m,&(PathCommand){.kind=PC_BODY,.x=-10,.timeout_ms=30000});
         break;
     case WAREHOUSE_ALIGN_LINE: /* Default-order fallback retains lateral line alignment. */
         if (PathLine_AlignFour(m,now,in)) {
@@ -342,7 +344,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         }
         else {
             bool reverse=BallInventory_ReverseTo(m->inventory.current,(uint8_t)slot);
-            if (emit(m,(PathCommand){.kind=PC_TURN,
+            if (emit(m,&(PathCommand){.kind=PC_TURN,
                      .x=reverse
                          ? (m->inventory.current+BALL_SLOT_COUNT-slot)%BALL_SLOT_COUNT
                          : (slot+BALL_SLOT_COUNT-m->inventory.current)%BALL_SLOT_COUNT,
@@ -366,7 +368,7 @@ void PathWarehouse_Tick(PathMission *m, uint32_t now, const PathInput *in)
         {
             m->entered=now;
             /* Rule rows run bottom to top: 1 -> G111, 2 -> G110, 3 -> G109. */
-            m->waiting=emit(m,(PathCommand){.kind=PC_GROUP,.argument=112-(code>>4),.timeout_ms=30000});
+            m->waiting=emit(m,&(PathCommand){.kind=PC_GROUP,.argument=112-(code>>4),.timeout_ms=30000});
         }
         else if (in->reply==PATH_FAILED) fail(m,PATH_ERROR);
         else if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=30000) fail(m,PATH_TIMEOUT);
