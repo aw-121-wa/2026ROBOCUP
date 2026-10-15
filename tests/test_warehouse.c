@@ -1,6 +1,4 @@
-#include "path_config.h"
 #include "path_mission.h"
-#include "path_chassis.h"
 #include <stdio.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n",__LINE__,#x); return 1; } } while(0)
@@ -15,7 +13,7 @@ static bool send(void *ctx,const PathCommand *c) {
     if(c->kind==PC_LINE_CALIBRATE) bad=true;
     if(c->kind==PC_MAP_HEADING) { calibrations++; if(c->x!=0) bad=true; }
     if(c->kind==PC_MOVE && c->x==-30 && c->y==0) return c->acceleration==300 && c->deceleration==300;
-    if(c->kind==PC_MOVE) { moves++; if(c->x!=PATH_WAREHOUSE_COLUMN_SPACING_MM || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
+    if(c->kind==PC_MOVE) { moves++; if(c->x!=200 || c->y!=0 || c->acceleration!=850 || c->deceleration!=850) bad=true; }
     if(c->kind==PC_TURN) { turns++; turn_steps+=(unsigned)c->x; if(c->argument>1 || c->x<1 || c->x>BALL_SLOT_COUNT/2) bad=true; }
     if(c->kind==PC_GROUP) {
         if(groups>=9) { bad=true; return false; }
@@ -149,25 +147,7 @@ static int home_fixed_return(void) {
  }
  return 0;
 }
-static int entry_angle_deadline(void) {
-    for(unsigned blue=0;blue<2;++blue) {
-        init();m.blue=blue;m.step=12;m.phase=1;
-        m.line_active=m.line_stopping=m.stable=true;m.stable_since=0;
-        PathInput in={.gray=6,.settled=true,.map_yaw_deg=blue?179:1};
-        PathChassis_Tick(&m,1000,&in);
-        CHECK(m.phase==2 && last.kind==PC_HOME_ALIGN);
-        CHECK(last.x==(blue?180:0) && last.speed==0.05f);
-        in.settled=false;
-        PathChassis_Tick(&m,1299,&in);CHECK(m.phase==2);
-        PathChassis_Tick(&m,1300,&in);CHECK(m.phase==3 && last.kind==PC_HOLD && m.result==PATH_RUNNING);
-        in.settled=true;PathChassis_Tick(&m,1301,&in);CHECK(m.step==13);
-        init();m.step=12;m.phase=2;m.entered=1000;
-        PathChassis_Tick(&m,1001,&in);CHECK(m.phase==3); /* Precision completed early. */
-    }
-    return 0;
-}
 int main(void) {
-    if(entry_angle_deadline()) return 1;
     CHECK(home_fixed_return()==0);
     for(unsigned mask=0;mask<512;mask++) CHECK(run(mask)==0);
     CHECK(optimized_order()==0); CHECK(errors()==0); CHECK(alignment()==0);

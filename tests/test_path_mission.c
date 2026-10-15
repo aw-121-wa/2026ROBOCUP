@@ -1,4 +1,3 @@
-#include "path_config.h"
 #include "stair_heading.h"
 #include "disc_task_config.h"
 #include "path_mission.h"
@@ -159,7 +158,7 @@ static int chassis_only(void) {
     m.result=PATH_RUNNING; m.step=6; in.vision_ready=true;
     for(unsigned t=0;t<10000 && m.step==6;t+=10) {
         if(m.phase==2) in.yaw_deg-=1.0f;
-        if(m.step==9) { in.gray=m.phase==30?4:6; } if(m.step==13 && m.point<9) { in.gray=m.phase==15?2:6; } if(m.step==13 && m.point==9) in.gray=m.phase==6?2:6;
+        if(m.step==13 && m.point<9) { in.gray=m.phase==15?2:6; } if(m.step==13 && m.point==9) in.gray=m.phase==6?2:6;
         Path_Tick(&m,t,&in);
     }
     CHECK(m.step==8 && m.result==PATH_RUNNING);
@@ -188,22 +187,22 @@ static int chassis_only(void) {
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=9;
     for(unsigned t=0;t<10000 && m.result==PATH_RUNNING;t+=10) {
         in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; in.motion_done=true; unsigned before=p.n;
-        if(m.step==9) { in.gray=m.phase==30?4:6; } if(m.step==13 && m.point<9) { in.gray=m.phase==15?2:6; } if(m.step==13 && m.point==9) in.gray=m.phase==6?2:6;
+        if(m.step==13 && m.point<9) { in.gray=m.phase==15?2:6; } if(m.step==13 && m.point==9) in.gray=m.phase==6?2:6;
         Path_Tick(&m,t,&in);
         for(unsigned j=before;j<p.n;j++) if(p.commands[j].kind==PC_MOVE) in.x_mm+=p.commands[j].x;
     }
     CHECK(m.step==13 && m.result==PATH_DONE && m.grabs==0);
     CHECK(count(&p,PC_GROUP)==3 && count(&p,PC_STAIR_SCAN)==3 && count(&p,PC_TURN)==0);
-    const float expected[]={160,440,260,110,PATH_WAREHOUSE_COLUMN_SPACING_MM,PATH_WAREHOUSE_COLUMN_SPACING_MM};
+    const float expected[]={5,160,440,260,110,200,200};
     unsigned n=0;
     for(unsigned i=0;i<p.n;i++) if(p.commands[i].kind==PC_MOVE) {
-        CHECK(n<6 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
+        CHECK(n<7 && fabsf(p.commands[i].x-expected[n])<.01f && p.commands[i].y==0); n++;
     }
-    CHECK(n==6);
+    CHECK(n==7);
     CHECK(count(&p,PC_MAP_LATERAL)==1);
     Path_Tick(&m,5000,&in); CHECK(m.step==13 && m.result==PATH_DONE);
     p.n=0; Path_Init(&m,send,&p); m.result=PATH_RUNNING; m.step=12;
-    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==9) { in.gray=m.phase==30?4:6; } if(m.step==13 && m.point<9) { in.gray=m.phase==15?2:6; } if(m.step==13 && m.point==9) in.gray=m.phase==6?2:6; Path_Tick(&m,t,&in); }
+    for(unsigned t=0;t<5000 && m.result==PATH_RUNNING;t+=10) { in.map_yaw_deg=m.step<=9?STAIR_MAP_TARGET_DEG:0; if(m.step==13 && m.point<9) { in.gray=m.phase==15?2:6; } if(m.step==13 && m.point==9) in.gray=m.phase==6?2:6; Path_Tick(&m,t,&in); }
     CHECK(m.result==PATH_DONE);
     CHECK(count(&p,PC_MAP_LATERAL)==1 && count(&p,PC_MOVE)==2 && count(&p,PC_ROTATE)==0);
     return 0;

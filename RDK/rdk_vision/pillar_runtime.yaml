@@ -13,7 +13,7 @@ serial:
 roi:
   x: 72
   y: 29
-  width: 372
+  width: 392
   height: 290
   edge_margin: 4
 colors:

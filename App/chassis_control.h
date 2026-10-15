@@ -66,7 +66,7 @@ bool Chassis_ReturnHome(unsigned leg); /* 0: back, 1: right transit, 2: right li
 bool Chassis_ExitOrbitArc(float radius, float target_deg, float speed, float acceleration, float deceleration);
 bool Chassis_ExitOrbit(float forward_mm, float lateral_mm, float target_deg, float speed, float end_speed, float acceleration, float deceleration);
 bool Chassis_FinishForward(float distance_mm, float speed, float acceleration, float deceleration);
-bool Chassis_AlignHome(float target_deg, float tolerance_deg);
+bool Chassis_AlignHome(float target_deg);
 bool Chassis_AlignMapAxis(void);
 bool Chassis_SetMapHeading(float degrees);
 bool Chassis_MapLateral(float mm);

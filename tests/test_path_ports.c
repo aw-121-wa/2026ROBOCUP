@@ -48,8 +48,8 @@ HAL_StatusTypeDef HAL_UART_Transmit_IT(UART_HandleTypeDef *u, uint8_t *b, uint16
     return HAL_OK;
 }
 unsigned HAL_GPIO_ReadPin(void *port, uint16_t pin) {
-    if(path_diagnostics.step==13 && (path_diagnostics.phase==15 || path_diagnostics.phase==6 || path_diagnostics.phase==31) && port==GPIOD && pin==GPIO_PIN_1) return GPIO_PIN_SET;
-    if(path_diagnostics.step==9 && path_diagnostics.phase==30 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
+    if(path_diagnostics.step==13 && (path_diagnostics.phase==15 || path_diagnostics.phase==6) && port==GPIOD && pin==GPIO_PIN_1) return GPIO_PIN_SET;
+    if(path_diagnostics.blue && path_diagnostics.step==9 && path_diagnostics.phase==30 && pin==GPIO_PIN_1) return GPIO_PIN_SET;
     if(path_diagnostics.step==13 && path_diagnostics.phase==5 && pin!=GPIO_PIN_10) return GPIO_PIN_SET;
     return (((outer_line) && ((port == GPIOD && pin == GPIO_PIN_3) || (port == GPIOB && pin == GPIO_PIN_13))) ||
             (gray_line && port == GPIOD && (pin == GPIO_PIN_0 || pin == GPIO_PIN_1)) ||
@@ -110,12 +110,6 @@ bool Chassis_MoveRotateBoundary(float x, float y, float degrees, float v, float 
 bool Chassis_Rotate(float deg) { return Chassis_Move(deg, 0, 1, 1, 1); }
 bool Chassis_AlignZero(void) { measured_yaw=0; zero_aligns++; return Chassis_Rotate(0); }
 bool Chassis_Body(float x, float y, float w) {
-#if PATH_CONTINUOUS_WAREHOUSE
-    if(path_diagnostics.step==13) {
-        state.x_mm+=(x*cosf(yaw)-y*sinf(yaw))*.005f;
-        state.y_mm+=(x*sinf(yaw)+y*cosf(yaw))*.005f;
-    }
-#endif
     (void)x; (void)y; (void)w; moving = true; return state.armed;
 }
 HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *u) {
@@ -519,43 +513,11 @@ int main(int argc, char **argv) {
         CHECK(!strcmp(wire,"PILLAR_END\r\n"));reply("PILLAR_DONE\r\n");tick();
         bool group3_replied=false;
         unsigned warehouse_done=0, group_sequence=0;
-#if PATH_CONTINUOUS_WAREHOUSE
-        unsigned scan_token=0,scan_row=0,scan_frame=0;
-        float scan_axis=0,scan_origin=0;bool scan_origin_set=false;
-#endif
-        for(unsigned i=0;i<120000 && path_diagnostics.result==PATH_RUNNING;i++) {
+        for(unsigned i=0;i<30000 && path_diagnostics.result==PATH_RUNNING;i++) {
             moving=false;
             if (!group3_replied && !strcmp(wire,"GROUP 3\r\n")) {
                 reply("GROUP_ACK 3\r\nGROUP_DONE 3\r\n"); group3_replied=true;
             }
-#if PATH_CONTINUOUS_WAREHOUSE
-            unsigned request_token,request_row;
-            if(sscanf(wire,"WH_SCAN %u %u",&request_token,&request_row)==2 && request_token!=scan_token) {
-                scan_token=request_token;scan_row=request_row;scan_frame=0;
-                if(request_row==0 && scan_origin_set && path_diagnostics.warehouse_placed==0)
-                    scan_origin=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis);
-                if(!scan_origin_set) {
-                    scan_axis=yaw-map_yaw_test*0.01745329252f+(test_blue?3.14159265f:0);
-                    scan_origin=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis)-PATH_WAREHOUSE_COLUMN_SPACING_MM;
-                    scan_origin_set=true;
-                }
-            }
-            if(sscanf(wire,"WH_STOP %u",&request_token)==1 && scan_token) {
-                char response[80];snprintf(response,sizeof(response),"WH_DONE %u\r\n",request_token);
-                reply(response);scan_token=0;
-            }
-            if(scan_token) {
-                float p=state.x_mm*cosf(scan_axis)+state.y_mm*sinf(scan_axis)-scan_origin;
-                unsigned digit=scan_row?0:(fabsf(p-PATH_WAREHOUSE_COLUMN_SPACING_MM)<8?1:fabsf(p-2*PATH_WAREHOUSE_COLUMN_SPACING_MM)<8?2:fabsf(p-3*PATH_WAREHOUSE_COLUMN_SPACING_MM)<8?3:0);
-                char response[80];snprintf(response,sizeof(response),"WH_FRAME %u %u %u 0\r\n",scan_token,++scan_frame,digit);
-                reply(response);
-            }
-            unsigned pose;
-            if(sscanf(wire,"GROUP %u",&pose)==1 && pose>=112 && pose<=120 && wire_sequence!=group_sequence) {
-                char response[80];snprintf(response,sizeof(response),"GROUP_ACK %u\r\nGROUP_DONE %u\r\n",pose,pose);
-                reply(response);group_sequence=wire_sequence;
-            }
-#endif
             if(path_diagnostics.step==13 && !strncmp(wire,"WAREHOUSE_CHECK ",16)) {
                 unsigned token=0;sscanf(wire,"WAREHOUSE_CHECK %u",&token);
                 char response[60];snprintf(response,sizeof(response),"WAREHOUSE_DIGIT %u 0\r\n",token);
@@ -695,7 +657,7 @@ bool Chassis_MapLateral(float mm) { (void)mm; moving=true; return true; }
 
 bool Chassis_SetMapHeading(float degrees) { if(moving || (degrees!=0 && degrees!=180))return false; map_headings++; map_yaw_test=degrees; return true; }
 
-bool Chassis_AlignHome(float target_deg, float tolerance_deg) { (void)tolerance_deg; map_yaw_test=target_deg; moving=true; return true; }
+bool Chassis_AlignHome(float target_deg) { map_yaw_test=target_deg; moving=true; return true; }
 
 void Chassis_SetRoutePolicy(ChassisRoutePolicy policy) { (void)policy; }
 

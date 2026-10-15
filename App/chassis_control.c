@@ -324,7 +324,7 @@ bool Chassis_Arm(void)
 static float map_yaw;
 void Chassis_BeginPath(void)
 {
-    map_yaw = state.yaw_rad - ((PATH_WAREHOUSE_CAPTURE_START && route_policy.mirror_map_y) ? 180.0f * RAD : 0.0f);
+    map_yaw = state.yaw_rad;
     route_heading = heading = state.yaw_rad;
     path_heading_enabled = true;
     line_yaw_reference = Chassis_MeasuredYaw();
@@ -334,15 +334,15 @@ bool Chassis_ReturnHome(unsigned leg)
 {
     if (!path_heading_enabled || !state.armed || !Chassis_IsSettled() || leg>1) return false;
     float boost=PATH_TRAVEL_BOOST*route_policy.travel_speed_scale;
-    float forward=route_policy.mirror_map_y ? ROUTE_HOME_BLUE_X_MM : ROUTE_HOME_RED_X_MM;
-    float x=leg==0 ? forward : 0, y=leg==1 ? ROUTE_HOME_Y_MM : 0;
+    float forward=route_policy.mirror_map_y ? 1710.0f : -1685.0f;
+    float x=leg==0 ? forward : 0, y=leg==1 ? -900.0f : 0;
     if (!route_policy.mirror_map_y) {
         float angle=state.yaw_rad-map_yaw, c=cosf(angle), sn=sinf(angle);
         float bx=x*c+y*sn; y=-x*sn+y*c; x=bx;
         route_heading=heading=map_yaw; integral=0;
     }
     return Chassis_Move(x,y,
-                        CHASSIS_HOME_SPEED_MM_S_COMMAND*boost*1.25f,CHASSIS_HOME_ACCEL_MM_S2*boost,
+                        CHASSIS_HOME_SPEED_MM_S*boost,CHASSIS_HOME_ACCEL_MM_S2*boost,
                         CHASSIS_HOME_BRAKE_MM_S2*route_policy.travel_speed_scale);
 }
 void Chassis_Stop(void)
@@ -569,8 +569,8 @@ static bool align_map_heading(float degrees, float tolerance)
 }
 
 bool Chassis_AlignMapAxis(void) { return align_map_heading(route_policy.stair_target_deg, STAIR_HEADING_STOP_TOLERANCE_DEG); }
-bool Chassis_AlignHome(float target_deg, float tolerance_deg) {
-    if (!align_map_heading(target_deg, tolerance_deg>0 ? tolerance_deg : HEADING_STATIC_TOLERANCE_DEG)) return false;
+bool Chassis_AlignHome(float target_deg) {
+    if (!align_map_heading(target_deg, HEADING_STATIC_TOLERANCE_DEG)) return false;
     home_alignment=true;
     return true;
 }

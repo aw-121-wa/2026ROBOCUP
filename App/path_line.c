@@ -22,7 +22,7 @@ static void fail(PathMission *m, PathResult result)
 bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
                     uint32_t timeout, float lateral)
 {
-    if (!PATH_WAREHOUSE_UNTIMED(m) && (uint32_t)(now-m->entered)>=timeout) {
+    if (!PATH_TASK_UNTIMED(m) && (uint32_t)(now-m->entered)>=timeout) {
         fail(m,PATH_TIMEOUT); return false;
     }
     if (m->step == 9) {
@@ -34,10 +34,10 @@ bool PathLine_Align(PathMission *m, uint32_t now, const PathInput *in,
         float x=in->x_mm-m->approach_x, y=in->y_mm-m->approach_y;
         /* Ignore gray during fast approach and while the slow command is ramping down. */
         if (x*x+y*y >= PATH_STAIR_SEARCH_FAST_DISTANCE_MM*PATH_STAIR_SEARCH_FAST_DISTANCE_MM ||
-            (in->gray && isfinite(in->travel_rpm) && in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM_COMMAND+2.0f)) m->approach_slow=true;
-        if (!m->approach_slow) lateral=PATH_STAIR_SEARCH_FAST_RPM_COMMAND;
+            (in->gray && isfinite(in->travel_rpm) && in->travel_rpm<=PATH_STAIR_SEARCH_SLOW_RPM+2.0f)) m->approach_slow=true;
+        if (!m->approach_slow) lateral=PATH_STAIR_SEARCH_FAST_RPM;
         if (!m->line_entry_detected && (!m->approach_slow ||
-            !isfinite(in->travel_rpm) || in->travel_rpm>PATH_STAIR_SEARCH_SLOW_RPM_COMMAND+2.0f)) {
+            !isfinite(in->travel_rpm) || in->travel_rpm>PATH_STAIR_SEARCH_SLOW_RPM+2.0f)) {
             (void)emit(m,PC_BODY,0,lateral,0,0,timeout);
             return false;
         }
@@ -75,7 +75,7 @@ bool PathHeading_Ready(PathMission *m, uint32_t now, const PathInput *in)
     float error = remainderf(target - in->map_yaw_deg, 360.0f);
     if (!isfinite(error)) { fail(m, PATH_ERROR); return false; }
     if (m->heading_align_active) {
-        if ((uint32_t)(now-m->heading_align_since) >= PATH_HEADING_TIMEOUT_MS) {
+        if (!PATH_BLUE_STAIR_UNTIMED(m) && (uint32_t)(now-m->heading_align_since) >= PATH_HEADING_TIMEOUT_MS) {
             fail(m, PATH_TIMEOUT); return false;
         }
         if (!in->settled) return false;
@@ -106,7 +106,7 @@ static LinePolicy line_policy(const PathMission *m)
     return (LinePolicy){
         .accepted_patterns=(1U<<6),
         .bidirectional=true,
-        .lateral_mm_s=stair ? PATH_STAIR_LINE_MM_S : PATH_WAREHOUSE_LINE_MM_S_COMMAND,
+        .lateral_mm_s=stair ? PATH_STAIR_LINE_MM_S : PATH_WAREHOUSE_LINE_MM_S,
         .first_ms=stair || warehouse ? PATH_LINE_SWEEP_MS : PATH_LINE_ENTRY_SWEEP_MS,
         .reverse_ms=warehouse ? PATH_WAREHOUSE_REVERSE_MS :
                     stair ? PATH_LINE_SWEEP_MS : PATH_LINE_ENTRY_REVERSE_MS,
@@ -140,7 +140,7 @@ bool PathLine_AlignFour(PathMission *m, uint32_t now, const PathInput *in)
     if ((uint32_t)(now-m->line_since) >= search_ms &&
         ((!bidirectional && m->line_search_state == LINE_SEARCH_IDLE) || !PathLine_Aligned(m, in->gray))) {
         if (bidirectional) {
-            if (m->line_search_state == LINE_SWEEP_FINAL && !PATH_WAREHOUSE_UNTIMED(m)) { fail(m,PATH_TIMEOUT); return false; }
+            if (m->line_search_state == LINE_SWEEP_FINAL && !PATH_TASK_UNTIMED(m)) { fail(m,PATH_TIMEOUT); return false; }
             hold(m);
             m->line_search_state = m->line_search_state == LINE_SWEEP_REVERSE ? LINE_BRAKE_FINAL : LINE_BRAKE_REVERSE;
             return false;

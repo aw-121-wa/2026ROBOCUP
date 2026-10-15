@@ -23,7 +23,6 @@ static void run(unsigned balls) {
  PathInput in={.armed=true,.settled=true,.gray=6,.map_yaw_deg=STAIR_MAP_TARGET_DEG};
  scans=g4=g3=stopped=headings=0; unsigned got=0; bool event=false;
  for(unsigned t=0;t<100000 && m.step<11;t+=10) {
-  in.gray=m.phase==30 ? 4 : 6;
   in.reply=PATH_OK; in.vision_ready=true;
   last=(PathCommand){.kind=PC_HOLD};
   Path_Tick(&m,t,&in);
@@ -38,7 +37,7 @@ static void run(unsigned balls) {
   if(event && last.kind==PC_HOLD) { in.x_mm+=2;in.settled=true; }
   if(last.kind==PC_PILLAR_STOPPED) { got++;in.resume_index=in.ball_index;event=false; }
  }
- assert(m.step==11 && fabsf(in.x_mm-860)<.1f);
+ assert(m.step==11 && fabsf(in.x_mm-865)<.1f);
  assert(g4==(balls==2?0U:1U) && g3==1 && stopped==balls && m.grabs==balls);
  assert(scans==(balls==2?1:3));
  assert(headings==(balls==2?1U:3U)); /* Full inventory skips intermediate line alignment. */
@@ -61,10 +60,15 @@ static void entry_braking_keeps_detection(void) {
   }
   PathChassis_Tick(&m,150,&in);assert(m.phase==4);
   PathChassis_Tick(&m,160,&in);assert(m.phase==30 && m.stair_heading_calibrated);
-  in.gray=7;PathChassis_Tick(&m,170,&in);assert(last.kind==PC_BODY && last.x==-20 && m.phase==30);
-  in.gray=4;in.settled=false;PathChassis_Tick(&m,171,&in);assert(last.kind==PC_HOLD && m.phase==31);
-  PathChassis_Tick(&m,172,&in);assert(m.phase==31);
-  in.settled=true;in.x_mm=-30;PathChassis_Tick(&m,175,&in);
+  if(blue) {
+   in.gray=7;PathChassis_Tick(&m,170,&in);assert(last.kind==PC_BODY && last.x==-20 && m.phase==30);
+   in.gray=4;in.settled=false;PathChassis_Tick(&m,171,&in);assert(last.kind==PC_HOLD && m.phase==31);
+   PathChassis_Tick(&m,172,&in);assert(m.phase==31);
+   in.settled=true;in.x_mm=-30;PathChassis_Tick(&m,175,&in);
+  } else {
+   PathChassis_Tick(&m,170,&in);assert(last.kind==PC_MOVE && last.x==5);
+   in.x_mm=5;PathChassis_Tick(&m,175,&in);
+  }
   assert(m.phase==20 && m.stair_origin_x==in.x_mm && m.stair_distance==0);
   in.gray=7;
   /* Later boundaries still perform lateral reacquisition. */
