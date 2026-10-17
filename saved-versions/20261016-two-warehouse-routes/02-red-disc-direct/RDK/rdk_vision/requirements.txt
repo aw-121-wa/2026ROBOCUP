@@ -1,0 +1,2 @@
+PyYAML>=6.0,<7
+pyserial>=3.5,<4

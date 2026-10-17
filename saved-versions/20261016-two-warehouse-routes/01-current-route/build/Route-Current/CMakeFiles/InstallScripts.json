@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/stm32project/2026ROBOCUP/saved-versions/20261016-two-warehouse-routes/01-current-route/build/Route-Current/cmake_install.cmake",
+		"D:/stm32project/2026ROBOCUP/saved-versions/20261016-two-warehouse-routes/01-current-route/build/Route-Current/cmake/stm32cubemx/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

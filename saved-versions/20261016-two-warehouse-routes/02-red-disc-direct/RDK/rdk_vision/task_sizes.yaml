@@ -1,0 +1,7 @@
+disc: {}
+pillar: {}
+stair:
+  reference_width: 76
+  reference_height: 77
+  size_min_scale: 0.65
+  size_max_scale: 1.4

@@ -1,0 +1,11 @@
+RDK Disc STM32 Integration Baseline
+Build date: 2026-09-15
+Trigger X: 380
+ROI: x=92 y=29 width=352 height=244 edge_margin=4
+Reference ball: 148x150
+Red HSV: [0,100,60,10,255,255] + [170,100,60,179,255,255]
+Servo: /dev/ttyS1 @ 9600
+STM32 bridge: /dev/ttyUSB0 @ 115200
+Prep action: G101 x1
+Trigger action: G102 x5
+Camera: YUYV 640x480; AWB warm-up 45 frames then lock; warm-up overlaps G101
